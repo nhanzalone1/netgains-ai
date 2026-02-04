@@ -153,8 +153,7 @@ export async function POST(req: Request) {
               name,
               sets (
                 weight,
-                reps,
-                rpe
+                reps
               )
             )
           `)
