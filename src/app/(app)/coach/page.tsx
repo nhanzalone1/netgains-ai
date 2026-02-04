@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 
 export default function CoachPage() {
-  const { messages, input, setInput, handleSubmit, isLoading } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: "/api/chat",
   });
 
@@ -104,7 +104,7 @@ export default function CoachPage() {
           <input
             type="text"
             value={input ?? ""}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             placeholder="Message your coach..."
             className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
             style={{ background: "#1a1a24" }}
