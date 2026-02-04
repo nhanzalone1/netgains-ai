@@ -1,4 +1,4 @@
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 
 export const maxDuration = 30;
@@ -14,10 +14,13 @@ Key principles:
 - Always promote proper form over heavy weight`;
 
 export async function POST(req: Request) {
-  console.log("DEBUG: API Key exists:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
+  console.log("DEBUG: Final API Key detected:", !!apiKey);
 
   try {
     const { messages } = await req.json();
+
+    const google = createGoogleGenerativeAI({ apiKey });
 
     const result = streamText({
       model: google("gemini-1.5-flash"),
