@@ -11,6 +11,7 @@ import {
   ChevronRight,
   RotateCcw,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -27,6 +28,7 @@ import { UserMenu } from "@/components/user-menu";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { Popover } from "@/components/ui/popover";
 import type { ProgramSettings, ProgramProgress } from "@/lib/supabase/types";
 
 const INTENSITY_COLORS = {
@@ -366,17 +368,29 @@ export default function ProgramPage() {
 
   return (
     <div className="p-4 pb-48 max-w-lg mx-auto">
-      <PageHeader
-        title="Program"
-        action={
-          <div className="flex items-center gap-2">
-            {saving && (
-              <span className="text-xs text-muted-foreground">Saving...</span>
-            )}
-            <UserMenu />
-          </div>
-        }
-      />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-black uppercase tracking-tighter">
+            Program
+          </h1>
+          <Popover trigger={<Info className="w-4 h-4 text-muted-foreground" />}>
+            <div className="space-y-2">
+              <p className="font-semibold text-white">Your 8-Week Master Plan.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• <span className="text-gray-300">The Goal:</span> Two 4-week blocks to build raw strength.</li>
+                <li>• <span className="text-gray-300">The Flow:</span> Weeks 1-3 are for building. Week 4 is for recovery. Weeks 5-7 raise the intensity. Week 8 is a test.</li>
+                <li>• <span className="text-gray-300">Training Max:</span> All numbers are based on 90% of your true max to ensure perfect form.</li>
+              </ul>
+            </div>
+          </Popover>
+        </div>
+        <div className="flex items-center gap-2">
+          {saving && (
+            <span className="text-xs text-muted-foreground">Saving...</span>
+          )}
+          <UserMenu />
+        </div>
+      </div>
 
       {/* Maxes Input Section */}
       <AnimatePresence>

@@ -19,6 +19,7 @@ import {
   X,
   Dumbbell,
   BarChart3,
+  Info,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -26,6 +27,7 @@ import { useAuth } from "@/components/auth-provider";
 import { UserMenu } from "@/components/user-menu";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Popover } from "@/components/ui/popover";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
 
 // Epley Formula: Est. 1RM = Weight × (1 + Reps / 30)
@@ -244,7 +246,23 @@ export default function StatsPage() {
 
   return (
     <div className="p-4 pb-48 max-w-lg mx-auto">
-      <PageHeader title="Stats" action={<UserMenu />} />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-black uppercase tracking-tighter">
+            Stats
+          </h1>
+          <Popover trigger={<Info className="w-4 h-4 text-muted-foreground" />}>
+            <div className="space-y-2">
+              <p className="font-semibold text-white">Proof of Progress.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• <span className="text-gray-300">Est. 1RM:</span> Calculated using the Epley formula from your daily reps.</li>
+                <li>• <span className="text-gray-300">The Trend:</span> Ignore bad days. Watch the line move up over the 8 weeks.</li>
+              </ul>
+            </div>
+          </Popover>
+        </div>
+        <UserMenu />
+      </div>
 
       {/* Exercise Picker Button */}
       <motion.button

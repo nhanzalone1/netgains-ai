@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Trash2,
   CheckCircle,
+  Info,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
+import { Popover } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { WorkoutSession } from "@/components/workout-session";
@@ -502,17 +504,29 @@ export default function LogPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pb-32">
-      <PageHeader
-        title="Log"
-        action={
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-semibold uppercase">
-              LBS
-            </span>
-            <UserMenu />
-          </div>
-        }
-      />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-black uppercase tracking-tighter">
+            Log
+          </h1>
+          <Popover trigger={<Info className="w-4 h-4 text-muted-foreground" />}>
+            <div className="space-y-2">
+              <p className="font-semibold text-white">The Daily Grind.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• <span className="text-gray-300">Track Everything:</span> Log every set.</li>
+                <li>• <span className="text-gray-300">The '+' Set:</span> On your final set, do As Many Reps As Possible (AMRAP). This sets your PRs.</li>
+                <li>• <span className="text-gray-300">Finish Strong:</span> Always click 'Finish & Save' to lock in your data.</li>
+              </ul>
+            </div>
+          </Popover>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-semibold uppercase">
+            LBS
+          </span>
+          <UserMenu />
+        </div>
+      </div>
 
       {/* Section Header */}
       <div className="flex items-center justify-between mb-4">
