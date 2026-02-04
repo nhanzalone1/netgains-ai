@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText, StreamingTextResponse } from "ai";
+import { streamText } from "ai";
 
 export const maxDuration = 30;
 
@@ -26,5 +26,5 @@ export async function POST(req: Request) {
     messages,
   });
 
-  return new StreamingTextResponse(result.textStream);
+  return result.toDataStreamResponse();
 }
