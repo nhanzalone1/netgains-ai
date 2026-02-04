@@ -113,6 +113,9 @@ export function WorkoutSession({
   const [savingEdit, setSavingEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Progressive overload - best sets per exercise template
+  const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
+
   // Load library exercises on mount
   useEffect(() => {
     loadLibrary();
@@ -128,6 +131,54 @@ export function WorkoutSession({
 
     setLibraryExercises((data || []) as ExerciseTemplate[]);
     setLoadingLibrary(false);
+  };
+
+  // Fetch best set for a given exercise template (using Epley formula for 1RM)
+  const fetchBestSet = async (templateId: string) => {
+    if (!templateId || bestSets[templateId] !== undefined) return;
+
+    // Mark as loading (null means we're fetching)
+    setBestSets((prev) => ({ ...prev, [templateId]: null }));
+
+    // Query all sets for this exercise template
+    // Join: sets -> exercises (via exercise_id) -> exercises.template_id
+    const { data: exercises } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("template_id", templateId);
+
+    if (!exercises || exercises.length === 0) {
+      return;
+    }
+
+    const exerciseIds = exercises.map((e) => e.id);
+
+    const { data: sets } = await supabase
+      .from("sets")
+      .select("weight, reps")
+      .in("exercise_id", exerciseIds)
+      .gt("weight", 0)
+      .gt("reps", 0);
+
+    if (!sets || sets.length === 0) {
+      return;
+    }
+
+    // Calculate estimated 1RM using Epley formula and find the best
+    let bestSet: { weight: number; reps: number } | null = null;
+    let best1RM = 0;
+
+    for (const set of sets) {
+      const estimated1RM = set.weight * (1 + set.reps / 30);
+      if (estimated1RM > best1RM) {
+        best1RM = estimated1RM;
+        bestSet = { weight: set.weight, reps: set.reps };
+      }
+    }
+
+    if (bestSet) {
+      setBestSets((prev) => ({ ...prev, [templateId]: bestSet }));
+    }
   };
 
   // Generate unique ID
@@ -160,6 +211,11 @@ export function WorkoutSession({
       }
       return [...prev, newExercise];
     });
+
+    // Fetch best set for progressive overload indicator
+    if (template.id) {
+      fetchBestSet(template.id);
+    }
 
     return newExercise.id;
   };
@@ -201,6 +257,11 @@ export function WorkoutSession({
       newList.splice(origIndex + 1, 0, newExercise);
       return newList;
     });
+
+    // Fetch best set for progressive overload indicator
+    if (template.id) {
+      fetchBestSet(template.id);
+    }
 
     setSupersetForExerciseId(null);
   };
@@ -581,26 +642,27 @@ export function WorkoutSession({
                 }}
               >
                 {/* Exercise Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 rounded-t-2xl">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">{exercise.name}</h3>
-                    {exercise.equipment && (
-                      <span
-                        className="px-2 py-0.5 rounded text-xs font-semibold uppercase shrink-0"
-                        style={{
-                          background: equipStyle.bg,
-                          color: equipStyle.text,
-                        }}
-                      >
-                        {formatEquipment(exercise.equipment)}
-                      </span>
-                    )}
-                    {hasSuperset && (
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold uppercase bg-purple-500/20 text-purple-400">
-                        {isFirstInPair ? "SS1" : isSecondInPair ? "SS2" : "SS"}
-                      </span>
-                    )}
-                  </div>
+                <div className="px-4 py-3 border-b border-white/5 rounded-t-2xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <h3 className="font-semibold truncate">{exercise.name}</h3>
+                      {exercise.equipment && (
+                        <span
+                          className="px-2 py-0.5 rounded text-xs font-semibold uppercase shrink-0"
+                          style={{
+                            background: equipStyle.bg,
+                            color: equipStyle.text,
+                          }}
+                        >
+                          {formatEquipment(exercise.equipment)}
+                        </span>
+                      )}
+                      {hasSuperset && (
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold uppercase bg-purple-500/20 text-purple-400">
+                          {isFirstInPair ? "SS1" : isSecondInPair ? "SS2" : "SS"}
+                        </span>
+                      )}
+                    </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
                     {/* More Options Button */}
                     <div className="relative">
@@ -672,6 +734,17 @@ export function WorkoutSession({
                       <X className="w-5 h-5" />
                     </motion.button>
                   </div>
+                  </div>
+
+                  {/* Progressive Overload Indicator */}
+                  {exercise.templateId && bestSets[exercise.templateId] && (
+                    <div className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
+                      <span>🏆</span>
+                      <span>
+                        Best: {bestSets[exercise.templateId]!.weight} lbs × {bestSets[exercise.templateId]!.reps}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Set Headers */}
