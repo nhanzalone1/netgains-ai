@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { streamText, StreamingTextResponse } from "ai";
 
 export const maxDuration = 30;
 
@@ -15,25 +15,16 @@ Key principles:
 
 export async function POST(req: Request) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
-  console.log("DEBUG: Final API Key detected:", !!apiKey);
 
-  try {
-    const { messages } = await req.json();
+  const { messages } = await req.json();
 
-    const google = createGoogleGenerativeAI({ apiKey });
+  const google = createGoogleGenerativeAI({ apiKey });
 
-    const result = streamText({
-      model: google("models/gemini-1.5-flash-latest"),
-      system: systemPrompt,
-      messages,
-    });
+  const result = streamText({
+    model: google("models/gemini-1.5-flash-latest"),
+    system: systemPrompt,
+    messages,
+  });
 
-    return result.toDataStreamResponse();
-  } catch (error) {
-    console.error("DEBUG: Chat API error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  return new StreamingTextResponse(result.textStream);
 }
