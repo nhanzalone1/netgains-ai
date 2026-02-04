@@ -1,4 +1,5 @@
 import { BottomNav } from "@/components/bottom-nav";
+import { AICoach } from "@/components/ai-coach";
 
 export default function AppLayout({
   children,
@@ -11,6 +12,7 @@ export default function AppLayout({
         {children}
       </main>
       <BottomNav />
+      <AICoach />
     </>
   );
 }
