@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Dumbbell, ClipboardList, TrendingUp } from "lucide-react";
+import { Dumbbell, ClipboardList, TrendingUp, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 const navItems = [
   { href: "/program", label: "Program", icon: Dumbbell },
   { href: "/log", label: "Log", icon: ClipboardList },
   { href: "/stats", label: "Stats", icon: TrendingUp },
+  { href: "/coach", label: "Coach", icon: Sparkles },
 ];
 
 export function BottomNav() {
