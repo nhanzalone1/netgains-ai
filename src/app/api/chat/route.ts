@@ -14,13 +14,23 @@ Key principles:
 - Always promote proper form over heavy weight`;
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  console.log("DEBUG: API Key exists:", !!process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
-  const result = streamText({
-    model: google("gemini-1.5-flash"),
-    system: systemPrompt,
-    messages,
-  });
+  try {
+    const { messages } = await req.json();
 
-  return result.toDataStreamResponse();
+    const result = streamText({
+      model: google("gemini-1.5-flash"),
+      system: systemPrompt,
+      messages,
+    });
+
+    return result.toDataStreamResponse();
+  } catch (error) {
+    console.error("DEBUG: Chat API error:", error);
+    return new Response(
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 }
