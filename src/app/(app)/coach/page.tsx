@@ -13,6 +13,11 @@ export default function CoachPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Debug: log input value
+  useEffect(() => {
+    console.log("useChat input value:", input, "type:", typeof input);
+  }, [input]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -103,7 +108,7 @@ export default function CoachPage() {
           <input
             type="text"
             name="prompt"
-            value={input}
+            value={input || ""}
             onChange={handleInputChange}
             placeholder="Message your coach..."
             className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
@@ -112,7 +117,7 @@ export default function CoachPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             type="submit"
-            disabled={!input?.trim() || isLoading}
+            disabled={!(input && input.trim()) || isLoading}
             className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-5 h-5" />
