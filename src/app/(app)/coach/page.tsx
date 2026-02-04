@@ -1,18 +1,20 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
 export default function CoachPage() {
   const [inputValue, setInputValue] = useState("");
-  const chatHook = useChat({
-    api: "/api/chat",
-  });
-
-  const { messages, isLoading } = chatHook;
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,17 +25,81 @@ export default function CoachPage() {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    const message = inputValue.trim();
-    setInputValue("");
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: inputValue.trim(),
+    };
 
-    // Use append if available, otherwise use sendMessage or submit
-    if (typeof chatHook.append === "function") {
-      await chatHook.append({ role: "user", content: message });
-    } else if (typeof chatHook.sendMessage === "function") {
-      await (chatHook as any).sendMessage(message);
-    } else {
-      console.error("No append or sendMessage function available", chatHook);
+    setMessages((prev) => [...prev, userMessage]);
+    setInputValue("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to get response");
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "",
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            // Handle text chunks: 0:"text"
+            if (line.startsWith("0:")) {
+              try {
+                const text = JSON.parse(line.slice(2));
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessage.id
+                      ? { ...m, content: m.content + text }
+                      : m
+                  )
+                );
+              } catch {
+                // Skip malformed chunks
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "Sorry, I couldn't process your request. Please try again.",
+        },
+      ]);
     }
+
+    setIsLoading(false);
   };
 
   return (
