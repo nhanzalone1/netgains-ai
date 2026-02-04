@@ -1,6 +1,4 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { streamText, tool } from 'ai';
-import { z } from 'zod';
+import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 
 export const maxDuration = 30;
@@ -14,7 +12,7 @@ const COACH_SYSTEM_PROMPT = `You are Coach, a strict, no-nonsense bodybuilding c
 - You speak like a gym veteran, not a corporate AI.
 
 ## ONBOARDING MODE
-If the user hasn't completed onboarding (onboarding_complete is false), your FIRST priority is gathering their data. Ask ONE question at a time in this order:
+If the user hasn't completed onboarding (onboarding_complete is false or null), your FIRST priority is gathering their data. Ask ONE question at a time in this order:
 1. Height (in feet/inches)
 2. Current weight (in lbs)
 3. Goal: Are they bulking, cutting, or maintaining?
@@ -43,6 +41,52 @@ Once onboarded, you are their active coach:
 
 Stay in character. You're their coach, not their assistant.`;
 
+const tools: Anthropic.Tool[] = [
+  {
+    name: 'getUserProfile',
+    description: 'Get the current user profile including height, weight, goal, and onboarding status',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'updateUserProfile',
+    description: 'Update user profile with height, weight, goal, and/or onboarding status',
+    input_schema: {
+      type: 'object',
+      properties: {
+        height_inches: { type: 'number', description: 'Height in total inches (e.g., 70 for 5\'10")' },
+        weight_lbs: { type: 'number', description: 'Weight in pounds' },
+        goal: { type: 'string', enum: ['bulk', 'cut', 'maintain'], description: 'User fitness goal' },
+        onboarding_complete: { type: 'boolean', description: 'Whether onboarding is finished' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'getMaxes',
+    description: 'Get user current 1RM values for squat, bench, deadlift, overhead press',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'getRecentLifts',
+    description: 'Get recent workout history including exercises and sets',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Number of recent workouts to fetch (default 5)' },
+      },
+      required: [],
+    },
+  },
+];
+
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
@@ -54,110 +98,141 @@ export async function POST(req: Request) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const result = await streamText({
-    model: anthropic('claude-3-5-sonnet-20241022'),
-    system: COACH_SYSTEM_PROMPT,
-    messages,
-    tools: {
-      getUserProfile: tool({
-        description: 'Get the current user profile including height, weight, goal, and onboarding status',
-        parameters: z.object({}),
-        execute: async () => {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('height_inches, weight_lbs, goal, onboarding_complete, created_at')
-            .eq('id', user.id)
-            .single();
+  const anthropic = new Anthropic();
 
-          if (error) return { error: error.message };
-          return data;
-        },
-      }),
+  // Convert messages to Anthropic format
+  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m: { role: string; content: string }) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }));
 
-      updateUserProfile: tool({
-        description: 'Update user profile with height, weight, goal, and/or onboarding status',
-        parameters: z.object({
-          height_inches: z.number().optional().describe('Height in total inches (e.g., 70 for 5\'10")'),
-          weight_lbs: z.number().optional().describe('Weight in pounds'),
-          goal: z.enum(['bulk', 'cut', 'maintain']).optional().describe('User fitness goal'),
-          onboarding_complete: z.boolean().optional().describe('Whether onboarding is finished'),
-        }),
-        execute: async (params) => {
-          const updateData: Record<string, unknown> = {};
-          if (params.height_inches !== undefined) updateData.height_inches = params.height_inches;
-          if (params.weight_lbs !== undefined) updateData.weight_lbs = params.weight_lbs;
-          if (params.goal !== undefined) updateData.goal = params.goal;
-          if (params.onboarding_complete !== undefined) updateData.onboarding_complete = params.onboarding_complete;
+  // Tool execution helper
+  async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+    switch (name) {
+      case 'getUserProfile': {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('height_inches, weight_lbs, goal, onboarding_complete, created_at')
+          .eq('id', user.id)
+          .single();
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data);
+      }
+      case 'updateUserProfile': {
+        const updateData: Record<string, unknown> = {};
+        if (input.height_inches !== undefined) updateData.height_inches = input.height_inches;
+        if (input.weight_lbs !== undefined) updateData.weight_lbs = input.weight_lbs;
+        if (input.goal !== undefined) updateData.goal = input.goal;
+        if (input.onboarding_complete !== undefined) updateData.onboarding_complete = input.onboarding_complete;
 
-          const { error } = await supabase
-            .from('profiles')
-            .update(updateData)
-            .eq('id', user.id);
-
-          if (error) return { error: error.message };
-          return { success: true, updated: updateData };
-        },
-      }),
-
-      getMaxes: tool({
-        description: 'Get user current 1RM values for squat, bench, deadlift, overhead press',
-        parameters: z.object({}),
-        execute: async () => {
-          const { data, error } = await supabase
-            .from('maxes')
-            .select('squat, bench, deadlift, overhead, updated_at')
-            .eq('user_id', user.id)
-            .single();
-
-          if (error) return { error: error.message };
-          return data;
-        },
-      }),
-
-      getRecentLifts: tool({
-        description: 'Get recent workout history including exercises and sets',
-        parameters: z.object({
-          limit: z.number().optional().default(5).describe('Number of recent workouts to fetch'),
-        }),
-        execute: async ({ limit }) => {
-          const { data: workouts, error } = await supabase
-            .from('workouts')
-            .select(`
+        const { error } = await supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', user.id);
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ success: true, updated: updateData });
+      }
+      case 'getMaxes': {
+        const { data, error } = await supabase
+          .from('maxes')
+          .select('squat, bench, deadlift, overhead, updated_at')
+          .eq('user_id', user.id)
+          .single();
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data);
+      }
+      case 'getRecentLifts': {
+        const limit = (input.limit as number) ?? 5;
+        const { data: workouts, error } = await supabase
+          .from('workouts')
+          .select(`
+            id,
+            date,
+            exercises (
               id,
-              date,
-              exercises (
-                id,
-                name,
-                sets (
-                  weight,
-                  reps,
-                  rpe
-                )
+              name,
+              sets (
+                weight,
+                reps,
+                rpe
               )
-            `)
-            .eq('user_id', user.id)
-            .order('date', { ascending: false })
-            .limit(limit);
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(limit);
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(workouts);
+      }
+      default:
+        return JSON.stringify({ error: 'Unknown tool' });
+    }
+  }
 
-          if (error) return { error: error.message };
-          return workouts;
-        },
-      }),
-    },
-  });
-
-  // Create a streaming response manually
+  // Create streaming response
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of result.textStream) {
-          // Format as data stream: 0:"text"
-          const formatted = `0:${JSON.stringify(chunk)}\n`;
-          controller.enqueue(encoder.encode(formatted));
+        let currentMessages = [...anthropicMessages];
+
+        // Loop to handle tool calls
+        while (true) {
+          const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1024,
+            system: COACH_SYSTEM_PROMPT,
+            messages: currentMessages,
+            tools,
+          });
+
+          // Check if we need to handle tool use
+          if (response.stop_reason === 'tool_use') {
+            const assistantContent = response.content;
+
+            // Add assistant message with tool use
+            currentMessages.push({
+              role: 'assistant',
+              content: assistantContent,
+            });
+
+            // Process each tool use and collect results
+            const toolResults: Anthropic.ToolResultBlockParam[] = [];
+            for (const block of assistantContent) {
+              if (block.type === 'tool_use') {
+                const result = await executeTool(block.name, block.input as Record<string, unknown>);
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: block.id,
+                  content: result,
+                });
+              }
+            }
+
+            // Add tool results
+            currentMessages.push({
+              role: 'user',
+              content: toolResults,
+            });
+
+            // Continue the loop to get the final response
+            continue;
+          }
+
+          // Extract and stream text content
+          for (const block of response.content) {
+            if (block.type === 'text') {
+              const formatted = `0:${JSON.stringify(block.text)}\n`;
+              controller.enqueue(encoder.encode(formatted));
+            }
+          }
+
+          break;
         }
+
         controller.close();
       } catch (error) {
+        console.error('Chat error:', error);
         controller.error(error);
       }
     },
