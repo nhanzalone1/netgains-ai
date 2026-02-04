@@ -134,33 +134,30 @@ export function WorkoutSession({
   };
 
   // Fetch best set for a given exercise template (using Epley formula for 1RM)
-  const fetchBestSet = async (templateId: string) => {
-    if (!templateId || bestSets[templateId] !== undefined) return;
+  // Matches by exercise NAME (case-insensitive) since exercises table doesn't have template_id
+  const fetchBestSet = async (templateId: string, exerciseName: string) => {
+    if (!templateId || !exerciseName || bestSets[templateId] !== undefined) return;
 
     // Mark as loading (null means we're fetching)
     setBestSets((prev) => ({ ...prev, [templateId]: null }));
 
-    // Query all sets for this exercise template
-    // Join: sets -> exercises (via exercise_id) -> exercises.template_id
-    const { data: exercises } = await supabase
-      .from("exercises")
-      .select("id")
-      .eq("template_id", templateId);
+    // Query all workouts with exercises and sets, then filter by name
+    const { data: workouts } = await supabase
+      .from("workouts")
+      .select(`
+        id,
+        exercises (
+          id,
+          name,
+          sets (
+            weight,
+            reps
+          )
+        )
+      `)
+      .eq("user_id", userId);
 
-    if (!exercises || exercises.length === 0) {
-      return;
-    }
-
-    const exerciseIds = exercises.map((e) => e.id);
-
-    const { data: sets } = await supabase
-      .from("sets")
-      .select("weight, reps")
-      .in("exercise_id", exerciseIds)
-      .gt("weight", 0)
-      .gt("reps", 0);
-
-    if (!sets || sets.length === 0) {
+    if (!workouts || workouts.length === 0) {
       return;
     }
 
@@ -168,13 +165,30 @@ export function WorkoutSession({
     let bestSet: { weight: number; reps: number } | null = null;
     let best1RM = 0;
 
-    for (const set of sets) {
-      const estimated1RM = set.weight * (1 + set.reps / 30);
-      if (estimated1RM > best1RM) {
-        best1RM = estimated1RM;
-        bestSet = { weight: set.weight, reps: set.reps };
-      }
-    }
+    workouts.forEach((workout) => {
+      const exercises = workout.exercises as {
+        id: string;
+        name: string;
+        sets: { weight: number; reps: number }[];
+      }[];
+
+      // Find matching exercises (case-insensitive)
+      const matchingExercises = exercises.filter(
+        (ex) => ex.name.toLowerCase() === exerciseName.toLowerCase()
+      );
+
+      matchingExercises.forEach((ex) => {
+        ex.sets.forEach((set) => {
+          if (set.weight > 0 && set.reps > 0) {
+            const estimated1RM = set.weight * (1 + set.reps / 30);
+            if (estimated1RM > best1RM) {
+              best1RM = estimated1RM;
+              bestSet = { weight: set.weight, reps: set.reps };
+            }
+          }
+        });
+      });
+    });
 
     if (bestSet) {
       setBestSets((prev) => ({ ...prev, [templateId]: bestSet }));
@@ -214,7 +228,7 @@ export function WorkoutSession({
 
     // Fetch best set for progressive overload indicator
     if (template.id) {
-      fetchBestSet(template.id);
+      fetchBestSet(template.id, template.name);
     }
 
     return newExercise.id;
@@ -260,7 +274,7 @@ export function WorkoutSession({
 
     // Fetch best set for progressive overload indicator
     if (template.id) {
-      fetchBestSet(template.id);
+      fetchBestSet(template.id, template.name);
     }
 
     setSupersetForExerciseId(null);
