@@ -116,6 +116,26 @@ export function WorkoutSession({
   // Progressive overload - best sets per exercise (keyed by templateId AND name for redundancy)
   const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
 
+  // Sync current workout to localStorage so Coach can see in-progress data
+  useEffect(() => {
+    if (activeExercises.length > 0) {
+      const workoutData = {
+        folderName,
+        startedAt: new Date().toISOString(),
+        exercises: activeExercises.map((ex) => ({
+          name: ex.name,
+          equipment: ex.equipment,
+          sets: ex.sets
+            .filter((s) => s.weight || s.reps)
+            .map((s) => ({ weight: s.weight, reps: s.reps, variant: s.variant })),
+        })),
+      };
+      localStorage.setItem("netgains-current-workout", JSON.stringify(workoutData));
+    } else {
+      localStorage.removeItem("netgains-current-workout");
+    }
+  }, [activeExercises, folderName]);
+
   // Helper to safely get best set using multiple possible keys
   const getBestSetForExercise = (exercise: ActiveExercise): { weight: number; reps: number } | null => {
     // Try templateId first, then exercise name (normalized)
@@ -508,6 +528,7 @@ export function WorkoutSession({
     }
 
     setSaving(true);
+    localStorage.removeItem("netgains-current-workout");
     onSave(validExercises);
   };
 

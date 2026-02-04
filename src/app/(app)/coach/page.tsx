@@ -60,6 +60,14 @@ export default function CoachPage() {
             role: m.role,
             content: m.content,
           })),
+          currentWorkout: (() => {
+            try {
+              const stored = localStorage.getItem("netgains-current-workout");
+              return stored ? JSON.parse(stored) : null;
+            } catch {
+              return null;
+            }
+          })(),
         }),
       });
 

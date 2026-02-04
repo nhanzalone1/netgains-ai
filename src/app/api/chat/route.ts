@@ -31,6 +31,7 @@ Once onboarded, you are their active coach:
 - Use getRecentLifts to analyze their training history
 - Use getMaxes to see their current 1RMs
 - Use updateUserProfile to save onboarding data
+- Use getCurrentWorkout to see what they're doing RIGHT NOW in the gym (exercises and sets logged so far in their active session)
 - Always check profile first to know if they're onboarded
 
 ## VOICE EXAMPLES
@@ -85,10 +86,19 @@ const tools: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'getCurrentWorkout',
+    description: 'Get the user\'s in-progress workout that they are currently doing at the gym. Returns exercises and sets logged so far (not yet saved). Returns null if no workout is active.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { messages, currentWorkout } = await req.json();
 
   // Get authenticated user
   const supabase = await createClient();
@@ -162,6 +172,10 @@ export async function POST(req: Request) {
           .limit(limit);
         if (error) return JSON.stringify({ error: error.message });
         return JSON.stringify(workouts);
+      }
+      case 'getCurrentWorkout': {
+        if (!currentWorkout) return JSON.stringify({ active: false, message: 'No workout in progress' });
+        return JSON.stringify({ active: true, workout: currentWorkout });
       }
       default:
         return JSON.stringify({ error: 'Unknown tool' });
