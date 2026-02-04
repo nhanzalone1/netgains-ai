@@ -1,26 +1,40 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 
 export default function CoachPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+  const [inputValue, setInputValue] = useState("");
+  const chatHook = useChat({
     api: "/api/chat",
   });
 
+  const { messages, isLoading } = chatHook;
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Debug: log input value
-  useEffect(() => {
-    console.log("useChat input value:", input, "type:", typeof input);
-  }, [input]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isLoading) return;
+
+    const message = inputValue.trim();
+    setInputValue("");
+
+    // Use append if available, otherwise use sendMessage or submit
+    if (typeof chatHook.append === "function") {
+      await chatHook.append({ role: "user", content: message });
+    } else if (typeof chatHook.sendMessage === "function") {
+      await (chatHook as any).sendMessage(message);
+    } else {
+      console.error("No append or sendMessage function available", chatHook);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen" style={{ background: "#0f0f13" }}>
@@ -107,9 +121,8 @@ export default function CoachPage() {
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
-            name="prompt"
-            value={input || ""}
-            onChange={handleInputChange}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             placeholder="Message your coach..."
             className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
             style={{ background: "#1a1a24" }}
@@ -117,7 +130,7 @@ export default function CoachPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             type="submit"
-            disabled={!(input && input.trim()) || isLoading}
+            disabled={!inputValue.trim() || isLoading}
             className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-5 h-5" />
