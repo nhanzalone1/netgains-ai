@@ -113,8 +113,15 @@ export function WorkoutSession({
   const [savingEdit, setSavingEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Progressive overload - best sets per exercise template
+  // Progressive overload - best sets per exercise (keyed by templateId AND name for redundancy)
   const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
+
+  // Helper to safely get best set using multiple possible keys
+  const getBestSetForExercise = (exercise: ActiveExercise): { weight: number; reps: number } | null => {
+    // Try templateId first, then exercise name (normalized)
+    const nameKey = exercise.name.toLowerCase();
+    return bestSets[exercise.templateId || ""] || bestSets[nameKey] || null;
+  };
 
   // Load library exercises on mount
   useEffect(() => {
@@ -191,7 +198,13 @@ export function WorkoutSession({
     });
 
     if (bestSet) {
-      setBestSets((prev) => ({ ...prev, [templateId]: bestSet }));
+      // Store under both templateId AND normalized name for redundant lookup
+      const nameKey = exerciseName.toLowerCase();
+      setBestSets((prev) => ({
+        ...prev,
+        [templateId]: bestSet,
+        [nameKey]: bestSet,
+      }));
     }
   };
 
@@ -751,14 +764,17 @@ export function WorkoutSession({
                   </div>
 
                   {/* Progressive Overload Indicator */}
-                  {exercise.templateId && bestSets[exercise.templateId] && (
-                    <div className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
-                      <span>🏆</span>
-                      <span>
-                        Best: {bestSets[exercise.templateId]!.weight} lbs × {bestSets[exercise.templateId]!.reps}
-                      </span>
-                    </div>
-                  )}
+                  {(() => {
+                    const bestSet = getBestSetForExercise(exercise);
+                    return bestSet ? (
+                      <div className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
+                        <span>🏆</span>
+                        <span>
+                          Best: {bestSet.weight} lbs × {bestSet.reps}
+                        </span>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Set Headers */}
