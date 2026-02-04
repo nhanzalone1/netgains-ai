@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const result = streamText({
+  const result = await streamText({
     model: anthropic('claude-3-5-sonnet-20241022'),
     system: COACH_SYSTEM_PROMPT,
     messages,
@@ -143,24 +143,30 @@ export async function POST(req: Request) {
           return workouts;
         },
       }),
-
-      saveChatMessage: tool({
-        description: 'Save a message to chat history (used internally)',
-        parameters: z.object({
-          role: z.enum(['user', 'assistant']),
-          content: z.string(),
-        }),
-        execute: async ({ role, content }) => {
-          const { error } = await supabase
-            .from('chat_messages')
-            .insert({ user_id: user.id, role, content });
-
-          if (error) return { error: error.message };
-          return { success: true };
-        },
-      }),
     },
   });
 
-  return result.toDataStreamResponse();
+  // Create a streaming response manually
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of result.textStream) {
+          // Format as data stream: 0:"text"
+          const formatted = `0:${JSON.stringify(chunk)}\n`;
+          controller.enqueue(encoder.encode(formatted));
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Transfer-Encoding': 'chunked',
+    },
+  });
 }
