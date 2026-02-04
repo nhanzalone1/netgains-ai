@@ -513,9 +513,10 @@ export default function LogPage() {
             <div className="space-y-2">
               <p className="font-semibold text-white">The Daily Grind.</p>
               <ul className="text-sm text-gray-400 space-y-1">
-                <li>• <span className="text-gray-300">Track Everything:</span> Log every set.</li>
-                <li>• <span className="text-gray-300">The '+' Set:</span> On your final set, do As Many Reps As Possible (AMRAP). This sets your PRs.</li>
-                <li>• <span className="text-gray-300">Finish Strong:</span> Always click 'Finish & Save' to lock in your data.</li>
+                <li>• <span className="text-gray-300">Flexibility:</span> Make or choose a gym split that fits you.</li>
+                <li>• <span className="text-gray-300">Build:</span> Add your specific exercises for the session.</li>
+                <li>• <span className="text-gray-300">Track:</span> Record every set and rep precisely.</li>
+                <li>• <span className="text-gray-300">Finish:</span> Always click 'Finish & Save' to lock in your data.</li>
               </ul>
             </div>
           </Popover>

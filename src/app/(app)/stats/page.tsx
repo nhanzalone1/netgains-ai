@@ -255,8 +255,9 @@ export default function StatsPage() {
             <div className="space-y-2">
               <p className="font-semibold text-white">Proof of Progress.</p>
               <ul className="text-sm text-gray-400 space-y-1">
+                <li>• <span className="text-gray-300">All Lifts:</span> Track strength trends for <em>every</em> exercise, not just the main lifts.</li>
                 <li>• <span className="text-gray-300">Est. 1RM:</span> Calculated using the Epley formula from your daily reps.</li>
-                <li>• <span className="text-gray-300">The Trend:</span> Ignore bad days. Watch the line move up over the 8 weeks.</li>
+                <li>• <span className="text-gray-300">The Trend:</span> Ignore bad days. Watch the line move up over time.</li>
               </ul>
             </div>
           </Popover>
