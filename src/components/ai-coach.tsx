@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
+import { useAuth } from "@/components/auth-provider";
 
 interface Message {
   id: string;
@@ -12,6 +13,7 @@ interface Message {
 }
 
 export function AICoach() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -46,6 +48,7 @@ export function AICoach() {
             role: m.role,
             content: m.content,
           })),
+          userId: user?.id,
         }),
       });
 
@@ -141,7 +144,7 @@ export function AICoach() {
                 </div>
                 <h3 className="font-bold text-lg mb-2">NetGains AI Coach</h3>
                 <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                  Ask me about workout splits, exercise substitutions, nutrition, or anything fitness-related.
+                  I'm your no-nonsense bodybuilding coach. Tell me your height, weight, and goal (cut/bulk) to get started.
                 </p>
               </div>
             )}
