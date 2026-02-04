@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { streamText, createDataStreamResponse } from "ai";
 
 export const maxDuration = 30;
 
@@ -20,11 +20,14 @@ export async function POST(req: Request) {
 
   const google = createGoogleGenerativeAI({ apiKey });
 
-  const result = streamText({
-    model: google("models/gemini-1.5-flash-latest"),
-    system: systemPrompt,
-    messages,
+  return createDataStreamResponse({
+    execute: (dataStream) => {
+      const result = streamText({
+        model: google("models/gemini-1.5-flash-latest"),
+        system: systemPrompt,
+        messages,
+      });
+      result.mergeIntoDataStream(dataStream);
+    },
   });
-
-  return result.toDataStreamResponse();
 }
