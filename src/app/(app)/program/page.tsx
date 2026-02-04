@@ -127,6 +127,11 @@ export default function ProgramPage() {
           deadlift: savedSettings.deadlift_max,
         });
         setCurrentWeek(savedSettings.current_week);
+
+        // Show input form if maxes are all 0 (e.g., after a reset)
+        if (savedSettings.squat_max === 0 && savedSettings.bench_max === 0 && savedSettings.deadlift_max === 0) {
+          setShowMaxesInput(true);
+        }
       } else {
         setShowMaxesInput(true);
       }
