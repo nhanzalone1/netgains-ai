@@ -1,32 +1,21 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { Send, Loader2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 
 export default function CoachPage() {
-  const [inputValue, setInputValue] = useState("");
-  const { messages, append, isLoading } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: "/api/chat",
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
-
-    const message = inputValue.trim();
-    setInputValue("");
-    await append({ role: "user", content: message });
-  };
 
   return (
     <div className="flex flex-col h-screen" style={{ background: "#0f0f13" }}>
@@ -59,13 +48,13 @@ export default function CoachPage() {
             </div>
             <h2 className="text-xl font-bold mb-2">NetGains Coach</h2>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-6">
-              I'm your no-nonsense bodybuilding coach. Let's get your stats and start building.
+              I&apos;m your no-nonsense bodybuilding coach. Let&apos;s get your stats and start building.
             </p>
             <div
               className="inline-block px-4 py-2 rounded-xl text-sm text-muted-foreground"
               style={{ background: "#1a1a24" }}
             >
-              Say "hey" to get started
+              Say &quot;hey&quot; to get started
             </div>
           </div>
         )}
@@ -113,8 +102,9 @@ export default function CoachPage() {
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            name="prompt"
+            value={input}
+            onChange={handleInputChange}
             placeholder="Message your coach..."
             className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
             style={{ background: "#1a1a24" }}
@@ -122,7 +112,7 @@ export default function CoachPage() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             type="submit"
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!input?.trim() || isLoading}
             className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-5 h-5" />
