@@ -45,7 +45,7 @@ create table public.exercises (
 create table public.sets (
   id uuid default uuid_generate_v4() primary key,
   exercise_id uuid references public.exercises on delete cascade not null,
-  weight integer not null,
+  weight numeric(7,1) not null,
   reps integer not null,
   order_index integer not null default 0,
   created_at timestamptz default now() not null

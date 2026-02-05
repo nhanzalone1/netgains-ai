@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   ChevronLeft,
+  ChevronDown,
   Plus,
   X,
   MoreHorizontal,
@@ -87,8 +88,37 @@ export function WorkoutSession({
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
 
-  // Active workout state
-  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
+  // Active workout state — restore from localStorage if navigating back
+  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("netgains-current-workout");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.exercises && Array.isArray(parsed.exercises)) {
+          return parsed.exercises.map(
+            (ex: { name: string; equipment: string; templateId?: string | null; sets: { weight: string; reps: string; variant: string; label?: string }[] }) => ({
+              id: Math.random().toString(36).substring(2, 9),
+              name: ex.name,
+              equipment: ex.equipment,
+              templateId: ex.templateId || null,
+              sets:
+                ex.sets.length > 0
+                  ? ex.sets.map((s) => ({
+                      id: Math.random().toString(36).substring(2, 9),
+                      weight: s.weight || "",
+                      reps: s.reps || "",
+                      variant: (s.variant || "normal") as SetVariant,
+                      label: s.label,
+                    }))
+                  : [{ id: Math.random().toString(36).substring(2, 9), weight: "", reps: "", variant: "normal" as SetVariant }],
+            })
+          );
+        }
+      }
+    } catch { /* ignore parse errors */ }
+    return [];
+  });
   const [saving, setSaving] = useState(false);
 
   // New exercise modal
@@ -105,6 +135,9 @@ export function WorkoutSession({
   // Clear confirmation modal
   const [showClearModal, setShowClearModal] = useState(false);
 
+  // Library collapsed state
+  const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
+
   // Edit mode for library
   const [isEditingLibrary, setIsEditingLibrary] = useState(false);
   const [editingExercise, setEditingExercise] = useState<ExerciseTemplate | null>(null);
@@ -117,6 +150,7 @@ export function WorkoutSession({
   const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
 
   // Sync current workout to localStorage so Coach can see in-progress data
+  // and so the workout can be restored if the user navigates away
   useEffect(() => {
     if (activeExercises.length > 0) {
       const workoutData = {
@@ -125,9 +159,13 @@ export function WorkoutSession({
         exercises: activeExercises.map((ex) => ({
           name: ex.name,
           equipment: ex.equipment,
-          sets: ex.sets
-            .filter((s) => s.weight || s.reps)
-            .map((s) => ({ weight: s.weight, reps: s.reps, variant: s.variant })),
+          templateId: ex.templateId,
+          sets: ex.sets.map((s) => ({
+            weight: s.weight,
+            reps: s.reps,
+            variant: s.variant,
+            label: s.label,
+          })),
         })),
       };
       localStorage.setItem("netgains-current-workout", JSON.stringify(workoutData));
@@ -470,7 +508,11 @@ export function WorkoutSession({
     field: "weight" | "reps",
     value: string
   ) => {
-    if (value && !/^\d*$/.test(value)) return;
+    if (field === "weight") {
+      if (value && !/^\d*\.?\d*$/.test(value)) return;
+    } else {
+      if (value && !/^\d*$/.test(value)) return;
+    }
 
     setActiveExercises((prev) =>
       prev.map((ex) =>
@@ -834,6 +876,20 @@ export function WorkoutSession({
                       return "#ff4757";
                     };
 
+                    // Compute numbered label for L/R sets (e.g., "1L", "2R")
+                    const getSetLabel = () => {
+                      if (set.variant === "left" || set.variant === "right") {
+                        const side = set.variant === "left" ? "L" : "R";
+                        let pairIndex = 0;
+                        for (const s of exercise.sets) {
+                          if (s.id === set.id) break;
+                          if (s.variant === set.variant) pairIndex++;
+                        }
+                        return `${pairIndex + 1}${side}`;
+                      }
+                      return set.label || index + 1;
+                    };
+
                     return (
                       <div
                         key={set.id}
@@ -848,14 +904,14 @@ export function WorkoutSession({
                           className="text-sm font-bold text-center"
                           style={{ color: getLabelColor() }}
                         >
-                          {set.label || index + 1}
+                          {getSetLabel()}
                         </span>
 
                         {/* Weight Input */}
                         <div className="relative">
                           <input
                             type="text"
-                            inputMode="numeric"
+                            inputMode="decimal"
                             value={set.weight}
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "weight", e.target.value)
@@ -933,7 +989,7 @@ export function WorkoutSession({
 
       {/* Finish Button */}
       {activeExercises.length > 0 && (
-        <div className="fixed bottom-56 left-0 right-0 z-50 px-4">
+        <div className={`fixed left-0 right-0 z-50 px-4 ${isLibraryCollapsed ? "bottom-36" : "bottom-72"}`}>
           <div className="max-w-lg mx-auto">
             <Button onClick={handleFinish} loading={saving}>
               Finish & Save
@@ -953,18 +1009,29 @@ export function WorkoutSession({
         }}
       >
         <div className="max-w-lg mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => !supersetForExerciseId && setIsLibraryCollapsed(!isLibraryCollapsed)}
+          >
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               {supersetForExerciseId ? (
                 <span className="text-purple-400">Select Superset Exercise</span>
               ) : (
-                "Exercise Library"
+                <>
+                  Exercise Library
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform ${isLibraryCollapsed ? "-rotate-90" : ""}`}
+                  />
+                </>
               )}
             </h4>
             {!supersetForExerciseId && libraryExercises.length > 0 && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => setIsEditingLibrary(!isEditingLibrary)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingLibrary(!isEditingLibrary);
+                }}
                 className="text-xs font-semibold uppercase tracking-wide px-2 py-1"
                 style={{ color: isEditingLibrary ? "#22c55e" : "#ff4757" }}
               >
@@ -973,89 +1040,91 @@ export function WorkoutSession({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {/* New Exercise Chip */}
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowNewExercise(true)}
-              className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5"
-              style={{
-                background: supersetForExerciseId
-                  ? "rgba(168, 85, 247, 0.15)"
-                  : "rgba(255, 71, 87, 0.15)",
-                border: supersetForExerciseId
-                  ? "1px solid rgba(168, 85, 247, 0.3)"
-                  : "1px solid rgba(255, 71, 87, 0.3)",
-                color: supersetForExerciseId ? "#a855f7" : "#ff4757",
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              New
-            </motion.button>
-
-            {/* Cancel Superset Button */}
-            {supersetForExerciseId && (
+          {!isLibraryCollapsed && (
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto mt-3">
+              {/* New Exercise Chip */}
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => setSupersetForExerciseId(null)}
-                className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5 bg-muted/30 text-muted-foreground"
+                onClick={() => setShowNewExercise(true)}
+                className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5"
+                style={{
+                  background: supersetForExerciseId
+                    ? "rgba(168, 85, 247, 0.15)"
+                    : "rgba(255, 71, 87, 0.15)",
+                  border: supersetForExerciseId
+                    ? "1px solid rgba(168, 85, 247, 0.3)"
+                    : "1px solid rgba(255, 71, 87, 0.3)",
+                  color: supersetForExerciseId ? "#a855f7" : "#ff4757",
+                }}
               >
-                <X className="w-4 h-4" />
-                Cancel
+                <Plus className="w-4 h-4" />
+                New
               </motion.button>
-            )}
 
-            {/* Library Exercise Chips */}
-            {loadingLibrary ? (
-              <span className="text-sm text-muted-foreground px-4 py-2">
-                Loading...
-              </span>
-            ) : (
-              libraryExercises.map((exercise) => {
-                const chipStyle = getEquipmentStyle(exercise.equipment);
-                return (
-                  <motion.button
-                    key={exercise.id}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleLibraryChipClick(exercise)}
-                    className="px-3 py-2 rounded-full text-sm font-medium flex items-center gap-1.5"
-                    style={{
-                      background: isEditingLibrary
-                        ? "rgba(255, 71, 87, 0.08)"
-                        : supersetForExerciseId
-                        ? "rgba(168, 85, 247, 0.1)"
-                        : "rgba(26, 26, 36, 0.8)",
-                      border: isEditingLibrary
-                        ? "1px dashed rgba(255, 71, 87, 0.5)"
-                        : supersetForExerciseId
-                        ? "1px solid rgba(168, 85, 247, 0.3)"
-                        : "1px solid rgba(255, 255, 255, 0.1)",
-                    }}
-                  >
-                    {isEditingLibrary && (
-                      <Pencil className="w-3 h-3 text-red-400" />
-                    )}
-                    <span>{exercise.name}</span>
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+              {/* Cancel Superset Button */}
+              {supersetForExerciseId && (
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSupersetForExerciseId(null)}
+                  className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5 bg-muted/30 text-muted-foreground"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel
+                </motion.button>
+              )}
+
+              {/* Library Exercise Chips */}
+              {loadingLibrary ? (
+                <span className="text-sm text-muted-foreground px-4 py-2">
+                  Loading...
+                </span>
+              ) : (
+                libraryExercises.map((exercise) => {
+                  const chipStyle = getEquipmentStyle(exercise.equipment);
+                  return (
+                    <motion.button
+                      key={exercise.id}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleLibraryChipClick(exercise)}
+                      className="px-3 py-2 rounded-full text-sm font-medium flex items-center gap-1.5"
                       style={{
-                        background: chipStyle.bg,
-                        color: chipStyle.text,
+                        background: isEditingLibrary
+                          ? "rgba(255, 71, 87, 0.08)"
+                          : supersetForExerciseId
+                          ? "rgba(168, 85, 247, 0.1)"
+                          : "rgba(26, 26, 36, 0.8)",
+                        border: isEditingLibrary
+                          ? "1px dashed rgba(255, 71, 87, 0.5)"
+                          : supersetForExerciseId
+                          ? "1px solid rgba(168, 85, 247, 0.3)"
+                          : "1px solid rgba(255, 255, 255, 0.1)",
                       }}
                     >
-                      {formatEquipment(exercise.equipment).slice(0, 2)}
-                    </span>
-                  </motion.button>
-                );
-              })
-            )}
+                      {isEditingLibrary && (
+                        <Pencil className="w-3 h-3 text-red-400" />
+                      )}
+                      <span>{exercise.name}</span>
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+                        style={{
+                          background: chipStyle.bg,
+                          color: chipStyle.text,
+                        }}
+                      >
+                        {formatEquipment(exercise.equipment).slice(0, 2)}
+                      </span>
+                    </motion.button>
+                  );
+                })
+              )}
 
-            {!loadingLibrary && libraryExercises.length === 0 && (
-              <span className="text-sm text-muted-foreground">
-                Tap "+ New" to add your first exercise
-              </span>
-            )}
-          </div>
+              {!loadingLibrary && libraryExercises.length === 0 && (
+                <span className="text-sm text-muted-foreground">
+                  Tap &quot;+ New&quot; to add your first exercise
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

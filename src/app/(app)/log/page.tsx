@@ -34,11 +34,23 @@ export default function LogPage() {
   const supabase = createClient();
   const router = useRouter();
 
-  // Core state
+  // Core state — restore from sessionStorage immediately on mount
   const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = sessionStorage.getItem("netgains-selected-location-obj");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
   const [folders, setFolders] = useState<FolderWithCount[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<FolderWithCount | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<FolderWithCount | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = sessionStorage.getItem("netgains-selected-folder-obj");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
   const [loading, setLoading] = useState(true);
 
   // Modal states
@@ -62,6 +74,15 @@ export default function LogPage() {
     loadLocations();
   }, [user]);
 
+  // Persist selectedLocation to sessionStorage
+  useEffect(() => {
+    if (selectedLocation) {
+      sessionStorage.setItem("netgains-selected-location-obj", JSON.stringify(selectedLocation));
+    } else {
+      sessionStorage.removeItem("netgains-selected-location-obj");
+    }
+  }, [selectedLocation]);
+
   // Load folders when location is selected
   useEffect(() => {
     if (!selectedLocation) {
@@ -70,6 +91,15 @@ export default function LogPage() {
     }
     loadFolders(selectedLocation.id);
   }, [selectedLocation]);
+
+  // Persist selectedFolder to sessionStorage
+  useEffect(() => {
+    if (selectedFolder) {
+      sessionStorage.setItem("netgains-selected-folder-obj", JSON.stringify(selectedFolder));
+    } else {
+      sessionStorage.removeItem("netgains-selected-folder-obj");
+    }
+  }, [selectedFolder]);
 
   const loadLocations = async () => {
     if (!user) return;
@@ -233,14 +263,13 @@ export default function LogPage() {
       for (let i = 0; i < exercises.length; i++) {
         const exercise = exercises[i];
 
-        // Create exercise entry - include template_id for stats tracking
+        // Create exercise entry
         const { data: exerciseData, error: exerciseError } = await supabase
           .from("exercises")
           .insert({
             workout_id: workout.id,
             name: exercise.name,
             order_index: i,
-            template_id: exercise.templateId, // Link to exercise_template for stats
           })
           .select()
           .single();
@@ -250,22 +279,16 @@ export default function LogPage() {
           continue;
         }
 
-        // Create sets with variant flags
+        // Create sets
         const validSets = exercise.sets.filter((s) => s.weight && s.reps);
         for (let j = 0; j < validSets.length; j++) {
           const set = validSets[j];
-          const variant = set.variant || "normal";
 
           await supabase.from("sets").insert({
             exercise_id: exerciseData.id,
-            weight: parseInt(set.weight, 10),
+            weight: parseFloat(set.weight),
             reps: parseInt(set.reps, 10),
             order_index: j,
-            variant: variant,
-            is_assisted: variant.includes("assisted"),
-            is_dropset: variant.includes("drop"),
-            is_left: variant === "left",
-            is_right: variant === "right",
           });
         }
       }
@@ -283,6 +306,8 @@ export default function LogPage() {
     setShowSuccessModal(false);
     setSelectedFolder(null);
     setSelectedLocation(null);
+    sessionStorage.removeItem("netgains-selected-location-obj");
+    sessionStorage.removeItem("netgains-selected-folder-obj");
   };
 
   // Loading state

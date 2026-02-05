@@ -27,12 +27,14 @@ Once onboarded, you are their active coach:
 - Call out inconsistency if you see gaps in their training log
 
 ## TOOL USAGE
-- Use getUserProfile to check their stats and onboarding status
-- Use getRecentLifts to analyze their training history
-- Use getMaxes to see their current 1RMs
+- ALWAYS call getUserProfile first on every new conversation to check their onboarding status
+- ALWAYS call getCurrentWorkout to check if they have an active gym session. If active, it returns their exercises with weights, reps, and sets IN PROGRESS. This is the LIVE data from their current workout.
+- getRecentLifts returns SAVED/COMPLETED workouts from the database (past sessions only)
+- When analyzing strength trends, call both getRecentLifts and getMaxes
 - Use updateUserProfile to save onboarding data
-- Use getCurrentWorkout to see what they're doing RIGHT NOW in the gym (exercises and sets logged so far in their active session)
-- Always check profile first to know if they're onboarded
+- Never guess about their data — always use the tools to look it up
+- If a user mentions their current workout, today's session, or what they're doing now, call getCurrentWorkout
+- If a user asks about past sessions or history, call getRecentLifts
 
 ## VOICE EXAMPLES
 - "What's your height? Feet and inches."
@@ -153,25 +155,71 @@ export async function POST(req: Request) {
       }
       case 'getRecentLifts': {
         const limit = (input.limit as number) ?? 5;
+        console.log(`[Coach] getRecentLifts called for user ${user.id}, limit=${limit}`);
+
+        // Fetch workouts
         const { data: workouts, error } = await supabase
           .from('workouts')
-          .select(`
-            id,
-            date,
-            exercises (
-              id,
-              name,
-              sets (
-                weight,
-                reps
-              )
-            )
-          `)
+          .select('id, date, notes')
           .eq('user_id', user.id)
           .order('date', { ascending: false })
           .limit(limit);
-        if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify(workouts);
+
+        if (error) {
+          console.error('[Coach] getRecentLifts error:', error);
+          return JSON.stringify({ error: error.message });
+        }
+
+        if (!workouts || workouts.length === 0) {
+          return JSON.stringify([]);
+        }
+
+        // Fetch exercises and sets for each workout
+        const workoutIds = workouts.map((w) => w.id);
+        console.log('[Coach] Fetching exercises for workout IDs:', workoutIds);
+        const { data: exercises, error: exError } = await supabase
+          .from('exercises')
+          .select('id, workout_id, name, order_index')
+          .in('workout_id', workoutIds)
+          .order('order_index', { ascending: true });
+
+        if (exError) {
+          console.error('[Coach] Exercises query error:', exError);
+        }
+        console.log(`[Coach] Exercises query returned: ${exercises?.length ?? 0} exercises`, JSON.stringify(exercises));
+
+        const exerciseIds = (exercises || []).map((e) => e.id);
+        const { data: sets, error: setsError } = exerciseIds.length > 0
+          ? await supabase
+              .from('sets')
+              .select('id, exercise_id, weight, reps, order_index')
+              .in('exercise_id', exerciseIds)
+              .order('order_index', { ascending: true })
+          : { data: [], error: null };
+
+        if (setsError) {
+          console.error('[Coach] Sets query error:', setsError);
+        }
+        console.log(`[Coach] Sets query returned: ${sets?.length ?? 0} sets`);
+
+        // Assemble the data
+        const result = workouts.map((workout) => ({
+          ...workout,
+          exercises: (exercises || [])
+            .filter((e) => e.workout_id === workout.id)
+            .map((exercise) => ({
+              name: exercise.name,
+              sets: (sets || [])
+                .filter((s) => s.exercise_id === exercise.id)
+                .map((s) => ({ weight: s.weight, reps: s.reps })),
+            })),
+        }));
+
+        console.log(`[Coach] getRecentLifts returned ${result.length} workouts`);
+        if (result.length > 0) {
+          console.log('[Coach] First workout:', JSON.stringify(result[0], null, 2));
+        }
+        return JSON.stringify(result);
       }
       case 'getCurrentWorkout': {
         if (!currentWorkout) return JSON.stringify({ active: false, message: 'No workout in progress' });
