@@ -51,7 +51,18 @@ create table public.sets (
   created_at timestamptz default now() not null
 );
 
+-- Coach long-term memory (key-value pairs per user)
+create table public.coach_memory (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  key text not null,
+  value text not null,
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
 -- Indexes for common queries
+create index idx_coach_memory_user_id on public.coach_memory(user_id);
 create index idx_maxes_user_id on public.maxes(user_id);
 create index idx_workouts_user_id on public.workouts(user_id);
 create index idx_workouts_date on public.workouts(date);
@@ -64,6 +75,7 @@ alter table public.maxes enable row level security;
 alter table public.workouts enable row level security;
 alter table public.exercises enable row level security;
 alter table public.sets enable row level security;
+alter table public.coach_memory enable row level security;
 
 -- Profiles policies
 create policy "Users can view own profile"
@@ -194,6 +206,23 @@ create policy "Users can delete own sets"
     )
   );
 
+-- Coach memory policies
+create policy "Users can view own memories"
+  on public.coach_memory for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own memories"
+  on public.coach_memory for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own memories"
+  on public.coach_memory for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own memories"
+  on public.coach_memory for delete
+  using (auth.uid() = user_id);
+
 -- Function to create profile on signup
 create or replace function public.handle_new_user()
 returns trigger as $$
@@ -225,4 +254,8 @@ create trigger set_profiles_updated_at
 
 create trigger set_maxes_updated_at
   before update on public.maxes
+  for each row execute procedure public.handle_updated_at();
+
+create trigger set_coach_memory_updated_at
+  before update on public.coach_memory
   for each row execute procedure public.handle_updated_at();

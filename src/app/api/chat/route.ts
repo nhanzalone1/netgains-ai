@@ -12,12 +12,21 @@ const COACH_SYSTEM_PROMPT = `You are Coach, a strict, no-nonsense bodybuilding c
 - You speak like a gym veteran, not a corporate AI.
 
 ## ONBOARDING MODE
-If the user hasn't completed onboarding (onboarding_complete is false or null), your FIRST priority is gathering their data. Ask ONE question at a time in this order:
-1. Height (in feet/inches)
-2. Current weight (in lbs)
-3. Goal: Are they bulking, cutting, or maintaining?
+If the user hasn't completed onboarding (onboarding_complete is false or null), your FIRST priority is gathering their data. When the user sends their first message, respond with: "Before we get started, let me ask you a few questions so I can personalize your training."
 
-After getting all three, use the updateUserProfile tool to save their data and mark onboarding complete. Then welcome them to the program.
+Then ask ONE question at a time in this order:
+1. Name — "What should I call you?"
+2. Age — "How old are you?"
+3. Height — "Height? Feet and inches."
+4. Weight — "Current weight in lbs?"
+5. Training schedule — "How many days a week can you train?"
+6. Fitness goals — "What's the goal? Bulking, cutting, or maintaining?"
+7. Injuries or limitations — "Any injuries or limitations I need to know about? Bad shoulders, knees, back issues — anything."
+8. Coaching tone — "Last one. How do you want me to coach you? Strict and no-BS, motivational and hype, or chill and laid-back?"
+
+Save EACH answer immediately using saveMemory as the user provides it (e.g., key: "name", value: "Noah"). Also save height/weight to the profile using updateUserProfile, and save the goal there too.
+
+After all 8 questions are answered, mark onboarding_complete as true using updateUserProfile, and respond with: "Got it. Let's get to work, [name]."
 
 ## COACHING MODE
 Once onboarded, you are their active coach:
@@ -27,7 +36,7 @@ Once onboarded, you are their active coach:
 - Call out inconsistency if you see gaps in their training log
 
 ## TOOL USAGE
-- ALWAYS call getUserProfile first on every new conversation to check their onboarding status
+- ALWAYS call getUserProfile and getMemories first on every new conversation to check their onboarding status and load what you know about them
 - ALWAYS call getCurrentWorkout to check if they have an active gym session. If active, it returns their exercises with weights, reps, and sets IN PROGRESS. This is the LIVE data from their current workout.
 - getRecentLifts returns SAVED/COMPLETED workouts from the database (past sessions only)
 - When analyzing strength trends, call both getRecentLifts and getMaxes
@@ -35,6 +44,14 @@ Once onboarded, you are their active coach:
 - Never guess about their data — always use the tools to look it up
 - If a user mentions their current workout, today's session, or what they're doing now, call getCurrentWorkout
 - If a user asks about past sessions or history, call getRecentLifts
+
+## LONG-TERM MEMORY
+- At the start of every conversation, call getMemories to load what you know about this user
+- When the user shares important personal info, save it immediately with saveMemory
+- Things to remember: age, schedule, goals, injuries, preferences, training split, weak points, PRs, sleep habits, diet approach, any coaching adjustments you've made
+- Use descriptive keys like "age", "training_split", "left_shoulder_injury", "preferred_rep_range", "sleep_hours"
+- Always check memories before giving advice so your coaching is consistent and personalized
+- If a memory changes (e.g., new goal, weight update), save the updated value — it will overwrite the old one
 
 ## VOICE EXAMPLES
 - "What's your height? Feet and inches."
@@ -95,6 +112,27 @@ const tools: Anthropic.Tool[] = [
       type: 'object',
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'getMemories',
+    description: 'Get all saved memories/facts about this user (age, injuries, preferences, schedule, etc.). Call this at the start of every conversation.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'saveMemory',
+    description: 'Save a key-value fact about the user for long-term memory. If the key already exists, it will be updated. Use descriptive keys like "age", "training_split", "left_shoulder_injury".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'A descriptive key for the memory (e.g., "age", "training_split", "injury_notes")' },
+        value: { type: 'string', description: 'The value to store (e.g., "22", "push_pull_legs", "rotator cuff strain - avoid overhead")' },
+      },
+      required: ['key', 'value'],
     },
   },
 ];
@@ -224,6 +262,42 @@ export async function POST(req: Request) {
       case 'getCurrentWorkout': {
         if (!currentWorkout) return JSON.stringify({ active: false, message: 'No workout in progress' });
         return JSON.stringify({ active: true, workout: currentWorkout });
+      }
+      case 'getMemories': {
+        const { data, error } = await supabase
+          .from('coach_memory')
+          .select('key, value, updated_at')
+          .eq('user_id', user.id)
+          .order('key', { ascending: true });
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data || []);
+      }
+      case 'saveMemory': {
+        const key = input.key as string;
+        const value = input.value as string;
+
+        // Upsert: check if key exists, then update or insert
+        const { data: existing } = await supabase
+          .from('coach_memory')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('key', key)
+          .single();
+
+        if (existing) {
+          const { error } = await supabase
+            .from('coach_memory')
+            .update({ value })
+            .eq('id', existing.id);
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ success: true, action: 'updated', key, value });
+        } else {
+          const { error } = await supabase
+            .from('coach_memory')
+            .insert({ user_id: user.id, key, value });
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ success: true, action: 'created', key, value });
+        }
       }
       default:
         return JSON.stringify({ error: 'Unknown tool' });
