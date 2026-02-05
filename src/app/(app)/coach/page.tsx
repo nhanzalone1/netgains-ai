@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2, Sparkles, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 
@@ -138,6 +138,22 @@ export default function CoachPage() {
     setIsLoading(false);
   };
 
+  const handleReset = async () => {
+    if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
+    // Clear localStorage
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("netgains-current-workout");
+    // Reset onboarding and memories via API
+    try {
+      await fetch("/api/coach-reset", { method: "POST" });
+    } catch (e) {
+      console.error("Reset API error:", e);
+    }
+    // Reset local state
+    setMessages([INITIAL_GREETING]);
+    setInputValue("");
+  };
+
   return (
     <div className="flex flex-col h-screen" style={{ background: "#0f0f13" }}>
       {/* Header */}
@@ -154,11 +170,20 @@ export default function CoachPage() {
             <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
           </div>
         </div>
-        <UserMenu />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            className="p-2 rounded-lg text-muted-foreground hover:text-white transition-colors"
+            title="Reset chat"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          <UserMenu />
+        </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -198,8 +223,8 @@ export default function CoachPage() {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-white/5 pb-36">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+      <div className="fixed bottom-24 left-0 right-0 z-40 p-4 border-t border-white/5" style={{ background: "#0f0f13" }}>
+        <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto">
           <input
             type="text"
             value={inputValue}
