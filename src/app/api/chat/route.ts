@@ -32,6 +32,8 @@ Then ask ONE question at a time in this order:
 13. Cardio — "Current cardio routine? Type, duration, frequency. Or none."
 14. Activity level — "Daily step goal or general activity level outside the gym?"
 15. Sleep — "Average sleep hours per night?"
+16. Supplements — "What supplements do you currently take? Protein, creatine, vitamins, etc."
+17. Pre-workout — "Do you use a pre-workout? If so, which one and how often?"
 
 Save EACH answer immediately using saveMemory as the user provides it (e.g., key: "name", value: "Noah"). Also save height/weight to the profile using updateUserProfile, and save the goal there too.
 
@@ -165,8 +167,9 @@ export async function POST(req: Request) {
     content: m.content,
   }));
 
-  // Tool execution helper
+  // Tool execution helper — wrapped in try/catch so a single tool failure doesn't kill the whole request
   async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+    try {
     switch (name) {
       case 'getUserProfile': {
         const { data, error } = await supabase
@@ -311,6 +314,10 @@ export async function POST(req: Request) {
       default:
         return JSON.stringify({ error: 'Unknown tool' });
     }
+    } catch (err) {
+      console.error(`[Coach] Tool "${name}" threw an error:`, err);
+      return JSON.stringify({ error: `Tool ${name} failed: ${err instanceof Error ? err.message : 'unknown error'}` });
+    }
   }
 
   // Create streaming response
@@ -377,7 +384,10 @@ export async function POST(req: Request) {
         controller.close();
       } catch (error) {
         console.error('Chat error:', error);
-        controller.error(error);
+        // Send error as text instead of crashing the stream
+        const errorMsg = `0:${JSON.stringify("Coach is having a moment. Try sending that again.")}\n`;
+        controller.enqueue(encoder.encode(errorMsg));
+        controller.close();
       }
     },
   });

@@ -47,6 +47,63 @@ export default function CoachPage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   }, [messages]);
 
+  const sendRequest = async (allMessages: Message[]): Promise<Response> => {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: allMessages
+          .filter((m) => m.id !== "initial-greeting")
+          .map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        currentWorkout: (() => {
+          try {
+            const stored = localStorage.getItem("netgains-current-workout");
+            return stored ? JSON.parse(stored) : null;
+          } catch {
+            return null;
+          }
+        })(),
+      }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response;
+  };
+
+  const streamResponse = async (response: Response, assistantMessageId: string) => {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("0:")) {
+            try {
+              const text = JSON.parse(line.slice(2));
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessageId
+                    ? { ...m, content: m.content + text }
+                    : m
+                )
+              );
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -57,82 +114,46 @@ export default function CoachPage() {
       content: inputValue.trim(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const allMessages = [...messages, userMessage];
+    setMessages(allMessages);
     setInputValue("");
     setIsLoading(true);
 
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: "",
+    };
+
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, userMessage]
-            .filter((m) => m.id !== "initial-greeting")
-            .map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-          currentWorkout: (() => {
-            try {
-              const stored = localStorage.getItem("netgains-current-workout");
-              return stored ? JSON.parse(stored) : null;
-            } catch {
-              return null;
-            }
-          })(),
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to get response");
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "",
-      };
-
+      // First attempt
+      const response = await sendRequest(allMessages);
       setMessages((prev) => [...prev, assistantMessage]);
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            // Handle text chunks: 0:"text"
-            if (line.startsWith("0:")) {
-              try {
-                const text = JSON.parse(line.slice(2));
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMessage.id
-                      ? { ...m, content: m.content + text }
-                      : m
-                  )
-                );
-              } catch {
-                // Skip malformed chunks
-              }
-            }
-          }
-        }
+      await streamResponse(response, assistantMessage.id);
+    } catch (firstError) {
+      console.error("Chat error (attempt 1):", firstError);
+      try {
+        // Auto-retry once
+        const retryResponse = await sendRequest(allMessages);
+        setMessages((prev) => {
+          // Remove empty assistant message if it was added
+          const filtered = prev.filter((m) => m.id !== assistantMessage.id || m.content !== "");
+          return [...filtered, { ...assistantMessage, id: (Date.now() + 2).toString(), content: "" }];
+        });
+        const retryId = (Date.now() + 2).toString();
+        setMessages((prev) => [...prev.filter((m) => m.content !== "" || m.role !== "assistant"), { id: retryId, role: "assistant", content: "" }]);
+        await streamResponse(retryResponse, retryId);
+      } catch (retryError) {
+        console.error("Chat error (attempt 2):", retryError);
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== assistantMessage.id || m.content !== ""),
+          {
+            id: (Date.now() + 3).toString(),
+            role: "assistant",
+            content: "Coach is having a moment. Try sending that again.",
+          },
+        ]);
       }
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: "Sorry, I couldn't process your request. Please try again.",
-        },
-      ]);
     }
 
     setIsLoading(false);
