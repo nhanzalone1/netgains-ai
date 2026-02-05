@@ -44,7 +44,9 @@ export default function CoachPage() {
   }, [messages]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    // Don't save empty assistant messages
+    const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
   }, [messages]);
 
   const sendRequest = async (allMessages: Message[]): Promise<Response> => {
@@ -205,7 +207,7 @@ export default function CoachPage() {
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
-        {messages.map((message) => (
+        {messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "").map((message) => (
           <div
             key={message.id}
             className={`flex ${

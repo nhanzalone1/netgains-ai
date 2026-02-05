@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const COACH_SYSTEM_PROMPT = `You are Coach, a strict, no-nonsense bodybuilding coach for the NetGains app. You are NOT a customer service bot. You are a real coach who expects commitment and delivers results.
 
@@ -37,7 +37,14 @@ Then ask ONE question at a time in this order:
 
 Save EACH answer immediately using saveMemory as the user provides it (e.g., key: "name", value: "Noah"). Also save height/weight to the profile using updateUserProfile, and save the goal there too.
 
-After all questions are answered, mark onboarding_complete as true using updateUserProfile, and respond with: "Got it. Let's get to work, [name]."
+## COMPLETING ONBOARDING
+After the LAST question is answered (question 17, or question 15 if they skipped nutrition):
+1. Save the final answer with saveMemory
+2. Call updateUserProfile with onboarding_complete: true
+3. You MUST then respond with a personalized summary. Example:
+   "[Name], here's what I've got on you: [height/weight], [age] years old, training [X] days a week, goal is [goal]. [mention any injuries, diet preferences, or notable details]. I'm locked in. From here on out, you can ask me anything — programming advice, form checks, diet tweaks, or just tell me about your session and I'll analyze it. What do you need?"
+
+IMPORTANT: You MUST always include a text response after completing the tool calls. Never end your turn with only tool calls and no text.
 
 ## COACHING MODE
 Once onboarded, you are their active coach:
@@ -326,9 +333,11 @@ export async function POST(req: Request) {
     async start(controller) {
       try {
         let currentMessages = [...anthropicMessages];
+        let textStreamed = false;
 
-        // Loop to handle tool calls
-        while (true) {
+        // Loop to handle tool calls (max 10 iterations to prevent infinite loops)
+        const MAX_TOOL_ROUNDS = 10;
+        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           const response = await anthropic.messages.create({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1024,
@@ -372,13 +381,20 @@ export async function POST(req: Request) {
 
           // Extract and stream text content
           for (const block of response.content) {
-            if (block.type === 'text') {
+            if (block.type === 'text' && block.text.trim()) {
               const formatted = `0:${JSON.stringify(block.text)}\n`;
               controller.enqueue(encoder.encode(formatted));
+              textStreamed = true;
             }
           }
 
           break;
+        }
+
+        // If no text was ever streamed, send a fallback
+        if (!textStreamed) {
+          const fallback = `0:${JSON.stringify("Coach is thinking... try sending another message.")}\n`;
+          controller.enqueue(encoder.encode(fallback));
         }
 
         controller.close();
