@@ -60,30 +60,14 @@ export default function CoachPage() {
     }
   }, [messages, scrollToBottom]);
 
-  // Also scroll when streaming updates the last message
+  // Scroll when streaming completes (not during — let user read while streaming)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === "assistant" && isLoading) {
+    // Only scroll when streaming finishes (loading stops and we have content)
+    if (!isLoading && lastMessage?.role === "assistant" && lastMessage.content) {
       scrollToBottom();
     }
-  }, [messages, isLoading, scrollToBottom]);
-
-  // Handle mobile keyboard visibility — prevent scroll jump when keyboard appears
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    const handleResize = () => {
-      // When keyboard opens, the visual viewport shrinks
-      // Keep the messages container in view without jumping
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.style.paddingBottom = `${window.innerHeight - viewport.height + 128}px`;
-      }
-    };
-
-    viewport.addEventListener("resize", handleResize);
-    return () => viewport.removeEventListener("resize", handleResize);
-  }, []);
+  }, [isLoading, scrollToBottom]); // Intentionally not including messages to avoid scroll during stream
 
   useEffect(() => {
     // Don't save empty assistant messages
