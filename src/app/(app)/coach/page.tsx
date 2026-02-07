@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2, Sparkles, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
@@ -38,10 +38,52 @@ export default function CoachPage() {
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(messages.length);
+  const shouldScrollRef = useRef(false);
+
+  // Scroll to bottom only when a NEW message arrives, not on input focus
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    // Only scroll if message count increased (new message added)
+    if (messages.length > prevMessageCountRef.current) {
+      shouldScrollRef.current = true;
+    }
+    prevMessageCountRef.current = messages.length;
+
+    if (shouldScrollRef.current) {
+      scrollToBottom();
+      shouldScrollRef.current = false;
+    }
+  }, [messages, scrollToBottom]);
+
+  // Also scroll when streaming updates the last message
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === "assistant" && isLoading) {
+      scrollToBottom();
+    }
+  }, [messages, isLoading, scrollToBottom]);
+
+  // Handle mobile keyboard visibility — prevent scroll jump when keyboard appears
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const handleResize = () => {
+      // When keyboard opens, the visual viewport shrinks
+      // Keep the messages container in view without jumping
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.style.paddingBottom = `${window.innerHeight - viewport.height + 128}px`;
+      }
+    };
+
+    viewport.addEventListener("resize", handleResize);
+    return () => viewport.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     // Don't save empty assistant messages
@@ -120,6 +162,7 @@ export default function CoachPage() {
     setMessages(allMessages);
     setInputValue("");
     setIsLoading(true);
+    shouldScrollRef.current = true; // Ensure we scroll after sending
 
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -178,7 +221,7 @@ export default function CoachPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: "#0f0f13" }}>
+    <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/5">
         <div className="flex items-center gap-3">
@@ -206,7 +249,10 @@ export default function CoachPage() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 pb-32 space-y-4 overscroll-contain"
+      >
         {messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "").map((message) => (
           <div
             key={message.id}
@@ -242,11 +288,17 @@ export default function CoachPage() {
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* Input Area */}
-      <div className="fixed bottom-24 left-0 right-0 z-40 p-4 border-t border-white/5" style={{ background: "#0f0f13" }}>
+      {/* Input Area — uses safe-area-inset for notched phones */}
+      <div
+        className="fixed bottom-24 left-0 right-0 z-40 p-4 border-t border-white/5"
+        style={{
+          background: "#0f0f13",
+          paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        }}
+      >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto">
           <input
             type="text"
