@@ -37,10 +37,31 @@ export default function CoachPage() {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const shouldScrollRef = useRef(false);
+
+  // Track keyboard visibility via Visual Viewport API
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const onResize = () => {
+      // Keyboard height = full window height - visible viewport height
+      const kbHeight = window.innerHeight - viewport.height;
+      setKeyboardHeight(kbHeight > 50 ? kbHeight : 0); // Only set if significant
+    };
+
+    viewport.addEventListener("resize", onResize);
+    viewport.addEventListener("scroll", onResize);
+    return () => {
+      viewport.removeEventListener("resize", onResize);
+      viewport.removeEventListener("scroll", onResize);
+    };
+  }, []);
 
   // Scroll to bottom only when a NEW message arrives, not on input focus
   const scrollToBottom = useCallback(() => {
@@ -235,7 +256,8 @@ export default function CoachPage() {
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 pb-32 space-y-4 overscroll-contain"
+        className="flex-1 overflow-y-auto p-4 space-y-4 overscroll-contain"
+        style={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 80 : 128 }}
       >
         {messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "").map((message) => (
           <div
@@ -275,16 +297,18 @@ export default function CoachPage() {
         <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* Input Area — uses safe-area-inset for notched phones */}
+      {/* Input Area — repositions when keyboard is open */}
       <div
-        className="fixed bottom-24 left-0 right-0 z-40 p-4 border-t border-white/5"
+        className="fixed left-0 right-0 z-40 p-4 border-t border-white/5 transition-[bottom] duration-100"
         style={{
           background: "#0f0f13",
-          paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          bottom: keyboardHeight > 0 ? keyboardHeight : 96, // 96px = bottom nav height
+          paddingBottom: keyboardHeight > 0 ? 8 : "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto">
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
