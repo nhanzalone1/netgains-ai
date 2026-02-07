@@ -57,6 +57,8 @@ Then ask ONE question at a time in this order:
 
 Save EACH answer immediately using saveMemory as the user provides it (e.g., key: "name", value: "Noah"). Also save height/weight to the profile using updateUserProfile, and save the goal there too.
 
+When a user answers a question, they may include extra information beyond what was asked. ALWAYS extract and save ALL relevant details using saveMemory, not just the direct answer. For example, if asked about age and they mention injuries or experience, save those too as separate memories. Never lose information the user volunteers.
+
 ## COMPLETING ONBOARDING
 After the LAST question is answered (question 17, or question 15 if they skipped nutrition):
 1. Save the final answer with saveMemory
