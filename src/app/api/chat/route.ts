@@ -108,6 +108,29 @@ Once onboarded, you are their active coach:
 - Always check memories before giving advice so your coaching is consistent and personalized
 - If a memory changes (e.g., new goal, weight update), save the updated value — it will overwrite the old one
 
+## NUTRITION COACHING
+You can help users with meal planning and tracking:
+
+- When user asks for a meal plan, use addMealPlan to add each meal. Add all meals for the day with specific portions and macros.
+- When user asks about their nutrition today, call getTodaysMeals first to see what they've eaten and what's planned.
+- When analyzing their diet, compare consumed meals against their goals from getNutritionGoals.
+- If user wants to change their calorie/macro targets, use updateNutritionGoals.
+- Be specific with portions (e.g., "6oz chicken breast", "1 cup rice") and macros when creating meal plans.
+- Consider their dietary preferences/restrictions from memory when suggesting foods.
+- When creating a meal plan, add each meal using addMealPlan so it appears in their Nutrition tab.
+
+Example meal plan response format:
+"Here's your meal plan for today:
+
+Breakfast: 3 eggs scrambled with spinach, 2 slices toast (450 cal, 28g protein)
+Lunch: Grilled chicken breast 6oz with rice 1 cup and broccoli (550 cal, 45g protein)
+Dinner: Salmon 5oz with sweet potato and asparagus (500 cal, 35g protein)
+Snack: Greek yogurt with berries (200 cal, 15g protein)
+
+Total: 1,700 cal, 123g protein
+
+I've added these to your Nutrition tab. Tap each meal when you eat it."
+
 ## VOICE EXAMPLES
 - "What's your height? Feet and inches."
 - "185 at 5'10? Alright, we can work with that. Bulking or cutting?"
@@ -188,6 +211,58 @@ const tools: Anthropic.Tool[] = [
         value: { type: 'string', description: 'The value to store (e.g., "22", "push_pull_legs", "rotator cuff strain - avoid overhead")' },
       },
       required: ['key', 'value'],
+    },
+  },
+  {
+    name: 'getTodaysMeals',
+    description: 'Get all meals logged for a specific day including both planned (AI-generated) and consumed meals',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Date in YYYY-MM-DD format, defaults to today' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'getNutritionGoals',
+    description: 'Get user daily nutrition targets (calories, protein, carbs, fat)',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'addMealPlan',
+    description: 'Add a planned meal for the user (AI-generated meal plan). Use this when creating meal plans for the user.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'], description: 'Type of meal' },
+        food_name: { type: 'string', description: 'Name of the food/meal' },
+        calories: { type: 'number', description: 'Calories in the meal' },
+        protein: { type: 'number', description: 'Protein in grams' },
+        carbs: { type: 'number', description: 'Carbs in grams' },
+        fat: { type: 'number', description: 'Fat in grams' },
+        serving_size: { type: 'string', description: 'Serving size description (e.g., "6oz", "1 cup")' },
+        date: { type: 'string', description: 'Date in YYYY-MM-DD format, defaults to today' },
+      },
+      required: ['meal_type', 'food_name', 'calories', 'protein', 'carbs', 'fat'],
+    },
+  },
+  {
+    name: 'updateNutritionGoals',
+    description: 'Set or update user daily nutrition targets (calories, protein, carbs, fat)',
+    input_schema: {
+      type: 'object',
+      properties: {
+        calories: { type: 'number', description: 'Daily calorie target' },
+        protein: { type: 'number', description: 'Daily protein target in grams' },
+        carbs: { type: 'number', description: 'Daily carbs target in grams' },
+        fat: { type: 'number', description: 'Daily fat target in grams' },
+      },
+      required: [],
     },
   },
 ];
@@ -354,6 +429,77 @@ export async function POST(req: Request) {
           if (error) return JSON.stringify({ error: error.message });
           return JSON.stringify({ success: true, action: 'created', key, value });
         }
+      }
+      case 'getTodaysMeals': {
+        const targetDate = (input.date as string) || new Date().toISOString().split('T')[0];
+        const { data, error } = await supabase
+          .from('meals')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .order('meal_type');
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify(data || []);
+      }
+      case 'getNutritionGoals': {
+        const { data, error } = await supabase
+          .from('nutrition_goals')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        if (error) {
+          // Return defaults if no goals set
+          return JSON.stringify({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
+        }
+        return JSON.stringify(data);
+      }
+      case 'addMealPlan': {
+        const targetDate = (input.date as string) || new Date().toISOString().split('T')[0];
+        const { error } = await supabase
+          .from('meals')
+          .insert({
+            user_id: user.id,
+            date: targetDate,
+            meal_type: input.meal_type as string,
+            food_name: input.food_name as string,
+            calories: input.calories as number,
+            protein: input.protein as number,
+            carbs: input.carbs as number,
+            fat: input.fat as number,
+            serving_size: input.serving_size as string | null,
+            ai_generated: true,
+            consumed: false,
+          });
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ success: true, message: `Added ${input.food_name} to ${input.meal_type}` });
+      }
+      case 'updateNutritionGoals': {
+        const updates: Record<string, unknown> = {};
+        if (input.calories !== undefined) updates.calories = input.calories;
+        if (input.protein !== undefined) updates.protein = input.protein;
+        if (input.carbs !== undefined) updates.carbs = input.carbs;
+        if (input.fat !== undefined) updates.fat = input.fat;
+
+        // Check if goals exist
+        const { data: existing } = await supabase
+          .from('nutrition_goals')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (existing) {
+          const { error } = await supabase
+            .from('nutrition_goals')
+            .update(updates)
+            .eq('user_id', user.id);
+          if (error) return JSON.stringify({ error: error.message });
+        } else {
+          const { error } = await supabase
+            .from('nutrition_goals')
+            .insert({ user_id: user.id, ...updates });
+          if (error) return JSON.stringify({ error: error.message });
+        }
+        return JSON.stringify({ success: true, updated: updates });
       }
       default:
         return JSON.stringify({ error: 'Unknown tool' });

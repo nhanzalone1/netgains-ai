@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Dumbbell, ClipboardList, TrendingUp, Sparkles } from "lucide-react";
+import { ClipboardList, Utensils, Sparkles, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 
 const navItems = [
-  { href: "/program", label: "Program", icon: Dumbbell },
   { href: "/log", label: "Log", icon: ClipboardList },
-  { href: "/stats", label: "Stats", icon: TrendingUp },
+  { href: "/nutrition", label: "Nutrition", icon: Utensils },
   { href: "/coach", label: "Coach", icon: Sparkles },
+  { href: "/stats", label: "Stats", icon: TrendingUp },
 ];
 
 export function BottomNav() {
@@ -28,7 +28,7 @@ export function BottomNav() {
         }}
       >
         {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href === "/program" && pathname === "/");
+          const isActive = pathname === href || (href === "/log" && pathname === "/");
           return (
             <Link key={href} href={href}>
               <motion.div
