@@ -9,6 +9,8 @@ import {
   Check,
   Sparkles,
   X,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, PanInfo } from "framer-motion";
@@ -101,8 +103,8 @@ function getWeekDates(centerDate: Date): Date[] {
 function CalorieRing({
   consumed,
   goal,
-  size = 220,
-  strokeWidth = 14
+  size = 240,
+  strokeWidth = 16
 }: {
   consumed: number;
   goal: number;
@@ -112,15 +114,17 @@ function CalorieRing({
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const progress = Math.min(consumed / goal, 1);
-  const strokeDashoffset = circumference - (progress * circumference);
+  const offset = circumference - (progress * circumference);
   const remaining = Math.max(goal - consumed, 0);
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      {/* SVG Ring */}
       <svg
         width={size}
         height={size}
-        className="transform -rotate-90"
+        viewBox={`0 0 ${size} ${size}`}
+        style={{ transform: 'rotate(-90deg)' }}
       >
         {/* Background circle */}
         <circle
@@ -128,42 +132,32 @@ function CalorieRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.08)"
+          stroke="rgba(255, 255, 255, 0.1)"
           strokeWidth={strokeWidth}
         />
         {/* Progress circle */}
-        <motion.circle
+        <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="url(#calorieGradient)"
+          stroke="#ff4757"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset }}
-          transition={{ duration: 1, ease: "easeOut" }}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+          style={{
+            transition: 'stroke-dashoffset 1s ease-out',
+          }}
         />
-        <defs>
-          <linearGradient id="calorieGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ff4757" />
-            <stop offset="100%" stopColor="#ff6b81" />
-          </linearGradient>
-        </defs>
       </svg>
-      {/* Center text */}
+      {/* Center text - positioned absolutely */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <motion.span
-          className="text-4xl font-black"
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3 }}
-        >
+        <span className="text-5xl font-black text-white">
           {remaining.toLocaleString()}
-        </motion.span>
-        <span className="text-xs text-muted-foreground mt-1">remaining</span>
-        <span className="text-sm text-muted-foreground mt-2">
+        </span>
+        <span className="text-sm text-muted-foreground mt-1">remaining</span>
+        <span className="text-xs text-muted-foreground mt-3">
           {consumed.toLocaleString()} / {goal.toLocaleString()} kcal
         </span>
       </div>
@@ -230,6 +224,8 @@ export default function NutritionPage() {
   const [foodFat, setFoodFat] = useState("");
   const [foodServing, setFoodServing] = useState("");
   const [savingFood, setSavingFood] = useState(false);
+  const [estimating, setEstimating] = useState(false);
+  const [isAiEstimate, setIsAiEstimate] = useState(false);
 
   // Swipe direction for animation
   const [swipeDirection, setSwipeDirection] = useState(0);
@@ -377,6 +373,34 @@ export default function NutritionPage() {
     loadWeekData();
   };
 
+  // Estimate macros using AI
+  const handleEstimateMacros = async () => {
+    if (!foodName.trim()) return;
+
+    setEstimating(true);
+    try {
+      const response = await fetch("/api/nutrition/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ foodDescription: foodName }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFoodName(data.food_name || foodName);
+        setFoodCalories(data.calories?.toString() || "");
+        setFoodProtein(data.protein?.toString() || "");
+        setFoodCarbs(data.carbs?.toString() || "");
+        setFoodFat(data.fat?.toString() || "");
+        setFoodServing(data.serving_size || "");
+        setIsAiEstimate(true);
+      }
+    } catch (error) {
+      console.error("Failed to estimate:", error);
+    }
+    setEstimating(false);
+  };
+
   // Save custom food
   const handleSaveFood = async () => {
     if (!user || !foodName.trim()) return;
@@ -405,6 +429,7 @@ export default function NutritionPage() {
     setFoodCarbs("");
     setFoodFat("");
     setFoodServing("");
+    setIsAiEstimate(false);
     loadData();
     loadWeekData();
   };
@@ -741,15 +766,50 @@ export default function NutritionPage() {
             ))}
           </div>
 
-          {/* Food Name */}
-          <input
-            type="text"
-            value={foodName}
-            onChange={(e) => setFoodName(e.target.value)}
-            placeholder="Food name"
-            className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-            autoFocus
-          />
+          {/* Food Name + Estimate Button */}
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={foodName}
+              onChange={(e) => {
+                setFoodName(e.target.value);
+                setIsAiEstimate(false);
+              }}
+              placeholder="e.g., chicken breast 6oz, 2 eggs, protein shake"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              autoFocus
+            />
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={handleEstimateMacros}
+              disabled={!foodName.trim() || estimating}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+              style={{
+                background: "rgba(147, 51, 234, 0.15)",
+                border: "1px solid rgba(147, 51, 234, 0.3)",
+              }}
+            >
+              {estimating ? (
+                <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+              ) : (
+                <Wand2 className="w-4 h-4 text-purple-400" />
+              )}
+              <span className="text-purple-400">
+                {estimating ? "Estimating..." : "Estimate Macros"}
+              </span>
+            </motion.button>
+          </div>
+
+          {/* AI Estimate Note */}
+          {isAiEstimate && (
+            <motion.p
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xs text-purple-400 text-center"
+            >
+              AI estimate — adjust if needed
+            </motion.p>
+          )}
 
           {/* Macros Grid */}
           <div className="grid grid-cols-2 gap-3">
