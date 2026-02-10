@@ -54,14 +54,14 @@ const DEFAULT_GOALS: NutritionGoals = {
   fat: 65,
 };
 
-const QUICK_FOODS = [
-  { name: "Chicken Breast", calories: 165, protein: 31, carbs: 0, fat: 4, serving: "4oz" },
-  { name: "Rice", calories: 205, protein: 4, carbs: 45, fat: 0, serving: "1 cup" },
-  { name: "Eggs", calories: 155, protein: 13, carbs: 1, fat: 11, serving: "2 large" },
-  { name: "Protein Shake", calories: 120, protein: 25, carbs: 3, fat: 1, serving: "1 scoop" },
-  { name: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0, serving: "1 medium" },
-  { name: "Greek Yogurt", calories: 100, protein: 17, carbs: 6, fat: 1, serving: "170g" },
-];
+interface RecentFood {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  serving: string;
+}
 
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
@@ -146,26 +146,28 @@ function CalorieRing({
   );
 }
 
-// Vertical Macro Bar
+// Horizontal Macro Bar
 function MacroBar({ label, current, goal, color }: { label: string; current: number; goal: number; color: string }) {
   const progress = Math.min((current / goal) * 100, 100);
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="w-10 h-20 rounded-full bg-white/5 overflow-hidden flex items-end">
+    <div className="flex-1">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-xs font-semibold">
+          <span style={{ color }}>{current}</span>
+          <span className="text-muted-foreground">/{goal}g</span>
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-white/5 overflow-hidden">
         <motion.div
-          className="w-full rounded-full"
+          className="h-full rounded-full"
           style={{ background: color }}
-          initial={{ height: 0 }}
-          animate={{ height: `${progress}%` }}
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
           transition={{ duration: 0.8, ease: "easeOut" }}
         />
       </div>
-      <span className="text-xs font-semibold">
-        <span style={{ color }}>{current}</span>
-        <span className="text-muted-foreground">/{goal}</span>
-      </span>
     </div>
   );
 }
@@ -195,11 +197,13 @@ export default function NutritionPage() {
   const [isAiEstimate, setIsAiEstimate] = useState(false);
 
   const [swipeDirection, setSwipeDirection] = useState(0);
+  const [recentFoods, setRecentFoods] = useState<RecentFood[]>([]);
 
   useEffect(() => {
     if (!user) return;
     loadData();
     loadWeekData();
+    loadRecentFoods();
   }, [user, selectedDate]);
 
   const loadData = async () => {
@@ -259,6 +263,40 @@ export default function NutritionPage() {
     })));
   };
 
+  const loadRecentFoods = async () => {
+    if (!user) return;
+
+    // Get distinct recent foods from the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: recentMeals } = await supabase
+      .from("meals")
+      .select("food_name, calories, protein, carbs, fat, serving_size")
+      .eq("user_id", user.id)
+      .gte("date", formatDate(thirtyDaysAgo))
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (recentMeals) {
+      // Get unique foods by name (keep most recent)
+      const uniqueFoods = new Map<string, RecentFood>();
+      recentMeals.forEach((meal) => {
+        if (!uniqueFoods.has(meal.food_name)) {
+          uniqueFoods.set(meal.food_name, {
+            name: meal.food_name,
+            calories: meal.calories,
+            protein: meal.protein,
+            carbs: meal.carbs,
+            fat: meal.fat,
+            serving: meal.serving_size || "",
+          });
+        }
+      });
+      setRecentFoods(Array.from(uniqueFoods.values()).slice(0, 10));
+    }
+  };
+
   const goToPreviousDay = () => {
     setSwipeDirection(-1);
     const prev = new Date(selectedDate);
@@ -302,25 +340,14 @@ export default function NutritionPage() {
     return meal.meal_type === "meal" ? `Meal ${mealIndex}` : `Snack ${mealIndex}`;
   };
 
-  const quickAddFood = async (food: typeof QUICK_FOODS[0]) => {
-    if (!user) return;
-
-    await supabase.from("meals").insert({
-      user_id: user.id,
-      date: formatDate(selectedDate),
-      meal_type: "meal",
-      food_name: food.name,
-      calories: food.calories,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-      serving_size: food.serving,
-      ai_generated: false,
-      consumed: true,
-    });
-
-    loadData();
-    loadWeekData();
+  const openWithFood = (food: RecentFood) => {
+    setFoodName(food.name);
+    setFoodCalories(food.calories.toString());
+    setFoodProtein(food.protein.toString());
+    setFoodCarbs(food.carbs.toString());
+    setFoodFat(food.fat.toString());
+    setFoodServing(food.serving);
+    setShowAddFood(true);
   };
 
   const handleEstimateMacros = async () => {
@@ -380,6 +407,7 @@ export default function NutritionPage() {
     setIsAiEstimate(false);
     loadData();
     loadWeekData();
+    loadRecentFoods();
   };
 
   const markAsConsumed = async (mealId: string) => {
@@ -474,34 +502,37 @@ export default function NutritionPage() {
         className="px-4 pt-4"
       >
         {/* Ring + Macros Row */}
-        <div className="flex items-center justify-between gap-4 mb-6">
+        <div className="flex items-start gap-4 mb-6">
           {/* Calorie Ring - Left */}
           <CalorieRing consumed={totals.calories} goal={goals.calories} />
 
-          {/* Macro Bars - Right */}
-          <div className="flex gap-4">
+          {/* Macro Bars - Right (horizontal, stacked) */}
+          <div className="flex-1 flex flex-col gap-3 pt-4">
             <MacroBar label="Protein" current={totals.protein} goal={goals.protein} color="#22c55e" />
             <MacroBar label="Carbs" current={totals.carbs} goal={goals.carbs} color="#3b82f6" />
             <MacroBar label="Fat" current={totals.fat} goal={goals.fat} color="#eab308" />
           </div>
         </div>
 
-        {/* Quick Add */}
-        <div className="mb-6">
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            {QUICK_FOODS.map((food) => (
-              <motion.button
-                key={food.name}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => quickAddFood(food)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium"
-                style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)" }}
-              >
-                {food.name}
-              </motion.button>
-            ))}
+        {/* Recent Foods */}
+        {recentFoods.length > 0 && (
+          <div className="mb-6">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Recent</p>
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+              {recentFoods.map((food) => (
+                <motion.button
+                  key={food.name}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => openWithFood(food)}
+                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium"
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)" }}
+                >
+                  {food.name}
+                </motion.button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Meals/Snacks List */}
         <div className="space-y-2">
@@ -567,29 +598,29 @@ export default function NutritionPage() {
               </motion.div>
             ))
           )}
+
+          {/* Add Food Button - Below Meals */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowAddFood(true)}
+            className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium mt-4"
+            style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px dashed rgba(255, 255, 255, 0.15)" }}
+          >
+            <Plus className="w-4 h-4 text-primary" />
+            <span className="text-muted-foreground">Add Food</span>
+          </motion.button>
         </div>
       </motion.div>
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-32 right-4 z-40 flex flex-col gap-3">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => router.push("/coach")}
-          className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
-          style={{ background: "rgba(26, 26, 36, 0.9)", border: "1px solid rgba(255, 255, 255, 0.1)" }}
-        >
-          <Sparkles className="w-5 h-5 text-primary" />
-        </motion.button>
-
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setShowAddFood(true)}
-          className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
-          style={{ background: "linear-gradient(135deg, #ff4757 0%, #ff6b81 100%)", boxShadow: "0 4px 20px rgba(255, 71, 87, 0.4)" }}
-        >
-          <Plus className="w-6 h-6 text-white" />
-        </motion.button>
-      </div>
+      {/* Floating Coach Button */}
+      <motion.button
+        whileTap={{ scale: 0.9 }}
+        onClick={() => router.push("/coach")}
+        className="fixed bottom-32 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
+        style={{ background: "rgba(26, 26, 36, 0.9)", border: "1px solid rgba(255, 255, 255, 0.1)" }}
+      >
+        <Sparkles className="w-5 h-5 text-primary" />
+      </motion.button>
 
       {/* Add Food Modal */}
       <Modal open={showAddFood} onClose={() => setShowAddFood(false)} title="Add Food">
