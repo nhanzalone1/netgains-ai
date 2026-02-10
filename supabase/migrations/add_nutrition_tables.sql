@@ -18,7 +18,7 @@ create table if not exists public.meals (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users on delete cascade not null,
   date date not null default current_date,
-  meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snack')),
+  meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snack', 'meal')),
   food_name text not null,
   calories integer not null default 0,
   protein integer not null default 0,
