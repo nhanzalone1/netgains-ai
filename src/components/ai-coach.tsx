@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth-provider";
+import { useTheme } from "@/components/theme-provider";
 
 interface Message {
   id: string;
@@ -14,6 +15,7 @@ interface Message {
 
 export function AICoach() {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -121,7 +123,7 @@ export function AICoach() {
             onClick={() => setIsOpen(true)}
             className="fixed bottom-24 right-4 z-[200] w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-primary/30"
             style={{
-              background: "linear-gradient(135deg, #ff4757 0%, #ff6b81 100%)",
+              background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.accent} 100%)`,
             }}
           >
             <Sparkles className="w-6 h-6 text-white" />

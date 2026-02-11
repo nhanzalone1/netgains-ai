@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
+import { useTheme } from "@/components/theme-provider";
 import { UserMenu } from "@/components/user-menu";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -54,6 +55,7 @@ interface ChartDataPoint {
 
 export default function StatsPage() {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const supabase = createClient();
 
   // Exercise templates for picker
@@ -442,9 +444,9 @@ export default function StatsPage() {
                       <Line
                         type="monotone"
                         dataKey="est1RM"
-                        stroke="#ff4757"
+                        stroke={theme.primary}
                         strokeWidth={2.5}
-                        dot={{ fill: "#ff4757", strokeWidth: 0, r: 4 }}
+                        dot={{ fill: theme.primary, strokeWidth: 0, r: 4 }}
                         activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
                       />
                     </LineChart>

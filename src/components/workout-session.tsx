@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "./ui/button";
 import { NewExerciseModal } from "./new-exercise-modal";
 import { ExercisePickerModal } from "./exercise-picker-modal";
+import { useTheme } from "./theme-provider";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
 
 // Set variant types for special sets
@@ -83,6 +84,7 @@ export function WorkoutSession({
   onSave,
 }: WorkoutSessionProps) {
   const supabase = createClient();
+  const { theme } = useTheme();
 
   // Library exercises (from exercise_templates)
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
@@ -873,7 +875,7 @@ export function WorkoutSession({
                       if (set.variant.includes("assisted")) return "#3b82f6";
                       if (set.variant.includes("drop")) return "#ef4444";
                       if (set.variant === "left" || set.variant === "right") return "#22c55e";
-                      return "#ff4757";
+                      return theme.primary;
                     };
 
                     // Compute numbered label for L/R sets (e.g., "1L", "2R")
@@ -1033,7 +1035,7 @@ export function WorkoutSession({
                   setIsEditingLibrary(!isEditingLibrary);
                 }}
                 className="text-xs font-semibold uppercase tracking-wide px-2 py-1"
-                style={{ color: isEditingLibrary ? "#22c55e" : "#ff4757" }}
+                style={{ color: isEditingLibrary ? "#22c55e" : theme.primary }}
               >
                 {isEditingLibrary ? "Done" : "Edit"}
               </motion.button>
@@ -1050,11 +1052,11 @@ export function WorkoutSession({
                 style={{
                   background: supersetForExerciseId
                     ? "rgba(168, 85, 247, 0.15)"
-                    : "rgba(255, 71, 87, 0.15)",
+                    : `rgba(${theme.primaryRgb}, 0.15)`,
                   border: supersetForExerciseId
                     ? "1px solid rgba(168, 85, 247, 0.3)"
-                    : "1px solid rgba(255, 71, 87, 0.3)",
-                  color: supersetForExerciseId ? "#a855f7" : "#ff4757",
+                    : `1px solid rgba(${theme.primaryRgb}, 0.3)`,
+                  color: supersetForExerciseId ? "#a855f7" : theme.primary,
                 }}
               >
                 <Plus className="w-4 h-4" />

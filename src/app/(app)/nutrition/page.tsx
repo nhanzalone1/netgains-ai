@@ -130,7 +130,7 @@ function CalorieRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#ff4757"
+          stroke="var(--primary)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
@@ -478,7 +478,7 @@ export default function NutritionPage() {
                 >
                   <motion.div
                     className="w-full rounded-full"
-                    style={{ background: isSelected ? "#ff4757" : "rgba(255, 255, 255, 0.2)" }}
+                    style={{ background: isSelected ? "var(--primary)" : "rgba(255, 255, 255, 0.2)" }}
                     initial={{ height: 0 }}
                     animate={{ height: `${percentage}%` }}
                     transition={{ duration: 0.5, delay: i * 0.05 }}
@@ -508,9 +508,9 @@ export default function NutritionPage() {
 
           {/* Macro Bars - Right (horizontal, stacked) */}
           <div className="flex-1 flex flex-col gap-3 pt-4">
-            <MacroBar label="Protein" current={totals.protein} goal={goals.protein} color="#22c55e" />
-            <MacroBar label="Carbs" current={totals.carbs} goal={goals.carbs} color="#3b82f6" />
-            <MacroBar label="Fat" current={totals.fat} goal={goals.fat} color="#eab308" />
+            <MacroBar label="Protein" current={totals.protein} goal={goals.protein} color="var(--macro-protein)" />
+            <MacroBar label="Carbs" current={totals.carbs} goal={goals.carbs} color="var(--macro-carbs)" />
+            <MacroBar label="Fat" current={totals.fat} goal={goals.fat} color="var(--macro-fat)" />
           </div>
         </div>
 
