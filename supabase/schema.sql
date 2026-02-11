@@ -48,6 +48,7 @@ create table public.sets (
   weight numeric(7,1) not null,
   reps integer not null,
   order_index integer not null default 0,
+  variant text default 'normal',
   created_at timestamptz default now() not null
 );
 

@@ -306,7 +306,7 @@ export default function LogPage() {
       }
 
       // Build all sets for batch insert
-      const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number }[] = [];
+      const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number; variant: string }[] = [];
 
       for (let i = 0; i < validExercises.length; i++) {
         const exercise = validExercises[i];
@@ -318,6 +318,7 @@ export default function LogPage() {
             weight: parseFloat(set.weight),
             reps: parseInt(set.reps, 10),
             order_index: j,
+            variant: set.variant || "normal",
           });
         });
       }
