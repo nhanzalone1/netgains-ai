@@ -169,41 +169,41 @@ export default function CoachPage() {
     setIsLoading(true);
     shouldScrollRef.current = true; // Ensure we scroll after sending
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: "",
-    };
+    const assistantMessageId = (Date.now() + 1).toString();
 
-    try {
-      // First attempt
-      const response = await sendRequest(allMessages);
-      setMessages((prev) => [...prev, assistantMessage]);
-      await streamResponse(response, assistantMessage.id);
-    } catch (firstError) {
-      console.error("Chat error (attempt 1):", firstError);
+    // Add empty assistant message placeholder
+    setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "" }]);
+
+    let success = false;
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (!success && attempts < maxAttempts) {
+      attempts++;
       try {
-        // Auto-retry once
-        const retryResponse = await sendRequest(allMessages);
-        setMessages((prev) => {
-          // Remove empty assistant message if it was added
-          const filtered = prev.filter((m) => m.id !== assistantMessage.id || m.content !== "");
-          return [...filtered, { ...assistantMessage, id: (Date.now() + 2).toString(), content: "" }];
-        });
-        const retryId = (Date.now() + 2).toString();
-        setMessages((prev) => [...prev.filter((m) => m.content !== "" || m.role !== "assistant"), { id: retryId, role: "assistant", content: "" }]);
-        await streamResponse(retryResponse, retryId);
-      } catch (retryError) {
-        console.error("Chat error (attempt 2):", retryError);
-        setMessages((prev) => [
-          ...prev.filter((m) => m.id !== assistantMessage.id || m.content !== ""),
-          {
-            id: (Date.now() + 3).toString(),
-            role: "assistant",
-            content: "Coach is having a moment. Try sending that again.",
-          },
-        ]);
+        const response = await sendRequest(allMessages);
+        await streamResponse(response, assistantMessageId);
+        success = true;
+      } catch (error) {
+        console.error(`Chat error (attempt ${attempts}):`, error);
+        if (attempts < maxAttempts) {
+          // Reset content for retry
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessageId ? { ...m, content: "" } : m))
+          );
+        }
       }
+    }
+
+    // If all attempts failed, show error message
+    if (!success) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: "Coach is having a moment. Try sending that again." }
+            : m
+        )
+      );
     }
 
     setIsLoading(false);

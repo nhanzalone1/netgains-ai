@@ -503,7 +503,7 @@ export function WorkoutSession({
     return null;
   };
 
-  // Update set value
+  // Update set value with validation
   const updateSet = (
     exerciseId: string,
     setId: string,
@@ -511,9 +511,15 @@ export function WorkoutSession({
     value: string
   ) => {
     if (field === "weight") {
+      // Allow only valid decimal numbers up to 2500 lbs
       if (value && !/^\d*\.?\d*$/.test(value)) return;
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue) && numValue > 2500) return;
     } else {
+      // Allow only integers up to 999 reps
       if (value && !/^\d*$/.test(value)) return;
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue) && numValue > 999) return;
     }
 
     setActiveExercises((prev) =>

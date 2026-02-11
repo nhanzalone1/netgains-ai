@@ -103,25 +103,28 @@ export default function StatsPage() {
   const loadExerciseHistory = async (exerciseName: string) => {
     setLoadingHistory(true);
 
-    // Fetch all exercises matching this name with their sets and workout dates
-    const { data: workouts } = await supabase
-      .from("workouts")
+    // Query exercises directly, filtering by name at the database level
+    // This avoids loading all workouts into memory
+    const { data: exercises } = await supabase
+      .from("exercises")
       .select(`
         id,
-        date,
-        exercises (
+        name,
+        workout_id,
+        sets (
+          weight,
+          reps
+        ),
+        workouts!inner (
           id,
-          name,
-          sets (
-            weight,
-            reps
-          )
+          date,
+          user_id
         )
       `)
-      .eq("user_id", user!.id)
-      .order("date", { ascending: true });
+      .eq("workouts.user_id", user!.id)
+      .ilike("name", exerciseName);
 
-    if (!workouts || workouts.length === 0) {
+    if (!exercises || exercises.length === 0) {
       setSessionHistory([]);
       setLoadingHistory(false);
       return;
@@ -130,32 +133,20 @@ export default function StatsPage() {
     // Process data: find best set per day for this exercise
     const sessionMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
 
-    workouts.forEach((workout) => {
-      const exercises = workout.exercises as {
-        id: string;
-        name: string;
-        sets: { weight: number; reps: number }[];
-      }[];
-
-      // Find matching exercises (case-insensitive)
-      const matchingExercises = exercises.filter(
-        (ex) => ex.name.toLowerCase() === exerciseName.toLowerCase()
-      );
-
-      if (matchingExercises.length === 0) return;
+    exercises.forEach((exercise) => {
+      const workout = exercise.workouts as { id: string; date: string; user_id: string };
+      const sets = exercise.sets as { weight: number; reps: number }[];
 
       // Find the "Champion Set" - highest Est. 1RM for this day
       let bestSet = { weight: 0, reps: 0, est1RM: 0 };
 
-      matchingExercises.forEach((ex) => {
-        ex.sets.forEach((set) => {
-          if (set.weight > 0 && set.reps > 0) {
-            const est1RM = calculateEst1RM(set.weight, set.reps);
-            if (est1RM > bestSet.est1RM) {
-              bestSet = { weight: set.weight, reps: set.reps, est1RM };
-            }
+      sets.forEach((set) => {
+        if (set.weight > 0 && set.reps > 0) {
+          const est1RM = calculateEst1RM(set.weight, set.reps);
+          if (est1RM > bestSet.est1RM) {
+            bestSet = { weight: set.weight, reps: set.reps, est1RM };
           }
-        });
+        }
       });
 
       if (bestSet.est1RM > 0) {

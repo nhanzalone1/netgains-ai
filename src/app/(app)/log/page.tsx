@@ -117,6 +117,7 @@ export default function LogPage() {
   const loadFolders = async (locationId: string) => {
     if (!user) return;
 
+    // Fetch folders and exercise counts in 2 queries instead of N+1
     const { data: foldersData } = await supabase
       .from("folders")
       .select("*")
@@ -125,17 +126,28 @@ export default function LogPage() {
 
     const rawFolders = (foldersData || []) as Folder[];
 
-    // Get exercise counts for each folder
-    const foldersWithCounts: FolderWithCount[] = await Promise.all(
-      rawFolders.map(async (folder) => {
-        const { count } = await supabase
-          .from("exercise_templates")
-          .select("*", { count: "exact", head: true })
-          .eq("folder_id", folder.id);
+    if (rawFolders.length === 0) {
+      setFolders([]);
+      return;
+    }
 
-        return { ...folder, exercise_count: count || 0 };
-      })
-    );
+    // Get all exercise templates for these folders in one query
+    const folderIds = rawFolders.map((f) => f.id);
+    const { data: templates } = await supabase
+      .from("exercise_templates")
+      .select("folder_id")
+      .in("folder_id", folderIds);
+
+    // Count exercises per folder
+    const countMap = new Map<string, number>();
+    (templates || []).forEach((t: { folder_id: string }) => {
+      countMap.set(t.folder_id, (countMap.get(t.folder_id) || 0) + 1);
+    });
+
+    const foldersWithCounts: FolderWithCount[] = rawFolders.map((folder) => ({
+      ...folder,
+      exercise_count: countMap.get(folder.id) || 0,
+    }));
 
     setFolders(foldersWithCounts);
   };
@@ -241,8 +253,24 @@ export default function LogPage() {
   }[]) => {
     if (!user) return;
 
+    // Pre-validate: filter exercises with at least one valid set
+    const validExercises = exercises
+      .map((ex, i) => ({
+        ...ex,
+        orderIndex: i,
+        validSets: ex.sets.filter((s) => s.weight && s.reps),
+      }))
+      .filter((ex) => ex.validSets.length > 0);
+
+    if (validExercises.length === 0) {
+      alert("No valid sets to save. Add at least one complete set.");
+      return;
+    }
+
+    let workoutId: string | null = null;
+
     try {
-      // Create a new workout entry
+      // Create workout entry
       const { data: workout, error: workoutError } = await supabase
         .from("workouts")
         .insert({
@@ -259,44 +287,61 @@ export default function LogPage() {
         return;
       }
 
-      // Add exercises and sets
-      for (let i = 0; i < exercises.length; i++) {
-        const exercise = exercises[i];
+      workoutId = workout.id;
 
-        // Create exercise entry
-        const { data: exerciseData, error: exerciseError } = await supabase
-          .from("exercises")
-          .insert({
-            workout_id: workout.id,
-            name: exercise.name,
-            order_index: i,
-          })
-          .select()
-          .single();
+      // Batch insert all exercises
+      const exerciseInserts = validExercises.map((ex) => ({
+        workout_id: workout.id,
+        name: ex.name,
+        order_index: ex.orderIndex,
+      }));
 
-        if (exerciseError || !exerciseData) {
-          console.error("Failed to create exercise:", exerciseError);
-          continue;
-        }
+      const { data: exercisesData, error: exercisesError } = await supabase
+        .from("exercises")
+        .insert(exerciseInserts)
+        .select();
 
-        // Create sets
-        const validSets = exercise.sets.filter((s) => s.weight && s.reps);
-        for (let j = 0; j < validSets.length; j++) {
-          const set = validSets[j];
+      if (exercisesError || !exercisesData || exercisesData.length === 0) {
+        throw new Error("Failed to create exercises");
+      }
 
-          await supabase.from("sets").insert({
-            exercise_id: exerciseData.id,
+      // Build all sets for batch insert
+      const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number }[] = [];
+
+      for (let i = 0; i < validExercises.length; i++) {
+        const exercise = validExercises[i];
+        const exerciseRecord = exercisesData[i];
+
+        exercise.validSets.forEach((set, j) => {
+          setInserts.push({
+            exercise_id: exerciseRecord.id,
             weight: parseFloat(set.weight),
             reps: parseInt(set.reps, 10),
             order_index: j,
           });
+        });
+      }
+
+      if (setInserts.length > 0) {
+        const { error: setsError } = await supabase
+          .from("sets")
+          .insert(setInserts);
+
+        if (setsError) {
+          throw new Error("Failed to create sets");
         }
       }
 
-      // Success - show modal instead of alert
+      // Success - show modal
       setShowSuccessModal(true);
     } catch (err) {
       console.error("Error saving workout:", err);
+
+      // Cleanup: delete the workout if it was created (cascades to exercises/sets via FK)
+      if (workoutId) {
+        await supabase.from("workouts").delete().eq("id", workoutId);
+      }
+
       alert("Failed to save workout. Please try again.");
     }
   };
