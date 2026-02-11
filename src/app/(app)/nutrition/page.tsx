@@ -139,8 +139,8 @@ function CalorieRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-black text-white">{remaining.toLocaleString()}</span>
-        <span className="text-[10px] text-muted-foreground">left</span>
+        <span className="text-2xl font-black text-white">{consumed.toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">/ {goal.toLocaleString()}</span>
       </div>
     </div>
   );
@@ -198,6 +198,14 @@ export default function NutritionPage() {
 
   const [swipeDirection, setSwipeDirection] = useState(0);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>([]);
+
+  // Goals editor modal
+  const [showGoalsEditor, setShowGoalsEditor] = useState(false);
+  const [editCalories, setEditCalories] = useState("");
+  const [editProtein, setEditProtein] = useState("");
+  const [editCarbs, setEditCarbs] = useState("");
+  const [editFat, setEditFat] = useState("");
+  const [savingGoals, setSavingGoals] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -422,6 +430,43 @@ export default function NutritionPage() {
     loadWeekData();
   };
 
+  const openGoalsEditor = () => {
+    setEditCalories(goals.calories.toString());
+    setEditProtein(goals.protein.toString());
+    setEditCarbs(goals.carbs.toString());
+    setEditFat(goals.fat.toString());
+    setShowGoalsEditor(true);
+  };
+
+  const handleSaveGoals = async () => {
+    if (!user) return;
+
+    setSavingGoals(true);
+
+    const newGoals = {
+      calories: parseInt(editCalories) || goals.calories,
+      protein: parseInt(editProtein) || goals.protein,
+      carbs: parseInt(editCarbs) || goals.carbs,
+      fat: parseInt(editFat) || goals.fat,
+    };
+
+    // Upsert goals (insert or update)
+    const { error } = await supabase
+      .from("nutrition_goals")
+      .upsert({
+        user_id: user.id,
+        ...newGoals,
+      }, { onConflict: "user_id" });
+
+    if (!error) {
+      setGoals(newGoals);
+      setShowGoalsEditor(false);
+      loadWeekData();
+    }
+
+    setSavingGoals(false);
+  };
+
   const weekDates = getWeekDates(selectedDate);
 
   return (
@@ -503,8 +548,17 @@ export default function NutritionPage() {
       >
         {/* Ring + Macros Row */}
         <div className="flex items-start gap-4 mb-6">
-          {/* Calorie Ring - Left */}
-          <CalorieRing consumed={totals.calories} goal={goals.calories} />
+          {/* Calorie Ring - Left (tap to edit goals) */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={openGoalsEditor}
+            className="relative"
+          >
+            <CalorieRing consumed={totals.calories} goal={goals.calories} />
+            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-muted-foreground">
+              tap to edit
+            </span>
+          </motion.button>
 
           {/* Macro Bars - Right (horizontal, stacked) */}
           <div className="flex-1 flex flex-col gap-3 pt-4">
@@ -731,6 +785,64 @@ export default function NutritionPage() {
 
           <Button onClick={handleSaveFood} loading={savingFood} disabled={!foodName.trim()}>
             Add Food
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Goals Editor Modal */}
+      <Modal open={showGoalsEditor} onClose={() => setShowGoalsEditor(false)} title="Daily Goals">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-1">Calories</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={editCalories}
+              onChange={(e) => setEditCalories(e.target.value)}
+              placeholder="2000"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Protein (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editProtein}
+                onChange={(e) => setEditProtein(e.target.value)}
+                placeholder="150"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Carbs (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editCarbs}
+                onChange={(e) => setEditCarbs(e.target.value)}
+                placeholder="200"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Fat (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editFat}
+                onChange={(e) => setEditFat(e.target.value)}
+                placeholder="65"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleSaveGoals} loading={savingGoals}>
+            Save Goals
           </Button>
         </div>
       </Modal>
