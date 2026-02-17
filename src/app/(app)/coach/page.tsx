@@ -353,8 +353,11 @@ export default function CoachPage() {
 
   return (
     <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/5">
+      {/* Header - with safe area padding for notch/status bar */}
+      <div
+        className="flex items-center justify-between p-4 border-b border-white/5"
+        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+      >
         <div className="flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center"
@@ -370,10 +373,10 @@ export default function CoachPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="p-2 rounded-lg text-muted-foreground hover:text-white transition-colors"
+            className="p-3 rounded-lg text-muted-foreground hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="Reset chat"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-5 h-5" />
           </button>
           <UserMenu />
         </div>
