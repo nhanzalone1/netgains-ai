@@ -304,8 +304,11 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
+// Prefix used by the client to signal a system trigger (hidden from UI)
+const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
+
 export async function POST(req: Request) {
-  const { messages, currentWorkout, autoOpen } = await req.json();
+  const { messages, currentWorkout } = await req.json();
 
   // Get authenticated user
   const supabase = await createClient();
@@ -317,10 +320,14 @@ export async function POST(req: Request) {
 
   const anthropic = new Anthropic();
 
-  // For auto-open, we need to gather context and create a special opening prompt
+  // Check if this is a system trigger (hidden message to generate opening)
+  const isSystemTrigger = messages.length === 1 &&
+    messages[0].role === 'user' &&
+    messages[0].content.startsWith(TRIGGER_PREFIX);
+
   let anthropicMessages: Anthropic.MessageParam[];
 
-  if (autoOpen) {
+  if (isSystemTrigger) {
     // Gather context for personalized opening
     const [profileResult, memoriesResult, workoutsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
@@ -368,8 +375,8 @@ export async function POST(req: Request) {
       ? Math.floor((Date.now() - new Date(lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
-    // Build context for auto-open
-    const contextPrompt = `[AUTO-OPEN CONTEXT - Generate a personalized opening message]
+    // Build context for opening generation
+    const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
 
 User Profile:
 ${JSON.stringify(profile, null, 2)}
@@ -387,33 +394,36 @@ INSTRUCTIONS:
 Generate a casual opening message. Talk like a real person texting, not an AI.
 
 1. IF onboarding_complete is false or null:
-   - something like "hey i'm your coach. let's get you set up — what should i call you"
+   - Start with something like "hey i'm your coach. let's get you set up — what should i call you"
 
 2. IF onboarding complete AND daysSinceLastWorkout >= 2:
-   - casual check-in, reference their last session, no guilt trip. just "been a few days, ready to get back at it?"
+   - Casual check-in, reference their last session, no guilt trip. Something like "been a few days. ready to get back at it?"
 
 3. IF onboarding complete AND it's a training day:
-   - FULL MODE: what's on deck today, reference recent numbers, give them something to aim for
-   - ASSIST MODE: reference their pattern, mention a highlight from last session, suggest a target
+   - FULL MODE: What's on deck today, reference recent numbers, give them something to aim for
+   - ASSIST MODE: Reference their pattern, mention a highlight from last session, suggest a target
 
 4. IF onboarding complete AND it's a rest day:
-   - quick rest day acknowledgment, mention what they crushed last time
+   - Quick rest day acknowledgment, mention what they crushed last time
 
-Keep it short. Use real numbers from their history. Sound like a friend who coaches, not a bot.`;
+Keep it short. One or two sentences max. Use real numbers from their history. Sound like a friend who coaches, not a bot.`;
 
     anthropicMessages = [{ role: 'user', content: contextPrompt }];
   } else {
     // Normal message flow
     // Anthropic requires messages to start with user role and alternate
-    // If conversation starts with assistant (from auto-open), prepend a synthetic user message
-    const mappedMessages = messages.map((m: { role: string; content: string }) => ({
+    // Filter out any system trigger messages that might be in the history
+    const filteredMessages = messages.filter(
+      (m: { role: string; content: string }) => !m.content.startsWith(TRIGGER_PREFIX)
+    );
+
+    const mappedMessages = filteredMessages.map((m: { role: string; content: string }) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }));
 
-    // Fix message ordering if needed
+    // Fix message ordering if needed - if first message is assistant, prepend synthetic user
     if (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
-      // Prepend synthetic user message to satisfy API requirements
       anthropicMessages = [
         { role: 'user' as const, content: '[User opened the coach tab]' },
         ...mappedMessages,

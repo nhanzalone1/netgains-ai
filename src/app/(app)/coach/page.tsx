@@ -10,7 +10,11 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  hidden?: boolean; // Hidden messages are used as triggers but not shown in UI
 }
+
+// Hidden trigger message prefix - messages starting with this won't be shown
+const TRIGGER_PREFIX = "[SYSTEM_TRIGGER]";
 
 function getStorageKey(userId: string | undefined): string {
   return userId ? `netgains-coach-messages-${userId}` : "netgains-coach-messages";
@@ -49,38 +53,59 @@ function getTodayString(): string {
   return getDebugDate().toDateString();
 }
 
+function formatDebugDate(): string {
+  const date = getDebugDate();
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
 function shouldGenerateOpening(userId: string | undefined): boolean {
   if (typeof window === "undefined" || !userId) return false;
 
   const messages = loadMessages(userId);
   const lastOpenStr = localStorage.getItem(getLastOpenKey(userId));
   const today = getTodayString();
-
-  // Debug: log what we're checking
   const debugOverride = localStorage.getItem("netgains-debug-date-override");
-  if (debugOverride) {
-    console.log("[Debug] Date override active:", debugOverride, "→", today);
-    console.log("[Debug] Last open:", lastOpenStr);
-    console.log("[Debug] Messages count:", messages.length);
+
+  // Always log for debugging
+  console.log("=== shouldGenerateOpening ===");
+  console.log("Debug date override:", debugOverride || "(none)");
+  console.log("Today (effective):", today);
+  console.log("Last open stored:", lastOpenStr);
+  console.log("Messages count:", messages.length);
+
+  // Filter out hidden trigger messages for counting
+  const visibleMessages = messages.filter(m => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX));
+  console.log("Visible messages count:", visibleMessages.length);
+
+  // If no visible messages at all, definitely generate opening
+  if (visibleMessages.length === 0) {
+    console.log("→ RESULT: true (no visible messages)");
+    return true;
   }
 
-  // If no messages at all, definitely generate opening
-  if (messages.length === 0) return true;
-
   // If already opened "today" (considering debug override) and have messages, don't regenerate
-  if (lastOpenStr === today && messages.length > 0) return false;
+  if (lastOpenStr === today && visibleMessages.length > 0) {
+    console.log("→ RESULT: false (already opened today)");
+    return false;
+  }
 
-  // Check if last message was from "today" (considering debug override)
-  const lastMessage = messages[messages.length - 1];
-  if (lastMessage) {
-    const msgTimestamp = parseInt(lastMessage.id);
+  // Check if last visible message was from "today" (considering debug override)
+  const lastVisibleMessage = visibleMessages[visibleMessages.length - 1];
+  if (lastVisibleMessage) {
+    const msgTimestamp = parseInt(lastVisibleMessage.id);
+    console.log("Last visible message ID:", lastVisibleMessage.id, "parsed as timestamp:", msgTimestamp);
     if (!isNaN(msgTimestamp)) {
       const msgDate = new Date(msgTimestamp).toDateString();
-      if (msgDate === today) return false;
+      console.log("Last visible message date:", msgDate);
+      if (msgDate === today) {
+        console.log("→ RESULT: false (last visible message is from today)");
+        return false;
+      }
     }
   }
 
   // Generate opening for new day
+  console.log("→ RESULT: true (new day!)");
   return true;
 }
 
@@ -94,7 +119,6 @@ export default function CoachPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevMessageCountRef = useRef(messages.length);
-  const shouldScrollRef = useRef(false);
   const hasGeneratedOpeningRef = useRef(false);
 
   // Track keyboard visibility via Visual Viewport API
@@ -116,126 +140,71 @@ export default function CoachPage() {
     };
   }, []);
 
-  // Scroll to bottom only when a NEW message arrives, not on input focus
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Check if user is near the bottom of the scroll area
+  const isNearBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 150; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
   }, []);
 
+  // Smooth scroll to bottom, only if user is already near bottom
+  const scrollToBottom = useCallback((force = false) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (force || isNearBottom()) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [isNearBottom]);
+
+  // Track if we just sent a user message (to force scroll for their own messages)
+  const justSentMessageRef = useRef(false);
+
   useEffect(() => {
-    // Only scroll if message count increased (new message added)
+    // Only scroll if message count increased
     if (messages.length > prevMessageCountRef.current) {
-      shouldScrollRef.current = true;
+      const lastMessage = messages[messages.length - 1];
+
+      // Always scroll when user sends their own message
+      if (lastMessage?.role === "user" && !lastMessage.hidden) {
+        justSentMessageRef.current = true;
+        scrollToBottom(true);
+      } else if (justSentMessageRef.current) {
+        // Scroll for the assistant placeholder after user message
+        scrollToBottom(true);
+      }
     }
     prevMessageCountRef.current = messages.length;
-
-    if (shouldScrollRef.current) {
-      scrollToBottom();
-      shouldScrollRef.current = false;
-    }
   }, [messages, scrollToBottom]);
 
-  // Scroll when streaming completes (not during — let user read while streaming)
+  // Scroll during streaming only if user is near bottom (don't interrupt reading)
+  const lastContentLengthRef = useRef(0);
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
-    // Only scroll when streaming finishes (loading stops and we have content)
-    if (!isLoading && lastMessage?.role === "assistant" && lastMessage.content) {
-      scrollToBottom();
-    }
-  }, [isLoading, scrollToBottom]); // Intentionally not including messages to avoid scroll during stream
-
-  // Generate auto-opening message from coach
-  const generateAutoOpening = useCallback(async () => {
-    if (!user?.id) return;
-
-    setIsLoading(true);
-    const openingMessageId = Date.now().toString();
-
-    // Add empty assistant message placeholder
-    setMessages((prev) => [...prev, { id: openingMessageId, role: "assistant", content: "" }]);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [],
-          autoOpen: true, // Signal to generate contextual opening
-        }),
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (line.startsWith("0:")) {
-              try {
-                const text = JSON.parse(line.slice(2));
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === openingMessageId
-                      ? { ...m, content: m.content + text }
-                      : m
-                  )
-                );
-              } catch {
-                // Skip malformed chunks
-              }
-            }
-          }
+    if (lastMessage?.role === "assistant" && lastMessage.content) {
+      // Check if content grew (streaming)
+      if (lastMessage.content.length > lastContentLengthRef.current) {
+        lastContentLengthRef.current = lastMessage.content.length;
+        // Only auto-scroll during stream if near bottom
+        if (isNearBottom()) {
+          scrollToBottom();
         }
       }
-    } catch (error) {
-      console.error("Auto-open error:", error);
-      // Fallback to simple greeting
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === openingMessageId
-            ? { ...m, content: "Hey! I'm your coach. What's on your mind?" }
-            : m
-        )
-      );
     }
 
-    setIsLoading(false);
-    shouldScrollRef.current = true;
-  }, [user?.id]);
-
-  // Load messages and generate opening if needed
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const existingMessages = loadMessages(user.id);
-    setMessages(existingMessages);
-
-    // Check if we should generate an auto-opening message
-    if (shouldGenerateOpening(user.id) && !hasGeneratedOpeningRef.current) {
-      hasGeneratedOpeningRef.current = true;
-      generateAutoOpening();
+    // Reset when streaming completes
+    if (!isLoading) {
+      justSentMessageRef.current = false;
+      lastContentLengthRef.current = 0;
     }
+  }, [messages, isLoading, scrollToBottom, isNearBottom]);
 
-    // Mark today as opened (uses debug date if set)
-    localStorage.setItem(getLastOpenKey(user.id), getTodayString());
-  }, [user?.id, generateAutoOpening]);
-
-  // Save messages to user-specific storage
-  useEffect(() => {
-    if (!user?.id) return;
-    // Don't save empty assistant messages
-    const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
-    localStorage.setItem(getStorageKey(user.id), JSON.stringify(filtered));
-  }, [messages, user?.id]);
-
-  const sendRequest = async (allMessages: Message[]): Promise<Response> => {
+  // Send a request to the chat API
+  const sendRequest = useCallback(async (allMessages: Message[]): Promise<Response> => {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -256,9 +225,10 @@ export default function CoachPage() {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response;
-  };
+  }, []);
 
-  const streamResponse = async (response: Response, assistantMessageId: string) => {
+  // Stream response from the API into a message
+  const streamResponse = useCallback(async (response: Response, assistantMessageId: string) => {
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
 
@@ -288,7 +258,169 @@ export default function CoachPage() {
         }
       }
     }
-  };
+  }, []);
+
+  // Generate auto-opening message from coach using hidden trigger
+  const generateAutoOpening = useCallback(async () => {
+    if (!user?.id) return;
+
+    console.log(">>> generateAutoOpening called <<<");
+    setIsLoading(true);
+
+    // Create hidden trigger message - this won't be shown in UI but will be sent to API
+    const triggerMessageId = Date.now().toString();
+    const triggerContent = `${TRIGGER_PREFIX} User opened the coach tab on ${formatDebugDate()}. Generate a contextual daily greeting based on their profile, memories, and recent workout history. If they haven't completed onboarding, start that process. Otherwise, give them a personalized check-in based on their training status.`;
+
+    const triggerMessage: Message = {
+      id: triggerMessageId,
+      role: "user",
+      content: triggerContent,
+      hidden: true,
+    };
+
+    // Create placeholder for assistant's response
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantPlaceholder: Message = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+    };
+
+    // Add both to messages state
+    setMessages((prev) => [...prev, triggerMessage, assistantPlaceholder]);
+
+    try {
+      // Send the trigger through normal chat flow
+      const response = await sendRequest([triggerMessage]);
+      await streamResponse(response, assistantMessageId);
+      console.log(">>> Auto-opening streamed successfully <<<");
+    } catch (error) {
+      console.error("Auto-open error:", error);
+      // Fallback to simple greeting
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: "hey, i'm your coach. what should i call you?" }
+            : m
+        )
+      );
+    }
+
+    setIsLoading(false);
+  }, [user?.id, sendRequest, streamResponse]);
+
+  // Track which date we last generated an opening for
+  const lastGeneratedDateRef = useRef<string | null>(null);
+
+  // Check and potentially generate opening message
+  const checkAndGenerateOpening = useCallback(() => {
+    if (!user?.id) return;
+
+    const today = getTodayString();
+    console.log("=== checkAndGenerateOpening ===");
+    console.log("Today (effective):", today);
+    console.log("lastGeneratedDateRef:", lastGeneratedDateRef.current);
+    console.log("hasGeneratedOpeningRef:", hasGeneratedOpeningRef.current);
+
+    // Reset the generation flag if it's a new day
+    if (lastGeneratedDateRef.current !== today) {
+      console.log("New day detected, resetting hasGeneratedOpeningRef");
+      hasGeneratedOpeningRef.current = false;
+    }
+
+    const shouldGenerate = shouldGenerateOpening(user.id);
+    console.log("shouldGenerateOpening returned:", shouldGenerate);
+    console.log("Will generate?", shouldGenerate && !hasGeneratedOpeningRef.current);
+
+    // Check if we should generate an auto-opening message
+    if (shouldGenerate && !hasGeneratedOpeningRef.current) {
+      console.log(">>> GENERATING AUTO OPENING <<<");
+      hasGeneratedOpeningRef.current = true;
+      lastGeneratedDateRef.current = today;
+      generateAutoOpening();
+    }
+
+    // Mark today as opened (uses debug date if set)
+    localStorage.setItem(getLastOpenKey(user.id), today);
+  }, [user?.id, generateAutoOpening]);
+
+  // Track the debug date we last checked for
+  const lastCheckedDateRef = useRef<string | null>(null);
+
+  // Load messages on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    const existingMessages = loadMessages(user.id);
+    setMessages(existingMessages);
+    checkAndGenerateOpening();
+  }, [user?.id, checkAndGenerateOpening]);
+
+  // Also check on every render if the debug date has changed
+  // This catches in-app navigation where other hooks might not fire
+  useEffect(() => {
+    if (!user?.id) return;
+    const currentDate = getTodayString();
+    if (lastCheckedDateRef.current !== currentDate) {
+      console.log("=== Date changed since last check, re-checking opening ===");
+      console.log("Previous date:", lastCheckedDateRef.current);
+      console.log("Current date:", currentDate);
+      lastCheckedDateRef.current = currentDate;
+      checkAndGenerateOpening();
+    }
+  }); // No deps - runs on every render
+
+  // Re-check when page becomes visible or gains focus
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("=== Page became visible, re-checking opening ===");
+        if (user?.id) {
+          const existingMessages = loadMessages(user.id);
+          setMessages(existingMessages);
+        }
+        checkAndGenerateOpening();
+      }
+    };
+
+    const handleFocus = () => {
+      console.log("=== Window focused, re-checking opening ===");
+      if (user?.id) {
+        const existingMessages = loadMessages(user.id);
+        setMessages(existingMessages);
+      }
+      checkAndGenerateOpening();
+    };
+
+    // pageshow fires when navigating back to a page (including bfcache)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        console.log("=== Page restored from cache, re-checking opening ===");
+        if (user?.id) {
+          const existingMessages = loadMessages(user.id);
+          setMessages(existingMessages);
+        }
+        checkAndGenerateOpening();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [user?.id, checkAndGenerateOpening]);
+
+  // Save messages to user-specific storage
+  useEffect(() => {
+    if (!user?.id) return;
+    // Don't save empty assistant messages
+    const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
+    localStorage.setItem(getStorageKey(user.id), JSON.stringify(filtered));
+  }, [messages, user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,7 +440,6 @@ export default function CoachPage() {
       (inputRef.current as HTMLTextAreaElement).style.height = "auto";
     }
     setIsLoading(true);
-    shouldScrollRef.current = true; // Ensure we scroll after sending
 
     const assistantMessageId = (Date.now() + 1).toString();
 
@@ -366,12 +497,18 @@ export default function CoachPage() {
     setMessages([]);
     setInputValue("");
     hasGeneratedOpeningRef.current = false;
+    lastGeneratedDateRef.current = null;
+    lastCheckedDateRef.current = null;
     // Trigger new opening after reset
     setTimeout(() => {
-      hasGeneratedOpeningRef.current = true;
       generateAutoOpening();
     }, 100);
   };
+
+  // Filter out hidden messages and empty assistant messages for display
+  const visibleMessages = messages.filter(
+    (m) => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX) && (m.role !== "assistant" || m.content.trim() !== "")
+  );
 
   return (
     <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
@@ -407,10 +544,13 @@ export default function CoachPage() {
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 overscroll-contain"
-        style={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 80 : 128 }}
+        className="flex-1 overflow-y-scroll p-4 space-y-4 min-h-0"
+        style={{
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight + 80 : 128,
+          WebkitOverflowScrolling: 'touch',
+        }}
       >
-        {messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "").map((message) => (
+        {visibleMessages.map((message) => (
           <div
             key={message.id}
             className={`flex ${
