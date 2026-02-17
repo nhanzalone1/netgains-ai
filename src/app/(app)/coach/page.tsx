@@ -15,7 +15,7 @@ interface Message {
 const INITIAL_GREETING: Message = {
   id: "initial-greeting",
   role: "assistant",
-  content: "Hey. I'm your coach. Ready when you are.",
+  content: "What's up — I'm your coach. I'm going to learn how you train, what you eat, and how you recover so I can help you get results faster than going at it alone. Let's get started. What should I call you?",
 };
 
 function getStorageKey(userId: string | undefined): string {
