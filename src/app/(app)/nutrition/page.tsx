@@ -261,9 +261,16 @@ export default function NutritionPage() {
     // Show if: main onboarding complete, nutrition onboarding NOT complete, and no meals logged
     if (!hasCheckedOnboarding && profileResult.data) {
       const profile = profileResult.data;
+      console.log("[Nutrition Onboarding] Profile check:", {
+        onboarding_complete: profile.onboarding_complete,
+        nutrition_onboarding_complete: profile.nutrition_onboarding_complete,
+      });
+
       const needsOnboarding =
         profile.onboarding_complete === true &&
         profile.nutrition_onboarding_complete !== true;
+
+      console.log("[Nutrition Onboarding] Needs onboarding:", needsOnboarding);
 
       // Also check if they have ANY meals ever (not just today)
       if (needsOnboarding) {
@@ -272,7 +279,10 @@ export default function NutritionPage() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id);
 
+        console.log("[Nutrition Onboarding] Meal count:", count);
+
         if (count === 0) {
+          console.log("[Nutrition Onboarding] Showing onboarding!");
           setShowOnboarding(true);
         }
       }

@@ -57,9 +57,15 @@ export async function POST(request: Request) {
   const weightKg = weightLbs * 0.453592;
   const heightCm = heightInches * 2.54;
 
+  console.log('[Nutrition Calc] Input values:', {
+    weightLbs, heightInches, age, daysPerWeek, goal,
+    weightKg: weightKg.toFixed(1), heightCm: heightCm.toFixed(1)
+  });
+
   // Mifflin-St Jeor equation (for men - using +5, women would be -161)
   // BMR = (10 × weight in kg) + (6.25 × height in cm) - (5 × age) + 5
   const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5;
+  console.log('[Nutrition Calc] BMR:', Math.round(bmr));
 
   // Activity factor based on training days
   let activityFactor: number;
@@ -75,6 +81,7 @@ export async function POST(request: Request) {
 
   // Calculate TDEE
   const tdee = bmr * activityFactor;
+  console.log('[Nutrition Calc] Activity factor:', activityFactor, 'TDEE:', Math.round(tdee));
 
   // Adjust for goal
   let suggestedCalories: number;
@@ -103,6 +110,10 @@ export async function POST(request: Request) {
   const fat = Math.round((suggestedCalories * 0.25) / 9);
   // Carbs: remaining calories ÷ 4
   const carbs = Math.round((suggestedCalories - protein * 4 - fat * 9) / 4);
+
+  console.log('[Nutrition Calc] Final targets:', {
+    calories: suggestedCalories, protein, carbs, fat, goal: goalDescription
+  });
 
   // Build personalized message
   let message: string;

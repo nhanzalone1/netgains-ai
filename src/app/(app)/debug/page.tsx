@@ -288,6 +288,40 @@ export default function DebugPage() {
     }
   };
 
+  // Reset nutrition onboarding (clear flag + delete all meals)
+  const resetNutritionOnboarding = async () => {
+    if (!user) return;
+    if (!confirm("Reset nutrition onboarding? This will delete ALL meals and reset the flag.")) return;
+
+    // Delete all meals
+    const { error: mealError } = await supabase
+      .from("meals")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (mealError) {
+      showMessage(`Error deleting meals: ${mealError.message}`);
+      return;
+    }
+
+    // Reset the nutrition onboarding flag
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ nutrition_onboarding_complete: false })
+      .eq("id", user.id);
+
+    if (profileError) {
+      showMessage(`Error resetting flag: ${profileError.message}`);
+      return;
+    }
+
+    // Clear daily brief cache
+    localStorage.removeItem(`netgains-daily-brief-${user.id}`);
+
+    showMessage("Nutrition onboarding reset! Go to Nutrition tab to test.");
+    loadData();
+  };
+
   // Delete all workouts
   const clearAllWorkouts = async () => {
     if (!user) return;
@@ -478,9 +512,16 @@ export default function DebugPage() {
         </Section>
 
         {/* Nutrition Override */}
-        <Section title="Create Test Nutrition">
+        <Section title="Nutrition Testing">
           <p className="text-xs text-muted-foreground mb-2">
-            Creates 4 meals: ~1,930 cal, 155g protein
+            Test nutrition onboarding flow
+          </p>
+          <DebugButton onClick={resetNutritionOnboarding} variant="danger">
+            <Trash2 className="w-4 h-4" /> Reset Nutrition Onboarding (delete meals + flag)
+          </DebugButton>
+
+          <p className="text-xs text-muted-foreground mt-4 mb-2">
+            Or create test meals (~1,930 cal, 155g protein)
           </p>
           <div className="flex gap-2">
             <input
