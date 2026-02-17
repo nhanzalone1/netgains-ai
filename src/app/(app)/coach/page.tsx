@@ -331,6 +331,16 @@ export default function CoachPage() {
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
             }}
+            onFocus={() => {
+              // Prevent mobile browser from auto-scrolling on focus
+              const container = messagesContainerRef.current;
+              if (container) {
+                const scrollPos = container.scrollTop;
+                requestAnimationFrame(() => {
+                  container.scrollTop = scrollPos;
+                });
+              }
+            }}
             onKeyDown={(e) => {
               // Submit on Enter (without Shift)
               if (e.key === "Enter" && !e.shiftKey) {
