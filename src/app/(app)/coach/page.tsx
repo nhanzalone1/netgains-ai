@@ -58,6 +58,27 @@ function formatDebugDate(): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
+function getMessageDate(messageId: string): string | null {
+  const timestamp = parseInt(messageId);
+  if (isNaN(timestamp)) return null;
+  return new Date(timestamp).toDateString();
+}
+
+function formatDateDivider(dateString: string): string {
+  const date = new Date(dateString);
+  const today = getDebugDate();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  } else {
+    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+}
+
 function shouldGenerateOpening(userId: string | undefined): boolean {
   if (typeof window === "undefined" || !userId) return false;
 
@@ -510,6 +531,19 @@ export default function CoachPage() {
     (m) => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX) && (m.role !== "assistant" || m.content.trim() !== "")
   );
 
+  // Group messages by date for rendering with dividers
+  const messagesWithDividers: Array<{ type: 'divider'; date: string } | { type: 'message'; message: Message }> = [];
+  let lastDate: string | null = null;
+
+  for (const message of visibleMessages) {
+    const messageDate = getMessageDate(message.id);
+    if (messageDate && messageDate !== lastDate) {
+      messagesWithDividers.push({ type: 'divider', date: messageDate });
+      lastDate = messageDate;
+    }
+    messagesWithDividers.push({ type: 'message', message });
+  }
+
   return (
     <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
       {/* Header - sticky with safe area padding for notch/status bar */}
@@ -550,29 +584,44 @@ export default function CoachPage() {
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {visibleMessages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
+        {messagesWithDividers.map((item, index) => {
+          if (item.type === 'divider') {
+            return (
+              <div key={`divider-${item.date}`} className="flex items-center gap-3 py-2">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-xs text-muted-foreground font-medium px-2">
+                  {formatDateDivider(item.date)}
+                </span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+            );
+          }
+
+          const message = item.message;
+          return (
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : ""
+              key={message.id}
+              className={`flex ${
+                message.role === "user" ? "justify-end" : "justify-start"
               }`}
-              style={
-                message.role === "assistant"
-                  ? { background: "#1a1a24" }
-                  : undefined
-              }
             >
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              <div
+                className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : ""
+                }`}
+                style={
+                  message.role === "assistant"
+                    ? { background: "#1a1a24" }
+                    : undefined
+                }
+              >
+                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && (
           <div className="flex justify-start">

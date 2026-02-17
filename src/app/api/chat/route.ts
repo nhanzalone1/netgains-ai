@@ -328,16 +328,37 @@ export async function POST(req: Request) {
   let anthropicMessages: Anthropic.MessageParam[];
 
   if (isSystemTrigger) {
+    // Calculate yesterday's date for summary
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
     // Gather context for personalized opening
-    const [profileResult, memoriesResult, workoutsResult] = await Promise.all([
+    const [profileResult, memoriesResult, workoutsResult, yesterdayMealsResult, nutritionGoalsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
+      supabase.from('meals').select('*').eq('user_id', user.id).eq('date', yesterdayStr).eq('consumed', true),
+      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
     ]);
 
     const profile = profileResult.data;
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
+    const yesterdayMeals = yesterdayMealsResult.data || [];
+    const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+    // Calculate yesterday's nutrition totals
+    const yesterdayNutrition = yesterdayMeals.reduce(
+      (acc, meal) => ({
+        calories: acc.calories + (meal.calories || 0),
+        protein: acc.protein + (meal.protein || 0),
+        carbs: acc.carbs + (meal.carbs || 0),
+        fat: acc.fat + (meal.fat || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
 
     // Get exercises for recent workouts
     let workoutDetails: { date: string; exercises: { name: string; sets: { weight: number; reps: number }[] }[] }[] = [];
@@ -369,6 +390,106 @@ export async function POST(req: Request) {
       }
     }
 
+    // Find yesterday's workout specifically
+    const yesterdayWorkout = workoutDetails.find(w => w.date === yesterdayStr);
+
+    // Detect PRs from yesterday's workout
+    let yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
+
+    if (yesterdayWorkout && yesterdayWorkout.exercises.length > 0) {
+      // Get all historical data for exercises done yesterday (excluding yesterday)
+      const exerciseNames = yesterdayWorkout.exercises.map(e => e.name);
+
+      // Query all workouts before yesterday that have these exercises
+      const { data: historicalWorkouts } = await supabase
+        .from('workouts')
+        .select('id, date')
+        .eq('user_id', user.id)
+        .lt('date', yesterdayStr)
+        .order('date', { ascending: false });
+
+      if (historicalWorkouts && historicalWorkouts.length > 0) {
+        const historicalWorkoutIds = historicalWorkouts.map(w => w.id);
+
+        const { data: historicalExercises } = await supabase
+          .from('exercises')
+          .select('id, workout_id, name')
+          .in('workout_id', historicalWorkoutIds)
+          .in('name', exerciseNames);
+
+        if (historicalExercises && historicalExercises.length > 0) {
+          const historicalExerciseIds = historicalExercises.map(e => e.id);
+
+          const { data: historicalSets } = await supabase
+            .from('sets')
+            .select('exercise_id, weight, reps')
+            .in('exercise_id', historicalExerciseIds);
+
+          // Build historical bests per exercise
+          const historicalBests: Record<string, { weight: number; reps: number }> = {};
+
+          for (const exercise of historicalExercises) {
+            const exerciseSets = (historicalSets || []).filter(s => s.exercise_id === exercise.id);
+            for (const set of exerciseSets) {
+              const current = historicalBests[exercise.name];
+              // Compare by weight first, then by reps at same weight
+              if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
+                historicalBests[exercise.name] = { weight: set.weight, reps: set.reps };
+              }
+            }
+          }
+
+          // Check each of yesterday's exercises for PRs
+          for (const exercise of yesterdayWorkout.exercises) {
+            const yesterdayBest = exercise.sets.reduce(
+              (best, set) => {
+                if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
+                  return { weight: set.weight, reps: set.reps };
+                }
+                return best;
+              },
+              null as { weight: number; reps: number } | null
+            );
+
+            if (yesterdayBest) {
+              const historical = historicalBests[exercise.name];
+              // It's a PR if no historical data OR yesterday beat the historical best
+              if (!historical || yesterdayBest.weight > historical.weight ||
+                  (yesterdayBest.weight === historical.weight && yesterdayBest.reps > historical.reps)) {
+                yesterdayPRs.push({
+                  exercise: exercise.name,
+                  weight: yesterdayBest.weight,
+                  reps: yesterdayBest.reps,
+                  previousBest: historical || null,
+                });
+              }
+            }
+          }
+        } else {
+          // No historical data means everything yesterday is a PR (first time doing these exercises)
+          for (const exercise of yesterdayWorkout.exercises) {
+            const yesterdayBest = exercise.sets.reduce(
+              (best, set) => {
+                if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
+                  return { weight: set.weight, reps: set.reps };
+                }
+                return best;
+              },
+              null as { weight: number; reps: number } | null
+            );
+            if (yesterdayBest) {
+              yesterdayPRs.push({
+                exercise: exercise.name,
+                weight: yesterdayBest.weight,
+                reps: yesterdayBest.reps,
+                previousBest: null,
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Calculate days since last workout
     const lastWorkoutDate = recentWorkouts[0]?.date;
     const daysSinceLastWorkout = lastWorkoutDate
@@ -376,13 +497,33 @@ export async function POST(req: Request) {
       : null;
 
     // Build context for opening generation
-    const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
+    const contextPrompt = `[DAILY OPENING - Generate a personalized greeting with yesterday's summary]
 
 User Profile:
 ${JSON.stringify(profile, null, 2)}
 
 User Memories (things you've learned about them):
 ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
+
+=== YESTERDAY'S SUMMARY (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
+
+🏆 PERSONAL RECORDS HIT YESTERDAY:
+${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr =>
+  `- ${pr.exercise}: ${pr.weight}lbs x ${pr.reps} reps${pr.previousBest ? ` (previous best: ${pr.previousBest.weight}lbs x ${pr.previousBest.reps})` : ' (first time!)'}`
+).join('\n') : 'No PRs yesterday'}
+
+Yesterday's Workout:
+${yesterdayWorkout ? JSON.stringify(yesterdayWorkout.exercises, null, 2) : 'No workout logged'}
+
+Yesterday's Nutrition:
+${yesterdayMeals.length > 0 ? `
+- Calories: ${yesterdayNutrition.calories} / ${nutritionGoals.calories} goal (${Math.round((yesterdayNutrition.calories / nutritionGoals.calories) * 100)}%)
+- Protein: ${yesterdayNutrition.protein}g / ${nutritionGoals.protein}g goal (${Math.round((yesterdayNutrition.protein / nutritionGoals.protein) * 100)}%)
+- Carbs: ${yesterdayNutrition.carbs}g / ${nutritionGoals.carbs}g goal
+- Fat: ${yesterdayNutrition.fat}g / ${nutritionGoals.fat}g goal
+- Foods logged: ${yesterdayMeals.map(m => m.food_name).join(', ')}` : 'No meals logged'}
+
+=== END YESTERDAY'S SUMMARY ===
 
 Recent Workouts (last 10):
 ${workoutDetails.length > 0 ? JSON.stringify(workoutDetails, null, 2) : 'No workouts logged yet'}
@@ -393,20 +534,30 @@ Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month:
 INSTRUCTIONS:
 Generate a casual opening message. Talk like a real person texting, not an AI.
 
+**PRIORITY ORDER FOR GREETING:**
+
 1. IF onboarding_complete is false or null:
    - Start with something like "hey i'm your coach. let's get you set up — what should i call you"
+   - Do NOT include any yesterday summary for new users
 
-2. IF onboarding complete AND daysSinceLastWorkout >= 2:
-   - Casual check-in, reference their last session, no guilt trip. Something like "been a few days. ready to get back at it?"
+2. IF there are PRs from yesterday (HIGHEST PRIORITY when present):
+   - LEAD WITH THE PR. This is the headline. Example: "new bench PR yesterday — 235x3"
+   - Then mention nutrition highlights: "plus you hit 2,100 cal and 185g protein"
+   - End with today's plan: "solid day. today's pull day, let's keep it rolling"
+   - Format: "[PR announcement]. [nutrition summary]. [today's plan]"
 
-3. IF onboarding complete AND it's a training day:
-   - FULL MODE: What's on deck today, reference recent numbers, give them something to aim for
-   - ASSIST MODE: Reference their pattern, mention a highlight from last session, suggest a target
+3. IF onboarding complete AND yesterday has data but NO PRs:
+   - Start with a quick recap: "yesterday you hit [workout highlights] and got [X]g protein"
+   - If they crushed their goals, acknowledge it. If they missed, note it without being preachy.
+   - Then transition to today: what's the plan, rest day, etc.
 
-4. IF onboarding complete AND it's a rest day:
-   - Quick rest day acknowledgment, mention what they crushed last time
+4. IF onboarding complete AND no yesterday data:
+   - Skip the summary, just greet them and set up today
 
-Keep it short. One or two sentences max. Use real numbers from their history. Sound like a friend who coaches, not a bot.`;
+5. IF onboarding complete AND daysSinceLastWorkout >= 2:
+   - Casual check-in, reference their last session, no guilt trip
+
+Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who coaches, not a bot.`;
 
     anthropicMessages = [{ role: 'user', content: contextPrompt }];
   } else {
