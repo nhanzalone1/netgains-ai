@@ -177,6 +177,10 @@ export default function CoachPage() {
     const allMessages = [...messages, userMessage];
     setMessages(allMessages);
     setInputValue("");
+    // Reset textarea height
+    if (inputRef.current) {
+      (inputRef.current as HTMLTextAreaElement).style.height = "auto";
+    }
     setIsLoading(true);
     shouldScrollRef.current = true; // Ensure we scroll after sending
 
@@ -317,21 +321,33 @@ export default function CoachPage() {
           paddingBottom: keyboardHeight > 0 ? 8 : "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
-        <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto">
-          <input
-            ref={inputRef}
-            type="text"
+        <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
+          <textarea
+            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              // Auto-expand textarea
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
+            }}
+            onKeyDown={(e) => {
+              // Submit on Enter (without Shift)
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
             placeholder="Message your coach..."
-            className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+            rows={1}
+            className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px] max-h-[150px] resize-none overflow-y-auto"
             style={{ background: "#1a1a24" }}
           />
           <motion.button
             whileTap={{ scale: 0.9 }}
             type="submit"
             disabled={!inputValue.trim() || isLoading}
-            className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
             <Send className="w-5 h-5" />
           </motion.button>
