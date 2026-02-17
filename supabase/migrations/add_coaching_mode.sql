@@ -16,3 +16,7 @@ ADD COLUMN IF NOT EXISTS weight_lbs numeric;
 
 ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS goal text;
+
+-- App tour flag (one-time message shown after onboarding)
+ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS app_tour_shown boolean DEFAULT false;

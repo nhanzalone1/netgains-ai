@@ -102,6 +102,15 @@ After question 6 is answered:
 **If coaching_mode is "assist":**
 "[Name], I've got you. [height/weight], [age] years old, training [X] days a week, goal is [goal]. [Mention injuries if any.] You've got your own program — I respect that. Log your next workout and I'll analyze it. Or ask me anything — form tips, plateau fixes, diet advice. What do you need?"
 
+## APP TOUR (one-time only)
+After completing onboarding AND delivering your first coaching response, check if app_tour_shown is false or null in the user profile. If so:
+1. Call updateUserProfile with app_tour_shown: true
+2. Add this message at the end of your response (same message, after a line break):
+
+"Quick tour — Log tab is where you track your workouts. Nutrition tab is for food tracking (I'll help you set that up when you're ready). I'm always here in Coach if you need me. Stats shows your progress over time. For now just focus on getting your first workout in. Everything else clicks into place as you go."
+
+This tour message should appear ONCE, immediately after onboarding completes. Never show it again.
+
 IMPORTANT: You MUST always include a text response after completing the tool calls. Never end your turn with only tool calls and no text.
 
 ## COACHING MODE
@@ -163,7 +172,7 @@ Stay in character. You're their coach, not their assistant.`;
 const tools: Anthropic.Tool[] = [
   {
     name: 'getUserProfile',
-    description: 'Get the current user profile including height, weight, goal, and onboarding status',
+    description: 'Get the current user profile including height, weight, goal, onboarding status, and app_tour_shown',
     input_schema: {
       type: 'object',
       properties: {},
@@ -172,7 +181,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'updateUserProfile',
-    description: 'Update user profile with height, weight, goal, coaching_mode, and/or onboarding status',
+    description: 'Update user profile with height, weight, goal, coaching_mode, onboarding status, and/or app_tour_shown',
     input_schema: {
       type: 'object',
       properties: {
@@ -181,6 +190,7 @@ const tools: Anthropic.Tool[] = [
         goal: { type: 'string', enum: ['cutting', 'bulking', 'maintaining'], description: 'User fitness goal - used for nutrition calculations' },
         coaching_mode: { type: 'string', enum: ['full', 'assist'], description: 'Coaching mode: full = coach builds program, assist = user has own program' },
         onboarding_complete: { type: 'boolean', description: 'Whether onboarding is finished' },
+        app_tour_shown: { type: 'boolean', description: 'Whether the one-time app tour message has been shown' },
       },
       required: [],
     },
@@ -415,7 +425,7 @@ Be specific — use real numbers from their history. Keep it short and punchy. N
       case 'getUserProfile': {
         const { data, error } = await supabase
           .from('profiles')
-          .select('height_inches, weight_lbs, goal, coaching_mode, onboarding_complete, created_at')
+          .select('height_inches, weight_lbs, goal, coaching_mode, onboarding_complete, app_tour_shown, created_at')
           .eq('id', user.id)
           .single();
         if (error) return JSON.stringify({ error: error.message });
@@ -428,6 +438,7 @@ Be specific — use real numbers from their history. Keep it short and punchy. N
         if (input.goal !== undefined) updateData.goal = input.goal;
         if (input.coaching_mode !== undefined) updateData.coaching_mode = input.coaching_mode;
         if (input.onboarding_complete !== undefined) updateData.onboarding_complete = input.onboarding_complete;
+        if (input.app_tour_shown !== undefined) updateData.app_tour_shown = input.app_tour_shown;
 
         const { error } = await supabase
           .from('profiles')
