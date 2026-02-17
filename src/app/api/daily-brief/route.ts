@@ -195,7 +195,8 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       brief: {
         focus: brief.focus || 'Training Day',
         target: brief.target || 'Check in with your coach',
-        nutrition: brief.nutrition || macroSummary,
+        // Always use actual macro goals, don't let AI make up numbers
+        nutrition: macroSummary,
       },
       generatedAt: new Date().toISOString(),
     });
