@@ -546,15 +546,24 @@ export async function POST(req: Request) {
 
             // Process each tool use and collect results
             const toolResults: Anthropic.ToolResultBlockParam[] = [];
+            const toolErrors: string[] = [];
             for (const block of assistantContent) {
               if (block.type === 'tool_use') {
                 const result = await executeTool(block.name, block.input as Record<string, unknown>);
+                // Track errors for debugging
+                if (result.includes('"error"')) {
+                  toolErrors.push(`${block.name}: ${result}`);
+                }
                 toolResults.push({
                   type: 'tool_result',
                   tool_use_id: block.id,
                   content: result,
                 });
               }
+            }
+            // Log tool errors for debugging
+            if (toolErrors.length > 0) {
+              console.error('[Coach] Tool errors:', toolErrors);
             }
 
             // Add tool results
@@ -581,7 +590,7 @@ export async function POST(req: Request) {
 
         // If no text was ever streamed, send a fallback
         if (!textStreamed) {
-          const fallback = `0:${JSON.stringify("Coach is thinking... try sending another message.")}\n`;
+          const fallback = `0:${JSON.stringify("Coach got stuck on a database operation. Make sure all SQL migrations have been run (check for missing columns like coaching_mode, onboarding_complete, height_inches, weight_lbs, goal in profiles table).")}\n`;
           controller.enqueue(encoder.encode(fallback));
         }
 
