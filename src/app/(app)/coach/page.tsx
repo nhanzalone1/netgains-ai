@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2, Sparkles, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
+import { useAuth } from "@/components/auth-provider";
 
 interface Message {
   id: string;
@@ -11,18 +12,20 @@ interface Message {
   content: string;
 }
 
-const STORAGE_KEY = "netgains-coach-messages";
-
 const INITIAL_GREETING: Message = {
   id: "initial-greeting",
   role: "assistant",
   content: "Hey. I'm your coach. Ready when you are.",
 };
 
-function loadMessages(): Message[] {
+function getStorageKey(userId: string | undefined): string {
+  return userId ? `netgains-coach-messages-${userId}` : "netgains-coach-messages";
+}
+
+function loadMessages(userId: string | undefined): Message[] {
   if (typeof window === "undefined") return [INITIAL_GREETING];
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(getStorageKey(userId));
     if (stored) {
       const parsed = JSON.parse(stored);
       if (parsed.length > 0) return parsed;
@@ -34,8 +37,9 @@ function loadMessages(): Message[] {
 }
 
 export default function CoachPage() {
+  const { user } = useAuth();
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState<Message[]>(loadMessages);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_GREETING]);
   const [isLoading, setIsLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -90,11 +94,18 @@ export default function CoachPage() {
     }
   }, [isLoading, scrollToBottom]); // Intentionally not including messages to avoid scroll during stream
 
+  // Load messages when user changes (account switch)
   useEffect(() => {
+    setMessages(loadMessages(user?.id));
+  }, [user?.id]);
+
+  // Save messages to user-specific storage
+  useEffect(() => {
+    if (!user?.id) return;
     // Don't save empty assistant messages
     const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-  }, [messages]);
+    localStorage.setItem(getStorageKey(user.id), JSON.stringify(filtered));
+  }, [messages, user?.id]);
 
   const sendRequest = async (allMessages: Message[]): Promise<Response> => {
     const response = await fetch("/api/chat", {
@@ -211,8 +222,8 @@ export default function CoachPage() {
 
   const handleReset = async () => {
     if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
-    // Clear localStorage
-    localStorage.removeItem(STORAGE_KEY);
+    // Clear localStorage (user-specific)
+    localStorage.removeItem(getStorageKey(user?.id));
     localStorage.removeItem("netgains-current-workout");
     // Reset onboarding and memories via API
     try {
