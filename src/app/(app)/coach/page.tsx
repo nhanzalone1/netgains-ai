@@ -298,7 +298,7 @@ export default function CoachPage() {
           </div>
         ))}
 
-        {isLoading && messages[messages.length - 1]?.role === "user" && (
+        {isLoading && (
           <div className="flex justify-start">
             <div
               className="rounded-2xl px-4 py-3 flex items-center gap-2"
@@ -336,18 +336,17 @@ export default function CoachPage() {
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
             }}
-            onFocus={() => {
-              // Prevent mobile browser from auto-scrolling on focus
-              // Save scroll position and restore it multiple times to catch delayed browser scroll
+            onTouchStart={(e) => {
+              // On mobile, prevent the browser from scrolling when tapping the input
+              // by temporarily locking scroll position
               const container = messagesContainerRef.current;
               if (container) {
                 const scrollPos = container.scrollTop;
-                const restore = () => { container.scrollTop = scrollPos; };
-                requestAnimationFrame(restore);
-                setTimeout(restore, 0);
-                setTimeout(restore, 50);
-                setTimeout(restore, 100);
-                setTimeout(restore, 150);
+                const lockScroll = () => { container.scrollTop = scrollPos; };
+
+                // Lock scroll for 300ms to catch all browser scroll attempts
+                const interval = setInterval(lockScroll, 10);
+                setTimeout(() => clearInterval(interval), 300);
               }
             }}
             onKeyDown={(e) => {
