@@ -57,8 +57,8 @@ If the user hasn't completed onboarding (onboarding_complete is false or null), 
 
 3. Training schedule — "How many days a week can you train?"
 
-4. Goal — "What's the goal — build muscle, lose fat, or both?"
-   (Map to: "bulk" for build muscle, "cut" for lose fat, "recomp" for both. Save to profile.)
+4. Goal — "What's the goal right now — cutting (losing fat, keeping muscle), bulking (gaining size with minimal fat), or maintaining (staying where you're at)?"
+   (Store as: "cutting", "bulking", or "maintaining". Save to profile. This value is used for nutrition calculations later.)
 
 5. Coaching mode — "Do you want me to build your training program, or do you already have one you like?"
    - If they want you to BUILD IT → coaching_mode: "full"
@@ -160,7 +160,7 @@ const tools: Anthropic.Tool[] = [
       properties: {
         height_inches: { type: 'number', description: 'Height in total inches (e.g., 70 for 5\'10")' },
         weight_lbs: { type: 'number', description: 'Weight in pounds' },
-        goal: { type: 'string', enum: ['bulk', 'cut', 'recomp'], description: 'User fitness goal' },
+        goal: { type: 'string', enum: ['cutting', 'bulking', 'maintaining'], description: 'User fitness goal - used for nutrition calculations' },
         coaching_mode: { type: 'string', enum: ['full', 'assist'], description: 'Coaching mode: full = coach builds program, assist = user has own program' },
         onboarding_complete: { type: 'boolean', description: 'Whether onboarding is finished' },
       },
