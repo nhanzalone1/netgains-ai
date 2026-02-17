@@ -140,6 +140,8 @@ export async function POST(request: Request) {
   // Call Claude to generate the brief
   const anthropic = new Anthropic();
 
+  const macroSummary = `${nutritionGoals.calories}cal | ${nutritionGoals.protein}P ${nutritionGoals.carbs}C ${nutritionGoals.fat}F`;
+
   const prompt = `Generate a daily brief for a fitness app user. Keep it VERY short - 3 lines max total.
 
 USER CONTEXT:
@@ -150,7 +152,7 @@ USER CONTEXT:
 - Days since last workout: ${daysSinceLastWorkout ?? 'never trained'}
 - Last workout: ${lastWorkout ? `${lastWorkout.date} - ${lastWorkout.exercises.map(e => e.name).join(', ')}` : 'none'}
 - Best recent lift to beat: ${targetExercise ? `${targetExercise} ${targetWeight}x${targetReps}` : 'none yet'}
-- Protein goal: ${nutritionGoals.protein}g
+- Daily macro goals: ${macroSummary}
 
 LIKELY REST DAY: ${isLikelyRestDay}
 
@@ -158,14 +160,14 @@ OUTPUT FORMAT (respond with ONLY this JSON, no other text):
 {
   "focus": "<workout type OR 'Rest Day' - keep under 15 chars>",
   "target": "<specific target to beat OR recovery message - under 50 chars>",
-  "nutrition": "<protein goal reminder - under 25 chars>"
+  "nutrition": "<macro goals in format: Xcal | XP XC XF - under 30 chars>"
 }
 
 EXAMPLES:
-For FULL mode training day: {"focus": "Push Day", "target": "Bench target: 230x5 (hit 225x5 last week)", "nutrition": "Protein goal: 200g"}
-For ASSIST mode training day: {"focus": "Based on pattern: Pull", "target": "Last rows: 225x3 — go for 4", "nutrition": "Protein goal: 180g"}
-For rest day: {"focus": "Rest Day", "target": "Great week — ${workoutsThisWeek} sessions done", "nutrition": "Eat at maintenance"}
-For first-time user: {"focus": "Ready to Start", "target": "Log your first workout today", "nutrition": "Protein goal: ${nutritionGoals.protein}g"}`;
+For FULL mode training day: {"focus": "Push Day", "target": "Bench target: 230x5 (hit 225x5 last week)", "nutrition": "2500cal | 200P 250C 70F"}
+For ASSIST mode training day: {"focus": "Based on pattern: Pull", "target": "Last rows: 225x3 — go for 4", "nutrition": "2200cal | 180P 220C 60F"}
+For rest day: {"focus": "Rest Day", "target": "Great week — ${workoutsThisWeek} sessions done", "nutrition": "2000cal | 150P 200C 55F"}
+For first-time user: {"focus": "Ready to Start", "target": "Log your first workout today", "nutrition": "${macroSummary}"}`;
 
   try {
     const response = await anthropic.messages.create({
@@ -193,7 +195,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       brief: {
         focus: brief.focus || 'Training Day',
         target: brief.target || 'Check in with your coach',
-        nutrition: brief.nutrition || `Protein goal: ${nutritionGoals.protein}g`,
+        nutrition: brief.nutrition || macroSummary,
       },
       generatedAt: new Date().toISOString(),
     });
@@ -206,7 +208,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       brief: {
         focus: isLikelyRestDay ? 'Rest Day' : 'Training Day',
         target: targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Log a workout to get started',
-        nutrition: `Protein goal: ${nutritionGoals.protein}g`,
+        nutrition: macroSummary,
       },
       generatedAt: new Date().toISOString(),
     });
