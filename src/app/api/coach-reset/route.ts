@@ -13,6 +13,7 @@ export async function POST() {
     .from('profiles')
     .update({
       onboarding_complete: false,
+      nutrition_onboarding_complete: false,
       app_tour_shown: false,
       coaching_mode: null,
       goal: null,

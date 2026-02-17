@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 
 interface Meal {
   id: string;
@@ -183,6 +184,8 @@ export default function NutritionPage() {
   const [goals, setGoals] = useState<NutritionGoals>(DEFAULT_GOALS);
   const [weekData, setWeekData] = useState<WeekData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false);
 
   // Add food modal
   const [showAddFood, setShowAddFood] = useState(false);
@@ -227,23 +230,53 @@ export default function NutritionPage() {
 
     const dateStr = formatDate(selectedDate);
 
-    const { data: mealsData } = await supabase
-      .from("meals")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("date", dateStr)
-      .order("created_at", { ascending: true });
+    // Fetch meals, goals, and profile in parallel
+    const [mealsResult, goalsResult, profileResult] = await Promise.all([
+      supabase
+        .from("meals")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", dateStr)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("nutrition_goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .single(),
+      supabase
+        .from("profiles")
+        .select("nutrition_onboarding_complete, onboarding_complete")
+        .eq("id", user.id)
+        .single(),
+    ]);
 
-    setMeals((mealsData || []) as Meal[]);
+    const mealsData = mealsResult.data || [];
+    setMeals(mealsData as Meal[]);
 
-    const { data: goalsData } = await supabase
-      .from("nutrition_goals")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+    if (goalsResult.data) {
+      setGoals(goalsResult.data as NutritionGoals);
+    }
 
-    if (goalsData) {
-      setGoals(goalsData as NutritionGoals);
+    // Check if we need to show nutrition onboarding
+    // Show if: main onboarding complete, nutrition onboarding NOT complete, and no meals logged
+    if (!hasCheckedOnboarding && profileResult.data) {
+      const profile = profileResult.data;
+      const needsOnboarding =
+        profile.onboarding_complete === true &&
+        profile.nutrition_onboarding_complete !== true;
+
+      // Also check if they have ANY meals ever (not just today)
+      if (needsOnboarding) {
+        const { count } = await supabase
+          .from("meals")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        if (count === 0) {
+          setShowOnboarding(true);
+        }
+      }
+      setHasCheckedOnboarding(true);
     }
 
     setLoading(false);
@@ -310,6 +343,13 @@ export default function NutritionPage() {
       });
       setRecentFoods(Array.from(uniqueFoods.values()).slice(0, 5));
     }
+  };
+
+  const handleNutritionOnboardingComplete = (newGoals: NutritionGoals) => {
+    setGoals(newGoals);
+    setShowOnboarding(false);
+    // Reload week data with new goals
+    loadWeekData();
   };
 
   const goToPreviousDay = () => {
@@ -578,6 +618,13 @@ export default function NutritionPage() {
           })}
         </div>
       </div>
+
+      {/* Nutrition Onboarding */}
+      {showOnboarding && (
+        <div className="mx-4 mb-4 rounded-2xl overflow-hidden" style={{ background: "#1a1a24", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+          <NutritionOnboarding onComplete={handleNutritionOnboardingComplete} />
+        </div>
+      )}
 
       {/* Main Content */}
       <motion.div
