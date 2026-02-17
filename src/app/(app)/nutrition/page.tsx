@@ -11,6 +11,7 @@ import {
   Wand2,
   Loader2,
   Clock,
+  Copy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, PanInfo } from "framer-motion";
@@ -207,6 +208,18 @@ export default function NutritionPage() {
   const [editFat, setEditFat] = useState("");
   const [savingGoals, setSavingGoals] = useState(false);
 
+  // Copy from previous day
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyFromDate, setCopyFromDate] = useState<Date | null>(null);
+  const [previousDayMeals, setPreviousDayMeals] = useState<Meal[]>([]);
+  const [loadingPreviousMeals, setLoadingPreviousMeals] = useState(false);
+  const [copyingMeals, setCopyingMeals] = useState(false);
+
+  // Always start on today's date when page loads
+  useEffect(() => {
+    setSelectedDate(new Date());
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     loadData();
@@ -301,7 +314,7 @@ export default function NutritionPage() {
           });
         }
       });
-      setRecentFoods(Array.from(uniqueFoods.values()).slice(0, 10));
+      setRecentFoods(Array.from(uniqueFoods.values()).slice(0, 5));
     }
   };
 
@@ -467,6 +480,66 @@ export default function NutritionPage() {
     setSavingGoals(false);
   };
 
+  const openCopyModal = () => {
+    // Default to yesterday
+    const yesterday = new Date(selectedDate);
+    yesterday.setDate(yesterday.getDate() - 1);
+    setCopyFromDate(yesterday);
+    setPreviousDayMeals([]);
+    setShowCopyModal(true);
+    loadMealsForDate(yesterday);
+  };
+
+  const loadMealsForDate = async (date: Date) => {
+    if (!user) return;
+    setLoadingPreviousMeals(true);
+
+    const { data } = await supabase
+      .from("meals")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("date", formatDate(date))
+      .order("created_at", { ascending: true });
+
+    setPreviousDayMeals((data || []) as Meal[]);
+    setLoadingPreviousMeals(false);
+  };
+
+  const handleCopyFromDate = (date: Date) => {
+    setCopyFromDate(date);
+    loadMealsForDate(date);
+  };
+
+  const handleCopyMeals = async () => {
+    if (!user || previousDayMeals.length === 0) return;
+
+    setCopyingMeals(true);
+
+    const newMeals = previousDayMeals.map((meal) => ({
+      user_id: user.id,
+      date: formatDate(selectedDate),
+      meal_type: meal.meal_type,
+      food_name: meal.food_name,
+      calories: meal.calories,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      serving_size: meal.serving_size,
+      ai_generated: false,
+      consumed: true,
+    }));
+
+    const { error } = await supabase.from("meals").insert(newMeals);
+
+    if (!error) {
+      setShowCopyModal(false);
+      loadData();
+      loadWeekData();
+    }
+
+    setCopyingMeals(false);
+  };
+
   const weekDates = getWeekDates(selectedDate);
 
   return (
@@ -552,10 +625,10 @@ export default function NutritionPage() {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={openGoalsEditor}
-            className="relative"
+            className="flex flex-col items-center"
           >
             <CalorieRing consumed={totals.calories} goal={goals.calories} />
-            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-muted-foreground">
+            <span className="text-[9px] text-muted-foreground mt-1">
               tap to edit
             </span>
           </motion.button>
@@ -653,16 +726,27 @@ export default function NutritionPage() {
             ))
           )}
 
-          {/* Add Food Button - Below Meals */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowAddFood(true)}
-            className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium mt-4"
-            style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px dashed rgba(255, 255, 255, 0.15)" }}
-          >
-            <Plus className="w-4 h-4 text-primary" />
-            <span className="text-muted-foreground">Add Food</span>
-          </motion.button>
+          {/* Action Buttons - Below Meals */}
+          <div className="flex gap-2 mt-4">
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowAddFood(true)}
+              className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium"
+              style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px dashed rgba(255, 255, 255, 0.15)" }}
+            >
+              <Plus className="w-4 h-4 text-primary" />
+              <span className="text-muted-foreground">Add Food</span>
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={openCopyModal}
+              className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium"
+              style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px dashed rgba(255, 255, 255, 0.15)" }}
+            >
+              <Copy className="w-4 h-4 text-primary" />
+              <span className="text-muted-foreground">Copy Day</span>
+            </motion.button>
+          </div>
         </div>
       </motion.div>
 
@@ -843,6 +927,66 @@ export default function NutritionPage() {
 
           <Button onClick={handleSaveGoals} loading={savingGoals}>
             Save Goals
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Copy From Previous Day Modal */}
+      <Modal open={showCopyModal} onClose={() => setShowCopyModal(false)} title="Copy from Previous Day">
+        <div className="space-y-4">
+          {/* Date selector - last 7 days */}
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-2">Select Day</label>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(selectedDate);
+                date.setDate(date.getDate() - (i + 1));
+                const isSelected = copyFromDate && formatDate(date) === formatDate(copyFromDate);
+                return (
+                  <motion.button
+                    key={i}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleCopyFromDate(date)}
+                    className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium ${
+                      isSelected ? "bg-primary text-primary-foreground" : "bg-white/5"
+                    }`}
+                  >
+                    {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Preview meals */}
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-2">
+              {loadingPreviousMeals ? "Loading..." : `${previousDayMeals.length} items to copy`}
+            </label>
+            {!loadingPreviousMeals && previousDayMeals.length > 0 && (
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {previousDayMeals.map((meal) => (
+                  <div
+                    key={meal.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-white/5 text-sm"
+                  >
+                    <span className="truncate flex-1">{meal.food_name}</span>
+                    <span className="text-muted-foreground text-xs ml-2">{meal.calories} cal</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!loadingPreviousMeals && previousDayMeals.length === 0 && (
+              <p className="text-sm text-muted-foreground">No meals logged on this day</p>
+            )}
+          </div>
+
+          <Button
+            onClick={handleCopyMeals}
+            loading={copyingMeals}
+            disabled={previousDayMeals.length === 0 || loadingPreviousMeals}
+          >
+            Copy {previousDayMeals.length} Items
           </Button>
         </div>
       </Modal>

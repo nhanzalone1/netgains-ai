@@ -1006,12 +1006,17 @@ export function WorkoutSession({
         </div>
       )}
 
+      {/* Background fill below nav to prevent scroll bleed-through */}
+      <div
+        className="fixed bottom-0 left-0 right-0 h-24 z-30"
+        style={{ background: "#0f0f13" }}
+      />
+
       {/* Exercise Library */}
       <div
         className="fixed bottom-24 left-0 right-0 z-40"
         style={{
-          background: "rgba(15, 15, 19, 0.95)",
-          backdropFilter: "blur(24px)",
+          background: "#0f0f13",
           borderTop: "1px solid rgba(255, 255, 255, 0.05)",
           borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
         }}
