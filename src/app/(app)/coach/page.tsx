@@ -353,10 +353,10 @@ export default function CoachPage() {
 
   return (
     <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
-      {/* Header - with safe area padding for notch/status bar */}
+      {/* Header - sticky with safe area padding for notch/status bar */}
       <div
-        className="flex items-center justify-between p-4 border-b border-white/5"
-        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+        className="sticky top-0 z-50 flex items-center justify-between p-4 border-b border-white/5"
+        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
       >
         <div className="flex items-center gap-3">
           <div
