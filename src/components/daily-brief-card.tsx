@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -26,27 +25,19 @@ export function DailyBriefCard() {
   const [brief, setBrief] = useState<DailyBriefResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
+  const lastFetchedDateRef = useRef<string | null>(null);
 
-  const fetchBrief = useCallback(async () => {
+  // Fetch brief from API (not from cache)
+  const fetchBriefFromApi = useCallback(async () => {
     if (!user?.id) return;
 
-    setIsLoading(true);
-    setError(false);
+    const effectiveDate = getDebugDate();
 
-    // Check cache first
-    const cached = getDailyBriefCache(user.id);
-    if (cached) {
-      setBrief(cached);
-      setIsLoading(false);
-      return;
-    }
-
-    // Fetch from API
     try {
       const response = await fetch("/api/daily-brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ effectiveDate: getDebugDate() }),
+        body: JSON.stringify({ effectiveDate }),
       });
 
       if (!response.ok) {
@@ -56,6 +47,7 @@ export function DailyBriefCard() {
       const data: DailyBriefResponse = await response.json();
       setBrief(data);
       setDailyBriefCache(user.id, data);
+      lastFetchedDateRef.current = effectiveDate;
     } catch (err) {
       console.error("Failed to fetch daily brief:", err);
       setError(true);
@@ -64,22 +56,62 @@ export function DailyBriefCard() {
     setIsLoading(false);
   }, [user?.id]);
 
-  // Fetch on mount
+  // Check cache or fetch - used on mount and visibility changes
+  const checkAndFetch = useCallback(() => {
+    if (!user?.id) return;
+
+    const effectiveDate = getDebugDate();
+    setError(false);
+
+    // Check cache first (synchronous, avoids flicker)
+    const cached = getDailyBriefCache(user.id);
+    if (cached) {
+      setBrief(cached);
+      setIsLoading(false);
+      lastFetchedDateRef.current = effectiveDate;
+      return;
+    }
+
+    // No cache, need to fetch
+    setIsLoading(true);
+    fetchBriefFromApi();
+  }, [user?.id, fetchBriefFromApi]);
+
+  // Initial fetch on mount
   useEffect(() => {
-    fetchBrief();
-  }, [fetchBrief]);
+    checkAndFetch();
+  }, [checkAndFetch]);
 
   // Listen for cache invalidation
   useEffect(() => {
     const handleInvalidate = () => {
-      fetchBrief();
+      setIsLoading(true);
+      fetchBriefFromApi();
     };
 
     window.addEventListener(DAILY_BRIEF_INVALIDATE_EVENT, handleInvalidate);
     return () => {
       window.removeEventListener(DAILY_BRIEF_INVALIDATE_EVENT, handleInvalidate);
     };
-  }, [fetchBrief]);
+  }, [fetchBriefFromApi]);
+
+  // Re-check when page becomes visible (catches date changes, overnight stale cache)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const currentDate = getDebugDate();
+        // Only refetch if date changed since last fetch
+        if (lastFetchedDateRef.current !== currentDate) {
+          checkAndFetch();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [checkAndFetch]);
 
   // Loading skeleton
   if (isLoading) {

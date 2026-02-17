@@ -660,7 +660,7 @@ export default function CoachPage() {
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {messagesWithDividers.map((item, index) => {
+        {messagesWithDividers.map((item) => {
           if (item.type === 'divider') {
             return (
               <div key={`divider-${item.date}`} className="flex flex-col items-center py-4">
@@ -736,7 +736,7 @@ export default function CoachPage() {
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
             }}
-            onTouchStart={(e) => {
+            onTouchStart={() => {
               // On mobile, prevent the browser from scrolling when tapping the input
               // by temporarily locking scroll position
               const container = messagesContainerRef.current;
