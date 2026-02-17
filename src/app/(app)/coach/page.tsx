@@ -34,23 +34,45 @@ function loadMessages(userId: string | undefined): Message[] {
   }
 }
 
+function getDebugDate(): Date {
+  if (typeof window === "undefined") return new Date();
+  const override = localStorage.getItem("netgains-debug-date-override");
+  if (override) {
+    // Parse YYYY-MM-DD format and create date at noon to avoid timezone issues
+    const parsed = new Date(override + "T12:00:00");
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function getTodayString(): string {
+  return getDebugDate().toDateString();
+}
+
 function shouldGenerateOpening(userId: string | undefined): boolean {
   if (typeof window === "undefined" || !userId) return false;
 
   const messages = loadMessages(userId);
   const lastOpenStr = localStorage.getItem(getLastOpenKey(userId));
-  const today = new Date().toDateString();
+  const today = getTodayString();
+
+  // Debug: log what we're checking
+  const debugOverride = localStorage.getItem("netgains-debug-date-override");
+  if (debugOverride) {
+    console.log("[Debug] Date override active:", debugOverride, "→", today);
+    console.log("[Debug] Last open:", lastOpenStr);
+    console.log("[Debug] Messages count:", messages.length);
+  }
 
   // If no messages at all, definitely generate opening
   if (messages.length === 0) return true;
 
-  // If already opened today and have messages, don't regenerate
+  // If already opened "today" (considering debug override) and have messages, don't regenerate
   if (lastOpenStr === today && messages.length > 0) return false;
 
-  // Check if last message was from today (active conversation)
+  // Check if last message was from "today" (considering debug override)
   const lastMessage = messages[messages.length - 1];
   if (lastMessage) {
-    // If the last message ID is a timestamp from today, don't regenerate
     const msgTimestamp = parseInt(lastMessage.id);
     if (!isNaN(msgTimestamp)) {
       const msgDate = new Date(msgTimestamp).toDateString();
@@ -201,8 +223,8 @@ export default function CoachPage() {
       generateAutoOpening();
     }
 
-    // Mark today as opened
-    localStorage.setItem(getLastOpenKey(user.id), new Date().toDateString());
+    // Mark today as opened (uses debug date if set)
+    localStorage.setItem(getLastOpenKey(user.id), getTodayString());
   }, [user?.id, generateAutoOpening]);
 
   // Save messages to user-specific storage
