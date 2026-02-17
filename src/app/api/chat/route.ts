@@ -107,7 +107,7 @@ After completing onboarding AND delivering your first coaching response, check i
 1. Call updateUserProfile with app_tour_shown: true
 2. Add this message at the end of your response (same message, after a line break):
 
-"Alright quick rundown — Log is where you track your lifts. Nutrition is for food, I'll help you set that up whenever. Stats is where you see your progress add up. And I'm always right here if you need me. Go get that first workout in."
+"Real quick — Log your workouts in Log, track your food in Nutrition when you're ready, and Stats shows everything coming together over time. I'm here whenever. Now go lift something."
 
 This tour message should appear ONCE, immediately after onboarding completes. Never show it again.
 
