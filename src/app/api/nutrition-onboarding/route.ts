@@ -13,12 +13,12 @@ export async function POST(request: Request) {
   const body = await request.json();
   const {
     calorieAwareness,
-    statedCalories,
+    userMacros,
     trackingStyle,
     restrictions,
   } = body as {
     calorieAwareness: 'knows' | 'fresh';
-    statedCalories?: number;
+    userMacros?: { calories: number; protein: number; carbs: number; fat: number };
     trackingStyle: 'scale_app' | 'eyeballing' | 'no_tracking';
     restrictions: string;
   };
@@ -116,12 +116,7 @@ export async function POST(request: Request) {
   });
 
   // Build personalized message
-  let message: string;
-  if (statedCalories && Math.abs(statedCalories - suggestedCalories) > 200) {
-    message = `You mentioned eating around ${statedCalories.toLocaleString()} calories. Based on your stats and goal to ${goalDescription}, I calculated ${suggestedCalories.toLocaleString()} calories. You can use either as a starting point.`;
-  } else {
-    message = `Based on your stats (${weightLbs}lbs, ${Math.floor(heightInches / 12)}'${heightInches % 12}", ${daysPerWeek} training days) and goal to ${goalDescription}, here's your starting point:`;
-  }
+  const message = `Based on your stats (${weightLbs}lbs, ${Math.floor(heightInches / 12)}'${heightInches % 12}", ${daysPerWeek} training days) and goal to ${goalDescription}, here's your starting point:`;
 
   // Save preferences to coach_memory
   const memoriesToSave = [
@@ -150,8 +145,8 @@ export async function POST(request: Request) {
       carbs,
       fat,
     },
-    userStatedCalories: statedCalories || null,
     suggestedCalories,
+    weightLbs,
     message,
   });
 }
