@@ -355,6 +355,127 @@ export default function DebugPage() {
     }
   };
 
+  // Milestone testing
+  const [milestones, setMilestones] = useState<{ milestone_type: string; achieved_at: string; celebrated_at: string | null }[]>([]);
+
+  const loadMilestones = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("milestones")
+      .select("milestone_type, achieved_at, celebrated_at")
+      .eq("user_id", user.id)
+      .order("achieved_at", { ascending: false });
+    setMilestones(data || []);
+  };
+
+  const resetMilestones = async () => {
+    if (!user) return;
+    if (!confirm("Delete ALL milestones? This will reset all achievement tracking.")) return;
+
+    const { error } = await supabase
+      .from("milestones")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (error) {
+      showMessage(`Error: ${error.message}`);
+    } else {
+      showMessage("All milestones reset!");
+      loadMilestones();
+    }
+  };
+
+  const create7DayStreak = async () => {
+    if (!user) return;
+
+    // Create workouts for last 7 days
+    const workouts = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      workouts.push({
+        user_id: user.id,
+        date: date.toISOString().split("T")[0],
+        notes: `[DEBUG] Streak test day ${7 - i}`,
+      });
+    }
+
+    const { data: insertedWorkouts, error } = await supabase
+      .from("workouts")
+      .insert(workouts)
+      .select();
+
+    if (error) {
+      showMessage(`Error: ${error.message}`);
+      return;
+    }
+
+    // Add a simple exercise to each workout
+    if (insertedWorkouts) {
+      const exercises = insertedWorkouts.map((w) => ({
+        workout_id: w.id,
+        name: "Bench Press",
+        order_index: 0,
+      }));
+
+      const { data: insertedExercises } = await supabase
+        .from("exercises")
+        .insert(exercises)
+        .select();
+
+      // Add sets to each exercise
+      if (insertedExercises) {
+        const sets = insertedExercises.map((e) => ({
+          exercise_id: e.id,
+          weight: 135,
+          reps: 10,
+          order_index: 0,
+        }));
+        await supabase.from("sets").insert(sets);
+      }
+    }
+
+    showMessage("Created 7-day workout streak! Go to Coach tab to test milestone.");
+  };
+
+  const triggerFirstWorkout = async () => {
+    if (!user) return;
+
+    // Create a single workout for today
+    const { data: workout, error } = await supabase
+      .from("workouts")
+      .insert({
+        user_id: user.id,
+        date: new Date().toISOString().split("T")[0],
+        notes: "[DEBUG] First workout test",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      showMessage(`Error: ${error.message}`);
+      return;
+    }
+
+    // Add exercise and set
+    const { data: exercise } = await supabase
+      .from("exercises")
+      .insert({ workout_id: workout.id, name: "Squat", order_index: 0 })
+      .select()
+      .single();
+
+    if (exercise) {
+      await supabase.from("sets").insert({
+        exercise_id: exercise.id,
+        weight: 225,
+        reps: 5,
+        order_index: 0,
+      });
+    }
+
+    showMessage("Created first workout! Go to Coach tab to test milestone.");
+  };
+
   // Create test account
   const createTestAccount = async () => {
     const timestamp = Date.now();
@@ -537,6 +658,43 @@ export default function DebugPage() {
               Create
             </button>
           </div>
+        </Section>
+
+        {/* Milestone Testing */}
+        <Section title="Milestone Testing">
+          <p className="text-xs text-muted-foreground mb-2">
+            Test milestone detection and celebration
+          </p>
+          <div className="space-y-2">
+            <DebugButton onClick={resetMilestones} variant="danger">
+              <Trash2 className="w-4 h-4" /> Reset ALL Milestones
+            </DebugButton>
+            <DebugButton onClick={triggerFirstWorkout} variant="default">
+              <Play className="w-4 h-4" /> Create First Workout (triggers milestone)
+            </DebugButton>
+            <DebugButton onClick={create7DayStreak} variant="default">
+              <Play className="w-4 h-4" /> Create 7-Day Streak
+            </DebugButton>
+            <DebugButton onClick={loadMilestones} variant="default">
+              <RefreshCw className="w-4 h-4" /> Load Milestones
+            </DebugButton>
+          </div>
+
+          {milestones.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Current Milestones:</h4>
+              <div className="space-y-1">
+                {milestones.map((m) => (
+                  <div key={m.milestone_type} className="flex justify-between text-xs bg-black/30 rounded px-2 py-1">
+                    <span className="text-white">{m.milestone_type}</span>
+                    <span className={m.celebrated_at ? "text-green-400" : "text-yellow-400"}>
+                      {m.celebrated_at ? "celebrated" : "pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Section>
 
         {/* Raw Profile Data */}

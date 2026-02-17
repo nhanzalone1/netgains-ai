@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
 
 export const maxDuration = 60;
 
@@ -326,6 +327,7 @@ export async function POST(req: Request) {
     messages[0].content.startsWith(TRIGGER_PREFIX);
 
   let anthropicMessages: Anthropic.MessageParam[];
+  let milestoneContext: MilestoneContext | null = null;
 
   if (isSystemTrigger) {
     console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
@@ -422,7 +424,7 @@ export async function POST(req: Request) {
     }
 
     // Detect PRs from yesterday's workout
-    let yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
+    const yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
 
     if (yesterdayWorkout && yesterdayWorkout.exercises.length > 0) {
       // Get all historical data for exercises done yesterday (excluding yesterday)
@@ -534,6 +536,27 @@ export async function POST(req: Request) {
       ? Math.floor((Date.now() - new Date(lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
+    // Detect milestones (pass first PR if detected yesterday)
+    const firstPR = yesterdayPRs.length > 0 ? yesterdayPRs[0] : undefined;
+    milestoneContext = await detectMilestones(
+      supabase,
+      user.id,
+      firstPR ? { exercise: firstPR.exercise, weight: firstPR.weight, reps: firstPR.reps } : undefined
+    );
+
+    console.log('[Coach] Milestones detected:', milestoneContext.newMilestones.map(m => m.type));
+
+    // Build milestone section for context
+    const milestoneSection = milestoneContext.newMilestones.length > 0
+      ? `
+⚠️ CRITICAL - NEW MILESTONES ACHIEVED ⚠️
+You MUST lead your opening message with a celebration of these milestones. This takes priority over everything else except onboarding.
+${milestoneContext.newMilestones.map(m => formatMilestone(m)).join('\n')}
+
+Your opening MUST start by celebrating the highest-priority milestone above. Do not skip this.
+`
+      : '';
+
     // Build context for opening generation
     const contextPrompt = `[DAILY OPENING - Generate a personalized greeting with yesterday's summary]
 
@@ -542,7 +565,7 @@ ${JSON.stringify(profile, null, 2)}
 
 User Memories (things you've learned about them):
 ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
-
+${milestoneSection}
 === YESTERDAY'S SUMMARY (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 🏆 PERSONAL RECORDS HIT YESTERDAY:
@@ -578,21 +601,36 @@ Generate a casual opening message. Talk like a real person texting, not an AI.
    - Start with something like "hey i'm your coach. let's get you set up — what should i call you"
    - Do NOT include any yesterday summary for new users
 
-2. IF there are PRs from yesterday (HIGHEST PRIORITY when present):
+2. IF there are NEW MILESTONES TO CELEBRATE (check the section above):
+   - LEAD with the milestone celebration. This is the headline.
+   - Make it feel earned and natural, not like a system notification.
+   - Examples by milestone type:
+     * first_workout: "Day 1 done. Most people never start. You just did."
+     * first_pr: "New PR on bench — 235. That's not luck, that's the work paying off."
+     * streak_7: "7 days straight. You haven't missed once. We're building something here."
+     * streak_14: "Two weeks in a row. The habit's locked in now."
+     * streak_30: "30 days. A full month of showing up. You're different."
+     * workout_50: "50 workouts in the books. Most people quit at 5. You're built different."
+     * workout_100: "100 workouts logged. Only 8% of users get here. Remember that."
+     * first_food_entry: "First meal tracked. Now we can dial in your nutrition."
+   - If multiple milestones, prioritize: PR > streaks > workout counts > food logging
+   - After the celebration, briefly mention any other context (yesterday's workout, etc.)
+
+3. IF there are PRs from yesterday (and no milestone celebration needed):
    - LEAD WITH THE PR. This is the headline. Example: "new bench PR yesterday — 235x3"
    - Then mention nutrition highlights: "plus you hit 2,100 cal and 185g protein"
    - End with today's plan: "solid day. today's pull day, let's keep it rolling"
    - Format: "[PR announcement]. [nutrition summary]. [today's plan]"
 
-3. IF onboarding complete AND yesterday has data but NO PRs:
+4. IF onboarding complete AND yesterday has data but NO PRs or milestones:
    - Start with a quick recap: "yesterday you hit [workout highlights] and got [X]g protein"
    - If they crushed their goals, acknowledge it. If they missed, note it without being preachy.
    - Then transition to today: what's the plan, rest day, etc.
 
-4. IF onboarding complete AND no yesterday data:
+5. IF onboarding complete AND no yesterday data:
    - Skip the summary, just greet them and set up today
 
-5. IF onboarding complete AND daysSinceLastWorkout >= 2:
+6. IF onboarding complete AND daysSinceLastWorkout >= 2:
    - Casual check-in, reference their last session, no guilt trip
 
 Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who coaches, not a bot.`;
@@ -853,7 +891,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        let currentMessages = [...anthropicMessages];
+        const currentMessages = [...anthropicMessages];
         let textStreamed = false;
 
         // Loop to handle tool calls (max 10 iterations to prevent infinite loops)
@@ -925,6 +963,12 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
         if (!textStreamed) {
           const fallback = `0:${JSON.stringify("Coach got stuck on a database operation. Make sure all SQL migrations have been run (check for missing columns like coaching_mode, onboarding_complete, height_inches, weight_lbs, goal in profiles table).")}\n`;
           controller.enqueue(encoder.encode(fallback));
+        }
+
+        // Mark milestones as celebrated after successful response
+        if (textStreamed && milestoneContext && milestoneContext.newMilestones.length > 0) {
+          console.log('[Coach] Marking milestones as celebrated:', milestoneContext.newMilestones.map(m => m.type));
+          await markMilestonesCelebrated(supabase, user.id, milestoneContext.newMilestones);
         }
 
         controller.close();

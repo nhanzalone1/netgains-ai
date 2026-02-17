@@ -28,5 +28,11 @@ export async function POST() {
     .delete()
     .eq('user_id', user.id);
 
+  // Delete all milestones
+  await supabase
+    .from('milestones')
+    .delete()
+    .eq('user_id', user.id);
+
   return Response.json({ success: true });
 }
