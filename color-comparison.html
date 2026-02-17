@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetGains Color Schemes</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 24px;
+      color: #888;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .scheme {
+      background: #0f0f13;
+      border-radius: 24px;
+      padding: 20px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .scheme-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .card {
+      background: #1a1a24;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .ring-container {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .ring {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      position: relative;
+    }
+    .ring::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 6px solid rgba(255,255,255,0.1);
+    }
+    .ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 6px solid transparent;
+      border-top-color: var(--primary);
+      border-right-color: var(--primary);
+      transform: rotate(45deg);
+    }
+    .ring-value {
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .ring-label {
+      font-size: 9px;
+      color: #666;
+    }
+    .macros {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .macro-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .macro-label {
+      font-size: 10px;
+      color: #666;
+      width: 50px;
+      text-transform: uppercase;
+    }
+    .macro-bar {
+      flex: 1;
+      height: 6px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .macro-fill {
+      height: 100%;
+      border-radius: 3px;
+      width: 65%;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.05);
+      color: #888;
+      border: 1px dashed rgba(255,255,255,0.15);
+    }
+    .nav-pill {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: rgba(26, 26, 36, 0.8);
+      border-radius: 30px;
+      margin-top: 16px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #666;
+    }
+    .nav-item.active {
+      background: rgba(255,255,255,0.05);
+    }
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      background: currentColor;
+      opacity: 0.5;
+    }
+    .nav-item.active .nav-icon {
+      opacity: 1;
+    }
+    .gym-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(26, 26, 36, 0.6);
+      border-radius: 16px;
+      margin-bottom: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .gym-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gym-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+    .gym-info {
+      flex: 1;
+    }
+    .gym-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .gym-meta {
+      font-size: 11px;
+      color: #666;
+    }
+
+    /* Current */
+    .current { --primary: #ff4757; --accent: #ff6b7a; }
+    .current .scheme-title { color: #ff4757; }
+    .current .nav-item.active { color: #ff4757; }
+    .current .gym-icon { background: rgba(255,71,87,0.15); color: #ff4757; }
+    .current .macro-fill.p { background: #22c55e; }
+    .current .macro-fill.c { background: #3b82f6; }
+    .current .macro-fill.f { background: #eab308; }
+
+    /* Ember */
+    .ember { --primary: #f97316; --accent: #fb923c; }
+    .ember .scheme-title { color: #f97316; }
+    .ember .nav-item.active { color: #f97316; }
+    .ember .gym-icon { background: rgba(249,115,22,0.15); color: #f97316; }
+    .ember .macro-fill.p { background: #22c55e; }
+    .ember .macro-fill.c { background: #f97316; }
+    .ember .macro-fill.f { background: #fbbf24; }
+
+    /* Cyan */
+    .cyan { --primary: #06b6d4; --accent: #22d3ee; }
+    .cyan .scheme-title { color: #06b6d4; }
+    .cyan .nav-item.active { color: #06b6d4; }
+    .cyan .gym-icon { background: rgba(6,182,212,0.15); color: #06b6d4; }
+    .cyan .macro-fill.p { background: #a78bfa; }
+    .cyan .macro-fill.c { background: #06b6d4; }
+    .cyan .macro-fill.f { background: #f472b6; }
+
+    /* Neon Green */
+    .neon { --primary: #22c55e; --accent: #4ade80; }
+    .neon .scheme-title { color: #22c55e; }
+    .neon .nav-item.active { color: #22c55e; }
+    .neon .gym-icon { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .neon .macro-fill.p { background: #22c55e; }
+    .neon .macro-fill.c { background: #3b82f6; }
+    .neon .macro-fill.f { background: #f59e0b; }
+
+    /* Rose */
+    .rose { --primary: #e11d48; --accent: #f43f5e; }
+    .rose .scheme-title { color: #e11d48; }
+    .rose .nav-item.active { color: #e11d48; }
+    .rose .gym-icon { background: rgba(225,29,72,0.15); color: #e11d48; }
+    .rose .macro-fill.p { background: #22c55e; }
+    .rose .macro-fill.c { background: #6366f1; }
+    .rose .macro-fill.f { background: #f59e0b; }
+
+    /* Gradient */
+    .gradient { --primary: linear-gradient(135deg, #a855f7, #ec4899); }
+    .gradient .scheme-title { background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient .btn-primary { background: linear-gradient(135deg, #a855f7, #ec4899); }
+    .gradient .ring::after { border-top-color: #a855f7; border-right-color: #ec4899; }
+    .gradient .nav-item.active { color: #a855f7; }
+    .gradient .gym-icon { background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(236,72,153,0.15)); color: #a855f7; }
+    .gradient .macro-fill.p { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .gradient .macro-fill.c { background: linear-gradient(90deg, #a855f7, #c084fc); }
+    .gradient .macro-fill.f { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  </style>
+</head>
+<body>
+  <h1>Pick a Vibe</h1>
+  <div class="grid">
+
+    <!-- Current -->
+    <div class="scheme current">
+      <div class="scheme-title">Current (Coral Red)</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+    <!-- Ember -->
+    <div class="scheme ember">
+      <div class="scheme-title">Ember (Orange)</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+    <!-- Cyan -->
+    <div class="scheme cyan">
+      <div class="scheme-title">Electric Cyan</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+    <!-- Neon Green -->
+    <div class="scheme neon">
+      <div class="scheme-title">Neon Green (Apple)</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+    <!-- Rose -->
+    <div class="scheme rose">
+      <div class="scheme-title">Muted Rose</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+    <!-- Gradient -->
+    <div class="scheme gradient">
+      <div class="scheme-title">Purple-Pink Gradient</div>
+      <div class="card">
+        <div class="ring-container">
+          <div class="ring">
+            <span class="ring-value">1,247</span>
+            <span class="ring-label">left</span>
+          </div>
+          <div class="macros">
+            <div class="macro-row">
+              <span class="macro-label">Protein</span>
+              <div class="macro-bar"><div class="macro-fill p"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Carbs</span>
+              <div class="macro-bar"><div class="macro-fill c"></div></div>
+            </div>
+            <div class="macro-row">
+              <span class="macro-label">Fat</span>
+              <div class="macro-bar"><div class="macro-fill f"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gym-card">
+        <div class="gym-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="gym-info">
+          <div class="gym-name">MAIN GYM</div>
+          <div class="gym-meta">3 splits</div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Start Workout</button>
+      <button class="btn btn-ghost">+ Add Gym</button>
+      <div class="nav-pill">
+        <div class="nav-item active"><div class="nav-icon"></div>Log</div>
+        <div class="nav-item"><div class="nav-icon"></div>Food</div>
+        <div class="nav-item"><div class="nav-icon"></div>Coach</div>
+        <div class="nav-item"><div class="nav-icon"></div>Stats</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

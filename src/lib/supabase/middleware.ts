@@ -50,7 +50,7 @@ export async function updateSession(request: NextRequest) {
   // Redirect authenticated users away from auth pages
   if (user && isAuthPage) {
     const url = request.nextUrl.clone();
-    url.pathname = "/program";
+    url.pathname = "/coach";
     return NextResponse.redirect(url);
   }
 

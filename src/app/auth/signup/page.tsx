@@ -46,7 +46,7 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/program");
+      router.push("/coach");
       router.refresh();
     }
   };
