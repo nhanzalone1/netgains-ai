@@ -5,6 +5,7 @@ import { Send, Sparkles, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
+import { DailyBriefCard } from "@/components/daily-brief-card";
 
 interface Message {
   id: string;
@@ -94,41 +95,31 @@ function shouldGenerateOpening(userId: string | undefined): boolean {
   const messages = loadMessages(userId);
   const lastOpenStr = localStorage.getItem(getLastOpenKey(userId));
   const today = getTodayString();
-  const debugOverride = localStorage.getItem("netgains-debug-date-override");
 
-  // Always log for debugging
-  console.log("=== shouldGenerateOpening ===");
-  console.log("Debug date override:", debugOverride || "(none)");
-  console.log("Today (effective):", today);
-  console.log("Last open stored:", lastOpenStr);
-  console.log("Messages count:", messages.length);
-
-  // Filter out hidden trigger messages for counting
+  // Filter out hidden trigger messages for counting visible messages
   const visibleMessages = messages.filter(m => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX));
-  console.log("Visible messages count:", visibleMessages.length);
 
-  // If no visible messages at all, definitely generate opening
-  if (visibleMessages.length === 0) {
-    console.log("→ RESULT: true (no visible messages)");
-    return true;
-  }
+  // Check if we have ANY messages (including hidden triggers) - means we started an opening
+  const hasAnyMessages = messages.length > 0;
 
-  // If already opened "today" (considering debug override) and have messages, don't regenerate
-  if (lastOpenStr === today && visibleMessages.length > 0) {
-    console.log("→ RESULT: false (already opened today)");
+  // If we already opened today AND have any messages, don't regenerate
+  // This prevents duplicate openings when switching tabs mid-stream
+  if (lastOpenStr === today && hasAnyMessages) {
     return false;
   }
 
-  // Check if last visible message was from "today" (considering debug override)
+  // If no visible messages and either new day or no messages at all, generate opening
+  if (visibleMessages.length === 0) {
+    return true;
+  }
+
+  // Check if last visible message was from "today" - if so, no need for new opening
   const lastVisibleMessage = visibleMessages[visibleMessages.length - 1];
   if (lastVisibleMessage) {
     const msgTimestamp = parseInt(lastVisibleMessage.id);
-    console.log("Last visible message ID:", lastVisibleMessage.id, "parsed as timestamp:", msgTimestamp);
     if (!isNaN(msgTimestamp)) {
       const msgDate = new Date(msgTimestamp).toDateString();
-      console.log("Last visible message date:", msgDate);
       if (msgDate === today) {
-        console.log("→ RESULT: false (last visible message is from today)");
         return false;
       }
     }
@@ -150,6 +141,7 @@ export default function CoachPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const hasGeneratedOpeningRef = useRef(false);
+  const readyToSaveRef = useRef(false); // Only save after load effect completes AND state is applied
 
   // Track keyboard visibility via Visual Viewport API
   useEffect(() => {
@@ -419,6 +411,11 @@ export default function CoachPage() {
     if (!user?.id) return;
     const existingMessages = loadMessages(user.id);
     setMessages(existingMessages);
+    // Enable saving AFTER this effect cycle completes and state is applied
+    // Using setTimeout(0) pushes this to after React has flushed state updates
+    setTimeout(() => {
+      readyToSaveRef.current = true;
+    }, 0);
     checkAndGenerateOpening();
   }, [user?.id, checkAndGenerateOpening]);
 
@@ -507,6 +504,9 @@ export default function CoachPage() {
   // Save messages to user-specific storage
   useEffect(() => {
     if (!user?.id) return;
+    // Don't save until load effect has completed AND state has been applied
+    // This prevents the save effect from running with empty [] and wiping localStorage
+    if (!readyToSaveRef.current) return;
     // Don't save empty assistant messages
     const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
     localStorage.setItem(getStorageKey(user.id), JSON.stringify(filtered));
@@ -644,6 +644,11 @@ export default function CoachPage() {
           </button>
           <UserMenu />
         </div>
+      </div>
+
+      {/* Daily Brief Card - sticky below header */}
+      <div className="sticky top-[73px] z-40 pb-2" style={{ background: "#0f0f13" }}>
+        <DailyBriefCard />
       </div>
 
       {/* Messages Area */}

@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
+import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover } from "@/components/ui/popover";
@@ -333,8 +334,11 @@ export default function LogPage() {
         }
       }
 
-      // Success - show modal
+      // Success - show modal and invalidate daily brief cache
       setShowSuccessModal(true);
+      if (user?.id) {
+        invalidateDailyBriefCache(user.id);
+      }
     } catch (err) {
       console.error("Error saving workout:", err);
 
