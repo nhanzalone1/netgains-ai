@@ -8,10 +8,16 @@ export async function POST() {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  // Reset onboarding
+  // Reset onboarding and clear all profile data
   await supabase
     .from('profiles')
-    .update({ onboarding_complete: false })
+    .update({
+      onboarding_complete: false,
+      coaching_mode: null,
+      goal: null,
+      height_inches: null,
+      weight_lbs: null,
+    })
     .eq('id', user.id);
 
   // Delete all coach memories
