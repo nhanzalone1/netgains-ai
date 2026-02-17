@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Sparkles, RotateCcw } from "lucide-react";
+import { Send, Sparkles, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
@@ -12,34 +12,60 @@ interface Message {
   content: string;
 }
 
-const INITIAL_GREETING: Message = {
-  id: "initial-greeting",
-  role: "assistant",
-  content: "What's up — I'm your coach. I'm going to learn how you train, what you eat, and how you recover so I can help you get results faster than going at it alone. Let's get started. What should I call you?",
-};
-
 function getStorageKey(userId: string | undefined): string {
   return userId ? `netgains-coach-messages-${userId}` : "netgains-coach-messages";
 }
 
+function getLastOpenKey(userId: string | undefined): string {
+  return userId ? `netgains-coach-last-open-${userId}` : "netgains-coach-last-open";
+}
+
 function loadMessages(userId: string | undefined): Message[] {
-  if (typeof window === "undefined") return [INITIAL_GREETING];
+  if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(getStorageKey(userId));
     if (stored) {
       const parsed = JSON.parse(stored);
       if (parsed.length > 0) return parsed;
     }
-    return [INITIAL_GREETING];
+    return [];
   } catch {
-    return [INITIAL_GREETING];
+    return [];
   }
+}
+
+function shouldGenerateOpening(userId: string | undefined): boolean {
+  if (typeof window === "undefined" || !userId) return false;
+
+  const messages = loadMessages(userId);
+  const lastOpenStr = localStorage.getItem(getLastOpenKey(userId));
+  const today = new Date().toDateString();
+
+  // If no messages at all, definitely generate opening
+  if (messages.length === 0) return true;
+
+  // If already opened today and have messages, don't regenerate
+  if (lastOpenStr === today && messages.length > 0) return false;
+
+  // Check if last message was from today (active conversation)
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage) {
+    // If the last message ID is a timestamp from today, don't regenerate
+    const msgTimestamp = parseInt(lastMessage.id);
+    if (!isNaN(msgTimestamp)) {
+      const msgDate = new Date(msgTimestamp).toDateString();
+      if (msgDate === today) return false;
+    }
+  }
+
+  // Generate opening for new day
+  return true;
 }
 
 export default function CoachPage() {
   const { user } = useAuth();
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState<Message[]>([INITIAL_GREETING]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -47,6 +73,7 @@ export default function CoachPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const shouldScrollRef = useRef(false);
+  const hasGeneratedOpeningRef = useRef(false);
 
   // Track keyboard visibility via Visual Viewport API
   useEffect(() => {
@@ -94,10 +121,89 @@ export default function CoachPage() {
     }
   }, [isLoading, scrollToBottom]); // Intentionally not including messages to avoid scroll during stream
 
-  // Load messages when user changes (account switch)
-  useEffect(() => {
-    setMessages(loadMessages(user?.id));
+  // Generate auto-opening message from coach
+  const generateAutoOpening = useCallback(async () => {
+    if (!user?.id) return;
+
+    setIsLoading(true);
+    const openingMessageId = Date.now().toString();
+
+    // Add empty assistant message placeholder
+    setMessages((prev) => [...prev, { id: openingMessageId, role: "assistant", content: "" }]);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [],
+          autoOpen: true, // Signal to generate contextual opening
+        }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("0:")) {
+              try {
+                const text = JSON.parse(line.slice(2));
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === openingMessageId
+                      ? { ...m, content: m.content + text }
+                      : m
+                  )
+                );
+              } catch {
+                // Skip malformed chunks
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Auto-open error:", error);
+      // Fallback to simple greeting
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === openingMessageId
+            ? { ...m, content: "Hey! I'm your coach. What's on your mind?" }
+            : m
+        )
+      );
+    }
+
+    setIsLoading(false);
+    shouldScrollRef.current = true;
   }, [user?.id]);
+
+  // Load messages and generate opening if needed
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const existingMessages = loadMessages(user.id);
+    setMessages(existingMessages);
+
+    // Check if we should generate an auto-opening message
+    if (shouldGenerateOpening(user.id) && !hasGeneratedOpeningRef.current) {
+      hasGeneratedOpeningRef.current = true;
+      generateAutoOpening();
+    }
+
+    // Mark today as opened
+    localStorage.setItem(getLastOpenKey(user.id), new Date().toDateString());
+  }, [user?.id, generateAutoOpening]);
 
   // Save messages to user-specific storage
   useEffect(() => {
@@ -112,12 +218,10 @@ export default function CoachPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: allMessages
-          .filter((m) => m.id !== "initial-greeting")
-          .map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+        messages: allMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
         currentWorkout: (() => {
           try {
             const stored = localStorage.getItem("netgains-current-workout");
@@ -228,6 +332,7 @@ export default function CoachPage() {
     if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
     // Clear localStorage (user-specific)
     localStorage.removeItem(getStorageKey(user?.id));
+    localStorage.removeItem(getLastOpenKey(user?.id));
     localStorage.removeItem("netgains-current-workout");
     // Reset onboarding and memories via API
     try {
@@ -235,9 +340,15 @@ export default function CoachPage() {
     } catch (e) {
       console.error("Reset API error:", e);
     }
-    // Reset local state
-    setMessages([INITIAL_GREETING]);
+    // Reset local state and regenerate opening
+    setMessages([]);
     setInputValue("");
+    hasGeneratedOpeningRef.current = false;
+    // Trigger new opening after reset
+    setTimeout(() => {
+      hasGeneratedOpeningRef.current = true;
+      generateAutoOpening();
+    }, 100);
   };
 
   return (

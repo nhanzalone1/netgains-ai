@@ -272,7 +272,7 @@ const tools: Anthropic.Tool[] = [
 ];
 
 export async function POST(req: Request) {
-  const { messages, currentWorkout } = await req.json();
+  const { messages, currentWorkout, autoOpen } = await req.json();
 
   // Get authenticated user
   const supabase = await createClient();
@@ -284,11 +284,98 @@ export async function POST(req: Request) {
 
   const anthropic = new Anthropic();
 
-  // Convert messages to Anthropic format
-  const anthropicMessages: Anthropic.MessageParam[] = messages.map((m: { role: string; content: string }) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
+  // For auto-open, we need to gather context and create a special opening prompt
+  let anthropicMessages: Anthropic.MessageParam[];
+
+  if (autoOpen) {
+    // Gather context for personalized opening
+    const [profileResult, memoriesResult, workoutsResult] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
+      supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
+    ]);
+
+    const profile = profileResult.data;
+    const memories = memoriesResult.data || [];
+    const recentWorkouts = workoutsResult.data || [];
+
+    // Get exercises for recent workouts
+    let workoutDetails: { date: string; exercises: { name: string; sets: { weight: number; reps: number }[] }[] }[] = [];
+    if (recentWorkouts.length > 0) {
+      const workoutIds = recentWorkouts.map(w => w.id);
+      const { data: exercises } = await supabase
+        .from('exercises')
+        .select('id, workout_id, name')
+        .in('workout_id', workoutIds);
+
+      if (exercises && exercises.length > 0) {
+        const exerciseIds = exercises.map(e => e.id);
+        const { data: sets } = await supabase
+          .from('sets')
+          .select('exercise_id, weight, reps')
+          .in('exercise_id', exerciseIds);
+
+        workoutDetails = recentWorkouts.map(w => ({
+          date: w.date,
+          exercises: (exercises || [])
+            .filter(e => e.workout_id === w.id)
+            .map(e => ({
+              name: e.name,
+              sets: (sets || [])
+                .filter(s => s.exercise_id === e.id)
+                .map(s => ({ weight: s.weight, reps: s.reps }))
+            }))
+        }));
+      }
+    }
+
+    // Calculate days since last workout
+    const lastWorkoutDate = recentWorkouts[0]?.date;
+    const daysSinceLastWorkout = lastWorkoutDate
+      ? Math.floor((Date.now() - new Date(lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    // Build context for auto-open
+    const contextPrompt = `[AUTO-OPEN CONTEXT - Generate a personalized opening message]
+
+User Profile:
+${JSON.stringify(profile, null, 2)}
+
+User Memories (things you've learned about them):
+${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
+
+Recent Workouts (last 10):
+${workoutDetails.length > 0 ? JSON.stringify(workoutDetails, null, 2) : 'No workouts logged yet'}
+
+Days since last workout: ${daysSinceLastWorkout !== null ? daysSinceLastWorkout : 'Never logged'}
+Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+
+INSTRUCTIONS:
+Generate the coach's opening message based on this context. Follow these rules:
+
+1. IF onboarding_complete is false or null:
+   - Say: "Hey! I'm your coach. Let's get you set up — what should I call you?"
+
+2. IF onboarding complete AND daysSinceLastWorkout >= 2:
+   - Re-engagement: "Been a few days. No stress — let's ease back in today. [Reference their last workout briefly]. Ready when you are."
+
+3. IF onboarding complete AND it's a training day (based on their pattern):
+   - FULL MODE (coaching_mode = "full"): Open with the day's plan. Reference their recent lifts and suggest targets to beat.
+   - ASSIST MODE (coaching_mode = "assist"): Reference their workout pattern and last session's highlights. Suggest a target to beat.
+
+4. IF onboarding complete AND it's a rest day:
+   - "Rest day. [Reference what they did last workout]. Eat well, recover. Back at it tomorrow."
+
+Be specific — use real numbers from their history. Keep it short and punchy. No generic messages.`;
+
+    anthropicMessages = [{ role: 'user', content: contextPrompt }];
+  } else {
+    // Normal message flow
+    anthropicMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+  }
 
   // Tool execution helper — wrapped in try/catch so a single tool failure doesn't kill the whole request
   async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
