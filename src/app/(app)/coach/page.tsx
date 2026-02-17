@@ -301,10 +301,15 @@ export default function CoachPage() {
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex justify-start">
             <div
-              className="rounded-2xl px-4 py-3"
+              className="rounded-2xl px-4 py-3 flex items-center gap-2"
               style={{ background: "#1a1a24" }}
             >
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+              <span className="text-sm text-muted-foreground">Coach is thinking...</span>
             </div>
           </div>
         )}
@@ -333,12 +338,16 @@ export default function CoachPage() {
             }}
             onFocus={() => {
               // Prevent mobile browser from auto-scrolling on focus
+              // Save scroll position and restore it multiple times to catch delayed browser scroll
               const container = messagesContainerRef.current;
               if (container) {
                 const scrollPos = container.scrollTop;
-                requestAnimationFrame(() => {
-                  container.scrollTop = scrollPos;
-                });
+                const restore = () => { container.scrollTop = scrollPos; };
+                requestAnimationFrame(restore);
+                setTimeout(restore, 0);
+                setTimeout(restore, 50);
+                setTimeout(restore, 100);
+                setTimeout(restore, 150);
               }
             }}
             onKeyDown={(e) => {
