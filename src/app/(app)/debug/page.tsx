@@ -91,6 +91,16 @@ export default function DebugPage() {
     loadData();
   };
 
+  const markOnboardingComplete = async () => {
+    if (!user) return;
+    await supabase.from("profiles").update({
+      onboarding_complete: true,
+      app_tour_shown: true, // Also mark tour as shown so we skip that too
+    }).eq("id", user.id);
+    showMessage("Onboarding marked complete!");
+    loadData();
+  };
+
   // Clear chat history
   const clearChatHistory = () => {
     if (!user) return;
@@ -108,6 +118,68 @@ export default function DebugPage() {
     showMessage("Chat cleared, opening will regenerate on Coach tab");
   };
 
+  // State for test response
+  const [testResponse, setTestResponse] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+
+  // Direct test of daily summary API
+  const testDailySummary = async () => {
+    if (!user) return;
+    setTestLoading(true);
+    setTestResponse("Loading...");
+
+    // Get the effective date (debug override or today)
+    const debugOverride = localStorage.getItem("netgains-debug-date-override");
+    const effectiveDate = debugOverride || new Date().toISOString().split('T')[0];
+
+    const triggerMessage = `[SYSTEM_TRIGGER] effectiveDate=${effectiveDate} User opened coach tab. Generate greeting.`;
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: triggerMessage }],
+        }),
+      });
+
+      if (!response.ok) {
+        setTestResponse(`Error: HTTP ${response.status}`);
+        setTestLoading(false);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("0:")) {
+              try {
+                const text = JSON.parse(line.slice(2));
+                fullText += text;
+              } catch {
+                // Skip
+              }
+            }
+          }
+        }
+      }
+
+      setTestResponse(fullText || "(empty response)");
+    } catch (error) {
+      setTestResponse(`Error: ${error}`);
+    }
+
+    setTestLoading(false);
+  };
+
   // Set date override (stored in localStorage)
   const setDateOverrideValue = () => {
     if (dateOverride) {
@@ -122,19 +194,97 @@ export default function DebugPage() {
     showMessage("Date override cleared");
   };
 
-  // Set last workout override
+  // Set last workout override - creates a complete workout with exercises and sets
   const setLastWorkoutOverrideValue = async () => {
     if (!user || !lastWorkoutOverride) return;
-    // Create a fake workout entry
-    const { error } = await supabase.from("workouts").insert({
+
+    // Create workout entry
+    const { data: workout, error: workoutError } = await supabase
+      .from("workouts")
+      .insert({
+        user_id: user.id,
+        date: lastWorkoutOverride,
+        notes: "[DEBUG] Test workout with exercises",
+      })
+      .select()
+      .single();
+
+    if (workoutError || !workout) {
+      showMessage(`Error creating workout: ${workoutError?.message}`);
+      return;
+    }
+
+    // Create sample exercises
+    const exerciseData = [
+      { workout_id: workout.id, name: "Bench Press", order_index: 0 },
+      { workout_id: workout.id, name: "Incline Dumbbell Press", order_index: 1 },
+      { workout_id: workout.id, name: "Cable Flyes", order_index: 2 },
+    ];
+
+    const { data: exercises, error: exerciseError } = await supabase
+      .from("exercises")
+      .insert(exerciseData)
+      .select();
+
+    if (exerciseError || !exercises) {
+      showMessage(`Error creating exercises: ${exerciseError?.message}`);
+      return;
+    }
+
+    // Create sample sets for each exercise
+    const setData = [
+      // Bench Press - 3 sets
+      { exercise_id: exercises[0].id, weight: 225, reps: 5, order_index: 0 },
+      { exercise_id: exercises[0].id, weight: 225, reps: 5, order_index: 1 },
+      { exercise_id: exercises[0].id, weight: 235, reps: 3, order_index: 2 },
+      // Incline DB Press - 3 sets
+      { exercise_id: exercises[1].id, weight: 70, reps: 10, order_index: 0 },
+      { exercise_id: exercises[1].id, weight: 70, reps: 10, order_index: 1 },
+      { exercise_id: exercises[1].id, weight: 75, reps: 8, order_index: 2 },
+      // Cable Flyes - 2 sets
+      { exercise_id: exercises[2].id, weight: 30, reps: 12, order_index: 0 },
+      { exercise_id: exercises[2].id, weight: 30, reps: 12, order_index: 1 },
+    ];
+
+    const { error: setError } = await supabase.from("sets").insert(setData);
+
+    if (setError) {
+      showMessage(`Error creating sets: ${setError.message}`);
+      return;
+    }
+
+    showMessage(`Created workout on ${lastWorkoutOverride} with 3 exercises and 8 sets`);
+  };
+
+  // Create fake nutrition data for a date
+  const [nutritionOverrideDate, setNutritionOverrideDate] = useState("");
+
+  const createFakeNutrition = async () => {
+    if (!user || !nutritionOverrideDate) return;
+
+    const meals = [
+      { meal_type: "breakfast", food_name: "Eggs and Toast", calories: 450, protein: 28, carbs: 35, fat: 22 },
+      { meal_type: "lunch", food_name: "Chicken and Rice", calories: 650, protein: 45, carbs: 60, fat: 18 },
+      { meal_type: "dinner", food_name: "Salmon with Vegetables", calories: 550, protein: 42, carbs: 25, fat: 28 },
+      { meal_type: "snack", food_name: "Protein Shake", calories: 280, protein: 40, carbs: 15, fat: 5 },
+    ];
+
+    const mealData = meals.map((meal) => ({
       user_id: user.id,
-      date: lastWorkoutOverride,
-      notes: "[DEBUG] Fake workout for testing",
-    });
+      date: nutritionOverrideDate,
+      ...meal,
+      consumed: true,
+      ai_generated: false,
+    }));
+
+    const { error } = await supabase.from("meals").insert(mealData);
+
     if (error) {
-      showMessage(`Error: ${error.message}`);
+      showMessage(`Error creating meals: ${error.message}`);
     } else {
-      showMessage(`Created fake workout on ${lastWorkoutOverride}`);
+      const totalCal = meals.reduce((sum, m) => sum + m.calories, 0);
+      const totalPro = meals.reduce((sum, m) => sum + m.protein, 0);
+      showMessage(`Created ${meals.length} meals for ${nutritionOverrideDate} (${totalCal} cal, ${totalPro}g protein)`);
     }
   };
 
@@ -246,6 +396,9 @@ export default function DebugPage() {
             <DebugButton onClick={resetOnboardingOnly} variant="warning">
               <RefreshCw className="w-4 h-4" /> Reset onboarding_complete flag only
             </DebugButton>
+            <DebugButton onClick={markOnboardingComplete} variant="default">
+              <Play className="w-4 h-4" /> Mark onboarding COMPLETE (skip setup)
+            </DebugButton>
             <DebugButton onClick={resetAppTour} variant="warning">
               <RefreshCw className="w-4 h-4" /> Reset app_tour_shown flag
             </DebugButton>
@@ -261,6 +414,15 @@ export default function DebugPage() {
             <DebugButton onClick={triggerAIOpening} variant="default">
               <Play className="w-4 h-4" /> Trigger new opening message
             </DebugButton>
+            <DebugButton onClick={testDailySummary} variant="default">
+              <Play className="w-4 h-4" /> {testLoading ? "Testing..." : "Test Daily Summary API"}
+            </DebugButton>
+            {testResponse && (
+              <div className="mt-2 p-3 bg-black/50 rounded-lg text-xs whitespace-pre-wrap max-h-48 overflow-y-auto">
+                <p className="text-muted-foreground mb-1">API Response:</p>
+                <p className="text-white">{testResponse}</p>
+              </div>
+            )}
           </div>
         </Section>
 
@@ -292,7 +454,10 @@ export default function DebugPage() {
         </Section>
 
         {/* Last Workout Override */}
-        <Section title="Last Workout Override">
+        <Section title="Create Test Workout">
+          <p className="text-xs text-muted-foreground mb-2">
+            Creates a workout with Bench Press, Incline DB, Cable Flyes + sets
+          </p>
           <div className="flex gap-2">
             <input
               type="date"
@@ -310,6 +475,27 @@ export default function DebugPage() {
           <DebugButton onClick={clearAllWorkouts} variant="danger" className="mt-2">
             <Trash2 className="w-4 h-4" /> Delete ALL workouts
           </DebugButton>
+        </Section>
+
+        {/* Nutrition Override */}
+        <Section title="Create Test Nutrition">
+          <p className="text-xs text-muted-foreground mb-2">
+            Creates 4 meals: ~1,930 cal, 155g protein
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={nutritionOverrideDate}
+              onChange={(e) => setNutritionOverrideDate(e.target.value)}
+              className="flex-1 bg-white/10 rounded-lg px-3 py-2 text-sm"
+            />
+            <button
+              onClick={createFakeNutrition}
+              className="bg-green-600 text-white rounded-lg px-4 py-2 text-sm"
+            >
+              Create
+            </button>
+          </div>
         </Section>
 
         {/* Raw Profile Data */}

@@ -328,11 +328,27 @@ export async function POST(req: Request) {
   let anthropicMessages: Anthropic.MessageParam[];
 
   if (isSystemTrigger) {
+    console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
+
+    // Parse effective date from trigger message (for debug date override support)
+    // Format: [SYSTEM_TRIGGER] effectiveDate=YYYY-MM-DD ...
+    const triggerContent = messages[0].content;
+    console.log('[Coach] Trigger content:', triggerContent.substring(0, 100));
+
+    const effectiveDateMatch = triggerContent.match(/effectiveDate=(\d{4}-\d{2}-\d{2})/);
+    console.log('[Coach] Effective date match:', effectiveDateMatch?.[1] || 'none (using real date)');
+
+    const today = effectiveDateMatch
+      ? new Date(effectiveDateMatch[1] + 'T12:00:00') // Use noon to avoid timezone issues
+      : new Date();
+
     // Calculate yesterday's date for summary
-    const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    console.log('[Coach] Today (effective):', today.toISOString().split('T')[0]);
+    console.log('[Coach] Yesterday (looking for data):', yesterdayStr);
 
     // Gather context for personalized opening
     const [profileResult, memoriesResult, workoutsResult, yesterdayMealsResult, nutritionGoalsResult] = await Promise.all([
@@ -348,6 +364,11 @@ export async function POST(req: Request) {
     const recentWorkouts = workoutsResult.data || [];
     const yesterdayMeals = yesterdayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+    console.log('[Coach] Profile onboarding_complete:', profile?.onboarding_complete);
+    console.log('[Coach] Recent workouts count:', recentWorkouts.length);
+    console.log('[Coach] Recent workout dates:', recentWorkouts.map(w => w.date));
+    console.log('[Coach] Yesterday meals count:', yesterdayMeals.length);
 
     // Calculate yesterday's nutrition totals
     const yesterdayNutrition = yesterdayMeals.reduce(
@@ -393,6 +414,13 @@ export async function POST(req: Request) {
     // Find yesterday's workout specifically
     const yesterdayWorkout = workoutDetails.find(w => w.date === yesterdayStr);
 
+    console.log('[Coach] Workout details dates:', workoutDetails.map(w => w.date));
+    console.log('[Coach] Looking for yesterday:', yesterdayStr);
+    console.log('[Coach] Yesterday workout found:', !!yesterdayWorkout);
+    if (yesterdayWorkout) {
+      console.log('[Coach] Yesterday exercises:', yesterdayWorkout.exercises.map(e => `${e.name} (${e.sets.length} sets)`));
+    }
+
     // Detect PRs from yesterday's workout
     let yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
 
@@ -407,6 +435,19 @@ export async function POST(req: Request) {
         .eq('user_id', user.id)
         .lt('date', yesterdayStr)
         .order('date', { ascending: false });
+
+      // Helper to get best set from yesterday for an exercise
+      const getYesterdayBest = (exercise: { name: string; sets: { weight: number; reps: number }[] }) => {
+        return exercise.sets.reduce(
+          (best, set) => {
+            if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
+              return { weight: set.weight, reps: set.reps };
+            }
+            return best;
+          },
+          null as { weight: number; reps: number } | null
+        );
+      };
 
       if (historicalWorkouts && historicalWorkouts.length > 0) {
         const historicalWorkoutIds = historicalWorkouts.map(w => w.id);
@@ -441,19 +482,11 @@ export async function POST(req: Request) {
 
           // Check each of yesterday's exercises for PRs
           for (const exercise of yesterdayWorkout.exercises) {
-            const yesterdayBest = exercise.sets.reduce(
-              (best, set) => {
-                if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
-                  return { weight: set.weight, reps: set.reps };
-                }
-                return best;
-              },
-              null as { weight: number; reps: number } | null
-            );
+            const yesterdayBest = getYesterdayBest(exercise);
 
             if (yesterdayBest) {
               const historical = historicalBests[exercise.name];
-              // It's a PR if no historical data OR yesterday beat the historical best
+              // It's a PR if no historical data for this exercise OR yesterday beat the historical best
               if (!historical || yesterdayBest.weight > historical.weight ||
                   (yesterdayBest.weight === historical.weight && yesterdayBest.reps > historical.reps)) {
                 yesterdayPRs.push({
@@ -466,17 +499,9 @@ export async function POST(req: Request) {
             }
           }
         } else {
-          // No historical data means everything yesterday is a PR (first time doing these exercises)
+          // Historical workouts exist but none have these specific exercises - all are PRs
           for (const exercise of yesterdayWorkout.exercises) {
-            const yesterdayBest = exercise.sets.reduce(
-              (best, set) => {
-                if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
-                  return { weight: set.weight, reps: set.reps };
-                }
-                return best;
-              },
-              null as { weight: number; reps: number } | null
-            );
+            const yesterdayBest = getYesterdayBest(exercise);
             if (yesterdayBest) {
               yesterdayPRs.push({
                 exercise: exercise.name,
@@ -485,6 +510,19 @@ export async function POST(req: Request) {
                 previousBest: null,
               });
             }
+          }
+        }
+      } else {
+        // No historical workouts at all - this is the user's first workout, everything is a PR
+        for (const exercise of yesterdayWorkout.exercises) {
+          const yesterdayBest = getYesterdayBest(exercise);
+          if (yesterdayBest) {
+            yesterdayPRs.push({
+              exercise: exercise.name,
+              weight: yesterdayBest.weight,
+              reps: yesterdayBest.reps,
+              previousBest: null,
+            });
           }
         }
       }

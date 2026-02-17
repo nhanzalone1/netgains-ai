@@ -64,6 +64,15 @@ function getMessageDate(messageId: string): string | null {
   return new Date(timestamp).toDateString();
 }
 
+// Get timestamp for new messages - uses debug date if set
+function getMessageTimestamp(): number {
+  const debugDate = getDebugDate();
+  const now = new Date();
+  // Use debug date but with current time of day
+  debugDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  return debugDate.getTime();
+}
+
 function formatDateDivider(dateString: string): string {
   const date = new Date(dateString);
   const today = getDebugDate();
@@ -224,8 +233,11 @@ export default function CoachPage() {
     }
   }, [messages, isLoading, scrollToBottom, isNearBottom]);
 
+  // Track current request so we can abort it if needed
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Send a request to the chat API
-  const sendRequest = useCallback(async (allMessages: Message[]): Promise<Response> => {
+  const sendRequest = useCallback(async (allMessages: Message[], signal?: AbortSignal): Promise<Response> => {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -243,6 +255,7 @@ export default function CoachPage() {
           }
         })(),
       }),
+      signal,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response;
@@ -254,29 +267,38 @@ export default function CoachPage() {
     const decoder = new TextDecoder();
 
     if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
 
-        for (const line of lines) {
-          if (line.startsWith("0:")) {
-            try {
-              const text = JSON.parse(line.slice(2));
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessageId
-                    ? { ...m, content: m.content + text }
-                    : m
-                )
-              );
-            } catch {
-              // Skip malformed chunks
+          for (const line of lines) {
+            if (line.startsWith("0:")) {
+              try {
+                const text = JSON.parse(line.slice(2));
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessageId
+                      ? { ...m, content: m.content + text }
+                      : m
+                  )
+                );
+              } catch {
+                // Skip malformed chunks
+              }
             }
           }
         }
+      } catch (error) {
+        // Ignore abort errors, they're expected
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        console.error("Stream reading error:", error);
+        throw error;
       }
     }
   }, []);
@@ -286,11 +308,26 @@ export default function CoachPage() {
     if (!user?.id) return;
 
     console.log(">>> generateAutoOpening called <<<");
+
+    // Abort any existing request before starting a new one
+    if (abortControllerRef.current) {
+      console.log(">>> Aborting previous request <<<");
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    // Update both state and ref synchronously to prevent race conditions
     setIsLoading(true);
+    isLoadingRef.current = true;
 
     // Create hidden trigger message - this won't be shown in UI but will be sent to API
-    const triggerMessageId = Date.now().toString();
-    const triggerContent = `${TRIGGER_PREFIX} User opened the coach tab on ${formatDebugDate()}. Generate a contextual daily greeting based on their profile, memories, and recent workout history. If they haven't completed onboarding, start that process. Otherwise, give them a personalized check-in based on their training status.`;
+    // Include the effective date so the API can calculate "yesterday" correctly
+    const triggerMessageId = getMessageTimestamp().toString();
+    const effectiveDate = getDebugDate().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const triggerContent = `${TRIGGER_PREFIX} effectiveDate=${effectiveDate} User opened the coach tab on ${formatDebugDate()}. Generate a contextual daily greeting based on their profile, memories, and recent workout history. If they haven't completed onboarding, start that process. Otherwise, give them a personalized check-in based on their training status.`;
 
     const triggerMessage: Message = {
       id: triggerMessageId,
@@ -300,7 +337,7 @@ export default function CoachPage() {
     };
 
     // Create placeholder for assistant's response
-    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessageId = (getMessageTimestamp() + 1).toString();
     const assistantPlaceholder: Message = {
       id: assistantMessageId,
       role: "assistant",
@@ -312,10 +349,18 @@ export default function CoachPage() {
 
     try {
       // Send the trigger through normal chat flow
-      const response = await sendRequest([triggerMessage]);
+      const response = await sendRequest([triggerMessage], abortController.signal);
       await streamResponse(response, assistantMessageId);
       console.log(">>> Auto-opening streamed successfully <<<");
     } catch (error) {
+      // Ignore abort errors - they're expected when we cancel requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(">>> Request aborted (expected) <<<");
+        // Still need to reset loading state
+        setIsLoading(false);
+        isLoadingRef.current = false;
+        return;
+      }
       console.error("Auto-open error:", error);
       // Fallback to simple greeting
       setMessages((prev) =>
@@ -328,6 +373,7 @@ export default function CoachPage() {
     }
 
     setIsLoading(false);
+    isLoadingRef.current = false;
   }, [user?.id, sendRequest, streamResponse]);
 
   // Track which date we last generated an opening for
@@ -376,10 +422,27 @@ export default function CoachPage() {
     checkAndGenerateOpening();
   }, [user?.id, checkAndGenerateOpening]);
 
+  // Cleanup: abort any pending request when component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Track if we're currently streaming to avoid interruption
+  const isLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   // Also check on every render if the debug date has changed
   // This catches in-app navigation where other hooks might not fire
   useEffect(() => {
     if (!user?.id) return;
+    // Don't interrupt an active stream
+    if (isLoadingRef.current) return;
     const currentDate = getTodayString();
     if (lastCheckedDateRef.current !== currentDate) {
       console.log("=== Date changed since last check, re-checking opening ===");
@@ -395,6 +458,8 @@ export default function CoachPage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         console.log("=== Page became visible, re-checking opening ===");
+        // Don't do anything if we're currently streaming - it would interrupt the response
+        if (isLoadingRef.current) return;
         if (user?.id) {
           const existingMessages = loadMessages(user.id);
           setMessages(existingMessages);
@@ -405,6 +470,8 @@ export default function CoachPage() {
 
     const handleFocus = () => {
       console.log("=== Window focused, re-checking opening ===");
+      // Don't do anything if we're currently streaming - it would interrupt the response
+      if (isLoadingRef.current) return;
       if (user?.id) {
         const existingMessages = loadMessages(user.id);
         setMessages(existingMessages);
@@ -416,6 +483,8 @@ export default function CoachPage() {
     const handlePageShow = (event: PageTransitionEvent) => {
       if (event.persisted) {
         console.log("=== Page restored from cache, re-checking opening ===");
+        // Don't do anything if we're currently streaming - it would interrupt the response
+        if (isLoadingRef.current) return;
         if (user?.id) {
           const existingMessages = loadMessages(user.id);
           setMessages(existingMessages);
@@ -448,7 +517,7 @@ export default function CoachPage() {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: getMessageTimestamp().toString(),
       role: "user",
       content: inputValue.trim(),
     };
@@ -461,8 +530,9 @@ export default function CoachPage() {
       (inputRef.current as HTMLTextAreaElement).style.height = "auto";
     }
     setIsLoading(true);
+    isLoadingRef.current = true;
 
-    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessageId = (getMessageTimestamp() + 1).toString();
 
     // Add empty assistant message placeholder
     setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "" }]);
@@ -500,6 +570,7 @@ export default function CoachPage() {
     }
 
     setIsLoading(false);
+    isLoadingRef.current = false;
   };
 
   const handleReset = async () => {
@@ -587,12 +658,11 @@ export default function CoachPage() {
         {messagesWithDividers.map((item, index) => {
           if (item.type === 'divider') {
             return (
-              <div key={`divider-${item.date}`} className="flex items-center gap-3 py-2">
-                <div className="flex-1 h-px bg-white/10" />
-                <span className="text-xs text-muted-foreground font-medium px-2">
+              <div key={`divider-${item.date}`} className="flex flex-col items-center py-4">
+                <span className="text-xs text-muted-foreground font-medium mb-2">
                   {formatDateDivider(item.date)}
                 </span>
-                <div className="flex-1 h-px bg-white/10" />
+                <div className="w-full border-t border-dashed border-white/20" />
               </div>
             );
           }
