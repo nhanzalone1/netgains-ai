@@ -440,11 +440,15 @@ export default function NutritionPage() {
   const copyMeal = async (meal: Meal) => {
     if (!user) return;
 
+    const today = new Date();
+    const todayStr = formatDate(today);
+    const isViewingToday = formatDate(selectedDate) === todayStr;
+
     const { data } = await supabase
       .from("meals")
       .insert({
         user_id: user.id,
-        date: formatDate(selectedDate),
+        date: todayStr, // Always copy to today
         meal_type: meal.meal_type,
         food_name: meal.food_name,
         calories: meal.calories,
@@ -459,7 +463,10 @@ export default function NutritionPage() {
       .single();
 
     if (data) {
-      setMeals((prev) => [...prev, data as Meal]);
+      // Only add to local state if viewing today
+      if (isViewingToday) {
+        setMeals((prev) => [...prev, data as Meal]);
+      }
       loadWeekData();
     }
   };
