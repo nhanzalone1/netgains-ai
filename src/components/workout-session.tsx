@@ -448,14 +448,23 @@ export function WorkoutSession({
     setOpenOptionsMenuId(null);
   };
 
-  // Add L+R sets (unilateral)
+  // Add L+R sets (unilateral) - converts the last normal set to L, adds R
   const addUnilateralSets = (exerciseId: string) => {
     setActiveExercises((prev) =>
       prev.map((ex) => {
         if (ex.id !== exerciseId) return ex;
-        const leftSet = createSet("left", "", "L");
-        const rightSet = createSet("right", "", "R");
-        return { ...ex, sets: [...ex.sets, leftSet, rightSet] };
+        const lastSet = ex.sets[ex.sets.length - 1];
+
+        // Convert last set to left (if it's normal)
+        const updatedSets = ex.sets.map((s, i) =>
+          i === ex.sets.length - 1 && s.variant === "normal"
+            ? { ...s, variant: "left" as SetVariant, label: "L" }
+            : s
+        );
+
+        // Create right set with same weight
+        const rightSet = createSet("right", lastSet?.weight || "", "R");
+        return { ...ex, sets: [...updatedSets, rightSet] };
       })
     );
     setOpenOptionsMenuId(null);
