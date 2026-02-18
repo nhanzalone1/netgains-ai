@@ -448,23 +448,23 @@ export function WorkoutSession({
     setOpenOptionsMenuId(null);
   };
 
-  // Add L+R sets (unilateral) - converts the last normal set to L, adds R
+  // Add R+L sets (unilateral) - converts the last normal set to R, adds L
   const addUnilateralSets = (exerciseId: string) => {
     setActiveExercises((prev) =>
       prev.map((ex) => {
         if (ex.id !== exerciseId) return ex;
         const lastSet = ex.sets[ex.sets.length - 1];
 
-        // Convert last set to left (if it's normal)
+        // Convert last set to right (if it's normal)
         const updatedSets = ex.sets.map((s, i) =>
           i === ex.sets.length - 1 && s.variant === "normal"
-            ? { ...s, variant: "left" as SetVariant, label: "L" }
+            ? { ...s, variant: "right" as SetVariant, label: "R" }
             : s
         );
 
-        // Create right set with same weight
-        const rightSet = createSet("right", lastSet?.weight || "", "R");
-        return { ...ex, sets: [...updatedSets, rightSet] };
+        // Create left set with same weight
+        const leftSet = createSet("left", lastSet?.weight || "", "L");
+        return { ...ex, sets: [...updatedSets, leftSet] };
       })
     );
     setOpenOptionsMenuId(null);
@@ -825,7 +825,7 @@ export function WorkoutSession({
                               className="flex items-center gap-3 px-4 py-3 text-sm w-full hover:bg-green-500/10 transition-colors text-green-400"
                             >
                               <Move className="w-4 h-4" />
-                              L + R
+                              R + L
                             </button>
                           </motion.div>
                         )}
@@ -893,10 +893,28 @@ export function WorkoutSession({
                       return theme.primary;
                     };
 
-                    // Compute label for sets
+                    // Compute numbered label for R/L sets (e.g., "1R", "1L", "2R", "2L")
                     const getSetLabel = () => {
-                      if (set.variant === "left") return "L";
-                      if (set.variant === "right") return "R";
+                      if (set.variant === "right" || set.variant === "left") {
+                        const side = set.variant === "right" ? "R" : "L";
+                        // Count how many R sets came before this one to get pair number
+                        let pairIndex = 0;
+                        for (const s of exercise.sets) {
+                          if (s.id === set.id) break;
+                          if (s.variant === "right") pairIndex++;
+                        }
+                        // For L sets, use the same pair number as the preceding R
+                        if (set.variant === "left") {
+                          // Count R sets before this L to get the pair number
+                          let rCount = 0;
+                          for (const s of exercise.sets) {
+                            if (s.id === set.id) break;
+                            if (s.variant === "right") rCount++;
+                          }
+                          return `${rCount}${side}`;
+                        }
+                        return `${pairIndex + 1}${side}`;
+                      }
                       return set.label || index + 1;
                     };
 
