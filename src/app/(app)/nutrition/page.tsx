@@ -66,7 +66,11 @@ interface RecentFood {
 }
 
 function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
+  // Use local time, not UTC (toISOString gives UTC which can shift dates)
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDisplayDate(date: Date): string {

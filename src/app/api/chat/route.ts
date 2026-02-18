@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
+import { formatLocalDate } from '@/lib/date-utils';
 
 export const maxDuration = 60;
 
@@ -347,9 +348,10 @@ export async function POST(req: Request) {
     // Calculate yesterday's date for summary
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const todayStr = effectiveDateMatch?.[1] || formatLocalDate(today);
+    const yesterdayStr = formatLocalDate(yesterday);
 
-    console.log('[Coach] Today (effective):', today.toISOString().split('T')[0]);
+    console.log('[Coach] Today (effective):', todayStr);
     console.log('[Coach] Yesterday (looking for data):', yesterdayStr);
 
     // Gather context for personalized opening
@@ -541,7 +543,8 @@ export async function POST(req: Request) {
     milestoneContext = await detectMilestones(
       supabase,
       user.id,
-      firstPR ? { exercise: firstPR.exercise, weight: firstPR.weight, reps: firstPR.reps } : undefined
+      firstPR ? { exercise: firstPR.exercise, weight: firstPR.weight, reps: firstPR.reps } : undefined,
+      todayStr // Pass effective date for consistent timezone handling
     );
 
     console.log('[Coach] Milestones detected:', milestoneContext.newMilestones.map(m => m.type));

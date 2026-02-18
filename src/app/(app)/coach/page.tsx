@@ -50,6 +50,13 @@ function getDebugDate(): Date {
   return new Date();
 }
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getTodayString(): string {
   return getDebugDate().toDateString();
 }
@@ -318,7 +325,7 @@ export default function CoachPage() {
     // Create hidden trigger message - this won't be shown in UI but will be sent to API
     // Include the effective date so the API can calculate "yesterday" correctly
     const triggerMessageId = getMessageTimestamp().toString();
-    const effectiveDate = getDebugDate().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const effectiveDate = formatLocalDate(getDebugDate()); // YYYY-MM-DD format using local time
     const triggerContent = `${TRIGGER_PREFIX} effectiveDate=${effectiveDate} User opened the coach tab on ${formatDebugDate()}. Generate a contextual daily greeting based on their profile, memories, and recent workout history. If they haven't completed onboarding, start that process. Otherwise, give them a personalized check-in based on their training status.`;
 
     const triggerMessage: Message = {

@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
+import { formatLocalDate } from "@/lib/date-utils";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover } from "@/components/ui/popover";
@@ -276,7 +277,7 @@ export default function LogPage() {
         .from("workouts")
         .insert({
           user_id: user.id,
-          date: new Date().toISOString().split("T")[0],
+          date: formatLocalDate(new Date()),
           notes: `${selectedFolder?.name} session`,
         })
         .select()

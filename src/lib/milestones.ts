@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { formatLocalDate } from './date-utils';
 
 export interface Milestone {
   type: string;
@@ -46,7 +47,7 @@ function calculateStreak(workoutDates: string[], today: string): number {
 
   // Walk backwards from today
   for (let i = 0; i < 60; i++) { // Max 60 days back
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(currentDate);
 
     if (workoutDays.has(dateStr)) {
       streak++;
@@ -73,9 +74,10 @@ function calculateStreak(workoutDates: string[], today: string): number {
 export async function detectMilestones(
   supabase: SupabaseClient,
   userId: string,
-  prDetected?: { exercise: string; weight: number; reps: number }
+  prDetected?: { exercise: string; weight: number; reps: number },
+  effectiveDate?: string // YYYY-MM-DD from client, uses server time if not provided
 ): Promise<MilestoneContext> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = effectiveDate || formatLocalDate(new Date());
 
   // Get existing milestones
   const { data: existingMilestones } = await supabase
@@ -106,7 +108,7 @@ export async function detectMilestones(
       .from('workouts')
       .select('date')
       .eq('user_id', userId)
-      .gte('date', new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .gte('date', formatLocalDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)))
       .order('date', { ascending: false }),
   ]);
 
