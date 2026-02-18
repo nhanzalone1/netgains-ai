@@ -580,7 +580,27 @@ export default function CoachPage() {
     isLoadingRef.current = false;
   };
 
-  const handleReset = async () => {
+  // Soft reset: clears chat and triggers fresh daily greeting (keeps onboarding/memories)
+  const handleRefresh = () => {
+    // Clear chat messages from localStorage
+    localStorage.removeItem(getStorageKey(user?.id));
+    localStorage.removeItem(getLastOpenKey(user?.id));
+
+    // Reset local state
+    setMessages([]);
+    setInputValue("");
+    hasGeneratedOpeningRef.current = false;
+    lastGeneratedDateRef.current = null;
+    lastCheckedDateRef.current = null;
+
+    // Trigger fresh daily greeting
+    setTimeout(() => {
+      generateAutoOpening();
+    }, 100);
+  };
+
+  // Hard reset: wipes everything including onboarding and memories (accessed via debug)
+  const handleFullReset = async () => {
     if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
     // Clear localStorage (user-specific)
     localStorage.removeItem(getStorageKey(user?.id));
@@ -643,9 +663,9 @@ export default function CoachPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleReset}
+            onClick={handleRefresh}
             className="p-3 rounded-lg text-muted-foreground hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Reset chat"
+            title="Refresh conversation"
           >
             <RotateCcw className="w-5 h-5" />
           </button>

@@ -563,8 +563,20 @@ export default function DebugPage() {
         {/* Chat Controls */}
         <Section title="AI Coach">
           <div className="space-y-2">
-            <DebugButton onClick={clearChatHistory} variant="danger">
-              <Trash2 className="w-4 h-4" /> Clear all chat history
+            <DebugButton onClick={clearChatHistory} variant="warning">
+              <Trash2 className="w-4 h-4" /> Clear chat history (soft reset)
+            </DebugButton>
+            <DebugButton onClick={async () => {
+              if (!confirm("Full reset? This wipes onboarding, memories, and milestones.")) return;
+              clearChatHistory();
+              try {
+                await fetch("/api/coach-reset", { method: "POST" });
+                showMessage("Full coach reset complete!");
+              } catch (e) {
+                showMessage(`Reset error: ${e}`);
+              }
+            }} variant="danger">
+              <Trash2 className="w-4 h-4" /> Full Coach Reset (onboarding + memories)
             </DebugButton>
             <DebugButton onClick={triggerAIOpening} variant="default">
               <Play className="w-4 h-4" /> Trigger new opening message
