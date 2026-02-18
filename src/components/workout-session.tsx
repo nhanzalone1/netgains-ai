@@ -893,17 +893,10 @@ export function WorkoutSession({
                       return theme.primary;
                     };
 
-                    // Compute numbered label for L/R sets (e.g., "1L", "2R")
+                    // Compute label for sets
                     const getSetLabel = () => {
-                      if (set.variant === "left" || set.variant === "right") {
-                        const side = set.variant === "left" ? "L" : "R";
-                        let pairIndex = 0;
-                        for (const s of exercise.sets) {
-                          if (s.id === set.id) break;
-                          if (s.variant === set.variant) pairIndex++;
-                        }
-                        return `${pairIndex + 1}${side}`;
-                      }
+                      if (set.variant === "left") return "L";
+                      if (set.variant === "right") return "R";
                       return set.label || index + 1;
                     };
 
