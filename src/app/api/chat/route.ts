@@ -480,10 +480,11 @@ export async function POST(req: Request) {
     console.log('[Coach] Yesterday (looking for data):', yesterdayStr);
 
     // Gather context for personalized opening
-    const [profileResult, memoriesResult, workoutsResult, yesterdayMealsResult, nutritionGoalsResult] = await Promise.all([
+    const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
+      supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', yesterdayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
     ]);
@@ -491,13 +492,26 @@ export async function POST(req: Request) {
     const profile = profileResult.data;
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
+    const todayMeals = todayMealsResult.data || [];
     const yesterdayMeals = yesterdayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
 
     console.log('[Coach] Profile onboarding_complete:', profile?.onboarding_complete);
     console.log('[Coach] Recent workouts count:', recentWorkouts.length);
     console.log('[Coach] Recent workout dates:', recentWorkouts.map(w => w.date));
+    console.log('[Coach] Today meals count:', todayMeals.length);
     console.log('[Coach] Yesterday meals count:', yesterdayMeals.length);
+
+    // Calculate today's nutrition totals
+    const todayNutrition = todayMeals.reduce(
+      (acc, meal) => ({
+        calories: acc.calories + (meal.calories || 0),
+        protein: acc.protein + (meal.protein || 0),
+        carbs: acc.carbs + (meal.carbs || 0),
+        fat: acc.fat + (meal.fat || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
 
     // Calculate yesterday's nutrition totals
     const yesterdayNutrition = yesterdayMeals.reduce(
@@ -540,17 +554,23 @@ export async function POST(req: Request) {
       }
     }
 
-    // Find yesterday's workout specifically
+    // Find today's and yesterday's workouts specifically
+    const todayWorkout = workoutDetails.find(w => w.date === todayStr);
     const yesterdayWorkout = workoutDetails.find(w => w.date === yesterdayStr);
 
     console.log('[Coach] Workout details dates:', workoutDetails.map(w => w.date));
+    console.log('[Coach] Looking for today:', todayStr);
     console.log('[Coach] Looking for yesterday:', yesterdayStr);
+    console.log('[Coach] Today workout found:', !!todayWorkout);
     console.log('[Coach] Yesterday workout found:', !!yesterdayWorkout);
+    if (todayWorkout) {
+      console.log('[Coach] Today exercises:', todayWorkout.exercises.map(e => `${e.name} (${e.sets.length} sets)`));
+    }
     if (yesterdayWorkout) {
       console.log('[Coach] Yesterday exercises:', yesterdayWorkout.exercises.map(e => `${e.name} (${e.sets.length} sets)`));
     }
 
-    // Detect PRs from yesterday's workout
+    // Detect PRs from today's workout first, then yesterday's
     const yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
 
     if (yesterdayWorkout && yesterdayWorkout.exercises.length > 0) {
@@ -686,7 +706,7 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
       : '';
 
     // Build context for opening generation
-    const contextPrompt = `[DAILY OPENING - Generate a personalized greeting with yesterday's summary]
+    const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
 
 User Profile:
 ${JSON.stringify(profile, null, 2)}
@@ -694,7 +714,18 @@ ${JSON.stringify(profile, null, 2)}
 User Memories (things you've learned about them):
 ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
 ${milestoneSection}
-=== YESTERDAY'S SUMMARY (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
+=== TODAY'S DATA (${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
+
+Today's Workout:
+${todayWorkout ? JSON.stringify(todayWorkout.exercises, null, 2) : 'No workout logged today'}
+
+Today's Nutrition:
+${todayMeals.length > 0 ? `
+- Calories: ${todayNutrition.calories} / ${nutritionGoals.calories} goal
+- Protein: ${todayNutrition.protein}g / ${nutritionGoals.protein}g goal
+- Foods logged: ${todayMeals.map(m => m.food_name).join(', ')}` : 'No meals logged today'}
+
+=== YESTERDAY'S DATA (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 🏆 PERSONAL RECORDS HIT YESTERDAY:
 ${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr =>
@@ -702,32 +733,34 @@ ${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr =>
 ).join('\n') : 'No PRs yesterday'}
 
 Yesterday's Workout:
-${yesterdayWorkout ? JSON.stringify(yesterdayWorkout.exercises, null, 2) : 'No workout logged'}
+${yesterdayWorkout ? JSON.stringify(yesterdayWorkout.exercises, null, 2) : 'No workout logged yesterday'}
 
 Yesterday's Nutrition:
 ${yesterdayMeals.length > 0 ? `
 - Calories: ${yesterdayNutrition.calories} / ${nutritionGoals.calories} goal (${Math.round((yesterdayNutrition.calories / nutritionGoals.calories) * 100)}%)
 - Protein: ${yesterdayNutrition.protein}g / ${nutritionGoals.protein}g goal (${Math.round((yesterdayNutrition.protein / nutritionGoals.protein) * 100)}%)
-- Carbs: ${yesterdayNutrition.carbs}g / ${nutritionGoals.carbs}g goal
-- Fat: ${yesterdayNutrition.fat}g / ${nutritionGoals.fat}g goal
-- Foods logged: ${yesterdayMeals.map(m => m.food_name).join(', ')}` : 'No meals logged'}
+- Foods logged: ${yesterdayMeals.map(m => m.food_name).join(', ')}` : 'No meals logged yesterday'}
 
-=== END YESTERDAY'S SUMMARY ===
+=== END DATA ===
 
 Recent Workouts (last 10):
 ${workoutDetails.length > 0 ? JSON.stringify(workoutDetails, null, 2) : 'No workouts logged yet'}
 
 Days since last workout: ${daysSinceLastWorkout !== null ? daysSinceLastWorkout : 'Never logged'}
-Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
 
 INSTRUCTIONS:
 Generate a casual opening message. Talk like a real person texting, not an AI.
+
+**CRITICAL: Use correct day references**
+- If "Today's Workout" has data → say "today" (e.g., "solid leg session today")
+- If "Yesterday's Workout" has data but Today doesn't → say "yesterday"
+- NEVER say "yesterday" when the workout is from today
 
 **PRIORITY ORDER FOR GREETING:**
 
 1. IF onboarding_complete is false or null:
    - Start with something like "hey i'm your coach. let's get you set up — what should i call you"
-   - Do NOT include any yesterday summary for new users
+   - Do NOT include any workout summary for new users
 
 2. IF there are NEW MILESTONES TO CELEBRATE (check the section above):
    - LEAD with the milestone celebration. This is the headline.
@@ -742,24 +775,24 @@ Generate a casual opening message. Talk like a real person texting, not an AI.
      * workout_100: "100 workouts logged. Only 8% of users get here. Remember that."
      * first_food_entry: "First meal tracked. Now we can dial in your nutrition."
    - If multiple milestones, prioritize: PR > streaks > workout counts > food logging
-   - After the celebration, briefly mention any other context (yesterday's workout, etc.)
+   - After the celebration, briefly mention any other context
 
-3. IF there are PRs from yesterday (and no milestone celebration needed):
+3. IF today has workout data:
+   - Reference TODAY's workout: "solid push day today" or "nice leg session earlier"
+   - Mention nutrition if logged
+   - NEVER say "yesterday" for today's workout
+
+4. IF there are PRs from yesterday (and no today workout):
    - LEAD WITH THE PR. This is the headline. Example: "new bench PR yesterday — 235x3"
-   - Then mention nutrition highlights: "plus you hit 2,100 cal and 185g protein"
-   - End with today's plan: "solid day. today's pull day, let's keep it rolling"
-   - Format: "[PR announcement]. [nutrition summary]. [today's plan]"
+   - Then mention nutrition highlights
+   - End with today's plan
 
-4. IF onboarding complete AND yesterday has data but NO PRs or milestones:
-   - Start with a quick recap: "yesterday you hit [workout highlights] and got [X]g protein"
-   - If they crushed their goals, acknowledge it. If they missed, note it without being preachy.
+5. IF yesterday has workout data but no PRs and no today workout:
+   - Start with a quick recap: "yesterday you hit [workout highlights]"
    - Then transition to today: what's the plan, rest day, etc.
 
-5. IF onboarding complete AND no yesterday data:
-   - Skip the summary, just greet them and set up today
-
-6. IF onboarding complete AND daysSinceLastWorkout >= 2:
-   - Casual check-in, reference their last session, no guilt trip
+6. IF no recent workout data:
+   - Casual check-in, set up today's plan
 
 Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who coaches, not a bot.`;
 
