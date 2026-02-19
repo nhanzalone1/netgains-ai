@@ -872,8 +872,9 @@ export function WorkoutSession({
                     const isSpecial = set.variant !== "normal";
 
                     // Determine coupling (parent/child relationships)
-                    const isParent = set.variant === "assisted-parent" || set.variant === "drop-parent" || set.variant === "left";
-                    const isChild = set.variant === "assisted-child" || set.variant === "drop" || set.variant === "right";
+                    // R comes first (parent), L comes second (child)
+                    const isParent = set.variant === "assisted-parent" || set.variant === "drop-parent" || set.variant === "right";
+                    const isChild = set.variant === "assisted-child" || set.variant === "drop" || set.variant === "left";
 
                     // Rounding: parent gets top-rounded, child gets bottom-rounded
                     const roundingClass = isParent
