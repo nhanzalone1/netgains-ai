@@ -29,6 +29,17 @@ function getLastOpenKey(userId: string | undefined): string {
 
 // Load messages from database
 async function loadMessagesFromDB(userId: string): Promise<Message[]> {
+  console.log('[DB] Loading messages for user:', userId);
+
+  // First check if we're authenticated
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  console.log('[DB] Auth user:', authUser?.id);
+
+  if (!authUser) {
+    console.error('[DB] Not authenticated!');
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('chat_messages')
     .select('id, role, content, hidden, created_at')
@@ -36,10 +47,11 @@ async function loadMessagesFromDB(userId: string): Promise<Message[]> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error loading messages:', error);
+    console.error('[DB] Error loading messages:', error.message, error.code, error.details);
     return [];
   }
 
+  console.log('[DB] Loaded', data?.length || 0, 'messages');
   return (data || []).map(msg => ({
     id: msg.id,
     role: msg.role as 'user' | 'assistant',
@@ -53,6 +65,15 @@ async function loadMessagesFromDB(userId: string): Promise<Message[]> {
 async function saveMessageToDB(userId: string, message: Message): Promise<string | null> {
   console.log('[DB] Attempting to save message:', { userId, role: message.role, contentLength: message.content.length });
 
+  // Verify auth state
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  console.log('[DB] Auth check - userId param:', userId, 'auth.uid:', authUser?.id);
+
+  if (!authUser || authUser.id !== userId) {
+    console.error('[DB] Auth mismatch! userId:', userId, 'authUser:', authUser?.id);
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('chat_messages')
     .insert({
@@ -65,7 +86,7 @@ async function saveMessageToDB(userId: string, message: Message): Promise<string
     .single();
 
   if (error) {
-    console.error('[DB] Error saving message:', error.message, error.details, error.hint);
+    console.error('[DB] Error saving message:', error.message, error.code, error.details, error.hint);
     return null;
   }
 
