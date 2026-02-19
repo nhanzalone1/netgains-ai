@@ -34,5 +34,11 @@ export async function POST() {
     .delete()
     .eq('user_id', user.id);
 
+  // Delete all chat messages
+  await supabase
+    .from('chat_messages')
+    .delete()
+    .eq('user_id', user.id);
+
   return Response.json({ success: true });
 }

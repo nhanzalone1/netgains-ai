@@ -7,36 +7,90 @@ import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { DailyBriefCard } from "@/components/daily-brief-card";
+import { createClient } from "@/lib/supabase/client";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   hidden?: boolean; // Hidden messages are used as triggers but not shown in UI
+  created_at?: string; // ISO timestamp for date grouping
 }
 
 // Hidden trigger message prefix - messages starting with this won't be shown
 const TRIGGER_PREFIX = "[SYSTEM_TRIGGER]";
 
-function getStorageKey(userId: string | undefined): string {
-  return userId ? `netgains-coach-messages-${userId}` : "netgains-coach-messages";
-}
+// Supabase client instance
+const supabase = createClient();
 
 function getLastOpenKey(userId: string | undefined): string {
   return userId ? `netgains-coach-last-open-${userId}` : "netgains-coach-last-open";
 }
 
-function loadMessages(userId: string | undefined): Message[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = localStorage.getItem(getStorageKey(userId));
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed.length > 0) return parsed;
-    }
+// Load messages from database
+async function loadMessagesFromDB(userId: string): Promise<Message[]> {
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .select('id, role, content, hidden, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error loading messages:', error);
     return [];
-  } catch {
-    return [];
+  }
+
+  return (data || []).map(msg => ({
+    id: msg.id,
+    role: msg.role as 'user' | 'assistant',
+    content: msg.content,
+    hidden: msg.hidden || false,
+    created_at: msg.created_at,
+  }));
+}
+
+// Save a single message to database
+async function saveMessageToDB(userId: string, message: Message): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .insert({
+      user_id: userId,
+      role: message.role,
+      content: message.content,
+      hidden: message.hidden || false,
+    })
+    .select('id, created_at')
+    .single();
+
+  if (error) {
+    console.error('Error saving message:', error);
+    return null;
+  }
+
+  return data?.id || null;
+}
+
+// Update a message in database (for streaming assistant responses)
+async function updateMessageInDB(messageId: string, content: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_messages')
+    .update({ content })
+    .eq('id', messageId);
+
+  if (error) {
+    console.error('Error updating message:', error);
+  }
+}
+
+// Delete all messages for a user
+async function clearMessagesFromDB(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_messages')
+    .delete()
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error clearing messages:', error);
   }
 }
 
@@ -67,8 +121,12 @@ function formatDebugDate(): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function getMessageDate(messageId: string): string | null {
-  const timestamp = parseInt(messageId);
+function getMessageDate(message: Message): string | null {
+  if (message.created_at) {
+    return new Date(message.created_at).toDateString();
+  }
+  // Fallback for old messages with timestamp IDs
+  const timestamp = parseInt(message.id);
   if (isNaN(timestamp)) return null;
   return new Date(timestamp).toDateString();
 }
@@ -97,10 +155,9 @@ function formatDateDivider(dateString: string): string {
   }
 }
 
-function shouldGenerateOpening(userId: string | undefined): boolean {
+function shouldGenerateOpening(messages: Message[], userId: string | undefined): boolean {
   if (typeof window === "undefined" || !userId) return false;
 
-  const messages = loadMessages(userId);
   const lastOpenStr = localStorage.getItem(getLastOpenKey(userId));
   const today = getTodayString();
 
@@ -124,12 +181,9 @@ function shouldGenerateOpening(userId: string | undefined): boolean {
   // Check if last visible message was from "today" - if so, no need for new opening
   const lastVisibleMessage = visibleMessages[visibleMessages.length - 1];
   if (lastVisibleMessage) {
-    const msgTimestamp = parseInt(lastVisibleMessage.id);
-    if (!isNaN(msgTimestamp)) {
-      const msgDate = new Date(msgTimestamp).toDateString();
-      if (msgDate === today) {
-        return false;
-      }
+    const messageDate = getMessageDate(lastVisibleMessage);
+    if (messageDate === today) {
+      return false;
     }
   }
 
@@ -143,6 +197,7 @@ export default function CoachPage() {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -152,7 +207,6 @@ export default function CoachPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const hasGeneratedOpeningRef = useRef(false);
-  const readyToSaveRef = useRef(false); // Only save after load effect completes AND state is applied
 
   // Check if user is near the bottom of the scroll area
   const isNearBottom = useCallback(() => {
@@ -429,7 +483,7 @@ export default function CoachPage() {
   const lastGeneratedDateRef = useRef<string | null>(null);
 
   // Check and potentially generate opening message
-  const checkAndGenerateOpening = useCallback(() => {
+  const checkAndGenerateOpening = useCallback((currentMessages: Message[]) => {
     if (!user?.id) return;
 
     const today = getTodayString();
@@ -444,7 +498,7 @@ export default function CoachPage() {
       hasGeneratedOpeningRef.current = false;
     }
 
-    const shouldGenerate = shouldGenerateOpening(user.id);
+    const shouldGenerate = shouldGenerateOpening(currentMessages, user.id);
     console.log("shouldGenerateOpening returned:", shouldGenerate);
     console.log("Will generate?", shouldGenerate && !hasGeneratedOpeningRef.current);
 
@@ -463,17 +517,18 @@ export default function CoachPage() {
   // Track the debug date we last checked for
   const lastCheckedDateRef = useRef<string | null>(null);
 
-  // Load messages on mount
+  // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
-    const existingMessages = loadMessages(user.id);
-    setMessages(existingMessages);
-    // Enable saving AFTER this effect cycle completes and state is applied
-    // Using setTimeout(0) pushes this to after React has flushed state updates
-    setTimeout(() => {
-      readyToSaveRef.current = true;
-    }, 0);
-    checkAndGenerateOpening();
+
+    const loadMessages = async () => {
+      const dbMessages = await loadMessagesFromDB(user.id);
+      setMessages(dbMessages);
+      setMessagesLoaded(true);
+      checkAndGenerateOpening(dbMessages);
+    };
+
+    loadMessages();
   }, [user?.id, checkAndGenerateOpening]);
 
   // Cleanup: abort any pending request when component unmounts
@@ -494,7 +549,7 @@ export default function CoachPage() {
   // Also check on every render if the debug date has changed
   // This catches in-app navigation where other hooks might not fire
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !messagesLoaded) return;
     // Don't interrupt an active stream
     if (isLoadingRef.current) return;
     const currentDate = getTodayString();
@@ -503,47 +558,47 @@ export default function CoachPage() {
       console.log("Previous date:", lastCheckedDateRef.current);
       console.log("Current date:", currentDate);
       lastCheckedDateRef.current = currentDate;
-      checkAndGenerateOpening();
+      checkAndGenerateOpening(messages);
     }
   }); // No deps - runs on every render
 
   // Re-check when page becomes visible or gains focus
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === "visible") {
         console.log("=== Page became visible, re-checking opening ===");
         // Don't do anything if we're currently streaming - it would interrupt the response
         if (isLoadingRef.current) return;
         if (user?.id) {
-          const existingMessages = loadMessages(user.id);
-          setMessages(existingMessages);
+          const dbMessages = await loadMessagesFromDB(user.id);
+          setMessages(dbMessages);
+          checkAndGenerateOpening(dbMessages);
         }
-        checkAndGenerateOpening();
       }
     };
 
-    const handleFocus = () => {
+    const handleFocus = async () => {
       console.log("=== Window focused, re-checking opening ===");
       // Don't do anything if we're currently streaming - it would interrupt the response
       if (isLoadingRef.current) return;
       if (user?.id) {
-        const existingMessages = loadMessages(user.id);
-        setMessages(existingMessages);
+        const dbMessages = await loadMessagesFromDB(user.id);
+        setMessages(dbMessages);
+        checkAndGenerateOpening(dbMessages);
       }
-      checkAndGenerateOpening();
     };
 
     // pageshow fires when navigating back to a page (including bfcache)
-    const handlePageShow = (event: PageTransitionEvent) => {
+    const handlePageShow = async (event: PageTransitionEvent) => {
       if (event.persisted) {
         console.log("=== Page restored from cache, re-checking opening ===");
         // Don't do anything if we're currently streaming - it would interrupt the response
         if (isLoadingRef.current) return;
         if (user?.id) {
-          const existingMessages = loadMessages(user.id);
-          setMessages(existingMessages);
+          const dbMessages = await loadMessagesFromDB(user.id);
+          setMessages(dbMessages);
+          checkAndGenerateOpening(dbMessages);
         }
-        checkAndGenerateOpening();
       }
     };
 
@@ -556,18 +611,46 @@ export default function CoachPage() {
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [user?.id, checkAndGenerateOpening]);
+  }, [user?.id, checkAndGenerateOpening, messages, messagesLoaded]);
 
-  // Save messages to user-specific storage
+  // Track messages that need to be saved to DB
+  const pendingSaveRef = useRef<Set<string>>(new Set());
+  const lastSavedContentRef = useRef<Map<string, string>>(new Map());
+
+  // Save new messages to database when they're added or updated
   useEffect(() => {
-    if (!user?.id) return;
-    // Don't save until load effect has completed AND state has been applied
-    // This prevents the save effect from running with empty [] and wiping localStorage
-    if (!readyToSaveRef.current) return;
-    // Don't save empty assistant messages
-    const filtered = messages.filter((m) => m.role !== "assistant" || m.content.trim() !== "");
-    localStorage.setItem(getStorageKey(user.id), JSON.stringify(filtered));
-  }, [messages, user?.id]);
+    if (!user?.id || !messagesLoaded) return;
+
+    const saveNewMessages = async () => {
+      for (const message of messages) {
+        // Skip empty assistant messages (still streaming)
+        if (message.role === "assistant" && !message.content.trim()) continue;
+
+        // Check if this message needs to be saved (new or updated)
+        const lastSaved = lastSavedContentRef.current.get(message.id);
+
+        if (lastSaved === undefined) {
+          // New message - save to DB
+          const dbId = await saveMessageToDB(user.id, message);
+          if (dbId) {
+            lastSavedContentRef.current.set(message.id, message.content);
+            // Update the message ID in state if it was a temp ID
+            if (dbId !== message.id) {
+              setMessages(prev => prev.map(m =>
+                m.id === message.id ? { ...m, id: dbId } : m
+              ));
+            }
+          }
+        } else if (lastSaved !== message.content && message.content.trim()) {
+          // Content changed - update in DB
+          await updateMessageInDB(message.id, message.content);
+          lastSavedContentRef.current.set(message.id, message.content);
+        }
+      }
+    };
+
+    saveNewMessages();
+  }, [messages, user?.id, messagesLoaded]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -631,10 +714,16 @@ export default function CoachPage() {
   };
 
   // Soft reset: clears chat and triggers fresh daily greeting (keeps onboarding/memories)
-  const handleRefresh = () => {
-    // Clear chat messages from localStorage
-    localStorage.removeItem(getStorageKey(user?.id));
+  const handleRefresh = async () => {
+    // Clear chat messages from database
+    if (user?.id) {
+      await clearMessagesFromDB(user.id);
+    }
     localStorage.removeItem(getLastOpenKey(user?.id));
+
+    // Reset tracking refs
+    lastSavedContentRef.current.clear();
+    pendingSaveRef.current.clear();
 
     // Reset local state
     setMessages([]);
@@ -652,10 +741,17 @@ export default function CoachPage() {
   // Hard reset: wipes everything including onboarding and memories (accessed via debug)
   const handleFullReset = async () => {
     if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
-    // Clear localStorage (user-specific)
-    localStorage.removeItem(getStorageKey(user?.id));
+    // Clear chat messages from database
+    if (user?.id) {
+      await clearMessagesFromDB(user.id);
+    }
     localStorage.removeItem(getLastOpenKey(user?.id));
     localStorage.removeItem("netgains-current-workout");
+
+    // Reset tracking refs
+    lastSavedContentRef.current.clear();
+    pendingSaveRef.current.clear();
+
     // Reset onboarding and memories via API
     try {
       await fetch("/api/coach-reset", { method: "POST" });
@@ -684,7 +780,7 @@ export default function CoachPage() {
   let lastDate: string | null = null;
 
   for (const message of visibleMessages) {
-    const messageDate = getMessageDate(message.id);
+    const messageDate = getMessageDate(message);
     if (messageDate && messageDate !== lastDate) {
       messagesWithDividers.push({ type: 'divider', date: messageDate });
       lastDate = messageDate;
