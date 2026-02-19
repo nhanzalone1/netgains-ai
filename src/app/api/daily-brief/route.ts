@@ -82,13 +82,16 @@ export async function POST(request: Request) {
     }
   }
 
-  // Count workouts this week
+  // Count workouts this week (rolling 7 days)
   const weekAgo = new Date(effectiveDate);
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoStr = weekAgo.toISOString().split('T')[0];
   const workoutsThisWeek = recentWorkouts.filter(w => w.date >= weekAgoStr && w.date <= todayStr).length;
 
-  // Get last workout info
+  // Check if user already worked out today
+  const workedOutToday = recentWorkouts.some(w => w.date === todayStr);
+
+  // Get last workout info (excluding today if they already worked out)
   const lastWorkout = workoutDetails[0];
   const daysSinceLastWorkout = lastWorkout
     ? Math.floor((effectiveDate.getTime() - new Date(lastWorkout.date + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24))
@@ -101,10 +104,62 @@ export async function POST(request: Request) {
   // Build context for AI
   const coachingMode = profile.coaching_mode || 'assist';
   const trainingSplit = memoryMap.training_split || 'unknown';
-  const daysPerWeek = memoryMap.days_per_week || '4';
+  const daysPerWeek = parseInt(memoryMap.days_per_week || '4');
 
-  // Determine if today should be a rest day based on training frequency
-  const isLikelyRestDay = workoutsThisWeek >= parseInt(daysPerWeek) || daysSinceLastWorkout === 0;
+  // Determine the suggested next workout based on split pattern
+  let suggestedWorkout = 'Training';
+  const lastWorkoutType = lastWorkout?.exercises?.[0]?.name?.toLowerCase() || '';
+
+  // Detect workout type from exercise names
+  const detectWorkoutType = (exercises: { name: string }[]): string => {
+    const names = exercises.map(e => e.name.toLowerCase()).join(' ');
+    if (names.includes('bench') || names.includes('chest') || names.includes('push')) return 'push';
+    if (names.includes('row') || names.includes('pull') || names.includes('lat') || names.includes('back')) return 'pull';
+    if (names.includes('squat') || names.includes('leg') || names.includes('deadlift')) return 'legs';
+    if (names.includes('shoulder') || names.includes('delt')) return 'shoulders';
+    if (names.includes('arm') || names.includes('bicep') || names.includes('tricep')) return 'arms';
+    return 'full body';
+  };
+
+  // Suggest next workout based on split
+  if (trainingSplit.toLowerCase().includes('push') || trainingSplit.toLowerCase().includes('ppl')) {
+    const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'legs';
+    if (lastType === 'push') suggestedWorkout = 'Pull Day';
+    else if (lastType === 'pull') suggestedWorkout = 'Leg Day';
+    else suggestedWorkout = 'Push Day';
+  } else if (trainingSplit.toLowerCase().includes('upper') || trainingSplit.toLowerCase().includes('lower')) {
+    const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'lower';
+    suggestedWorkout = lastType.includes('leg') || lastType.includes('lower') ? 'Upper Body' : 'Lower Body';
+  } else if (trainingSplit.toLowerCase().includes('bro') || trainingSplit.toLowerCase().includes('body part')) {
+    // Body part split - suggest based on what they haven't hit recently
+    suggestedWorkout = 'Training Day';
+  } else {
+    suggestedWorkout = 'Training Day';
+  }
+
+  // Determine if today should be a rest day
+  // Rest day if: already worked out today, OR hit weekly goal, OR need recovery (3+ consecutive days)
+  const consecutiveWorkoutDays = (() => {
+    let count = 0;
+    const sortedWorkouts = [...recentWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+    let checkDate = new Date(effectiveDate);
+    checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
+
+    for (let i = 0; i < 7; i++) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (sortedWorkouts.some(w => w.date === dateStr)) {
+        count++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return count;
+  })();
+
+  const needsRecovery = consecutiveWorkoutDays >= 3;
+  const hitWeeklyGoal = workoutsThisWeek >= daysPerWeek;
+  const isRestDay = workedOutToday || hitWeeklyGoal || needsRecovery;
 
   // Find best recent performance for a "beat this" target
   let targetExercise = '';
@@ -142,19 +197,26 @@ export async function POST(request: Request) {
 
   const macroSummary = `${nutritionGoals.calories}cal | ${nutritionGoals.protein}P ${nutritionGoals.carbs}C ${nutritionGoals.fat}F`;
 
+  // Build the prompt with clear training/rest day determination
+  const restDayReason = workedOutToday ? 'already trained today' :
+    hitWeeklyGoal ? `hit ${daysPerWeek}-day weekly goal` :
+    needsRecovery ? `${consecutiveWorkoutDays} days straight, need recovery` : '';
+
   const prompt = `Generate a daily brief for a fitness app user. Keep it VERY short - 3 lines max total.
 
 USER CONTEXT:
 - Coaching mode: ${coachingMode} (${coachingMode === 'full' ? 'I build their program' : 'they have their own program'})
 - Training split: ${trainingSplit}
 - Days per week goal: ${daysPerWeek}
-- Workouts this week: ${workoutsThisWeek}
+- Workouts this week: ${workoutsThisWeek}/${daysPerWeek}
 - Days since last workout: ${daysSinceLastWorkout ?? 'never trained'}
 - Last workout: ${lastWorkout ? `${lastWorkout.date} - ${lastWorkout.exercises.map(e => e.name).join(', ')}` : 'none'}
 - Best recent lift to beat: ${targetExercise ? `${targetExercise} ${targetWeight}x${targetReps}` : 'none yet'}
 - Daily macro goals: ${macroSummary}
 
-LIKELY REST DAY: ${isLikelyRestDay}
+TODAY'S STATUS: ${isRestDay ? `REST DAY (${restDayReason})` : `TRAINING DAY — suggested: ${suggestedWorkout}`}
+
+IMPORTANT: Follow the TODAY'S STATUS above. If it says TRAINING DAY, do NOT output "Rest Day".
 
 OUTPUT FORMAT (respond with ONLY this JSON, no other text):
 {
@@ -164,9 +226,8 @@ OUTPUT FORMAT (respond with ONLY this JSON, no other text):
 }
 
 EXAMPLES:
-For FULL mode training day: {"focus": "Push Day", "target": "Bench target: 230x5 (hit 225x5 last week)", "nutrition": "2500cal | 200P 250C 70F"}
-For ASSIST mode training day: {"focus": "Based on pattern: Pull", "target": "Last rows: 225x3 — go for 4", "nutrition": "2200cal | 180P 220C 60F"}
-For rest day: {"focus": "Rest Day", "target": "Great week — ${workoutsThisWeek} sessions done", "nutrition": "2000cal | 150P 200C 55F"}
+For training day: {"focus": "${suggestedWorkout}", "target": "${targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Time to train'}", "nutrition": "${macroSummary}"}
+For rest day: {"focus": "Rest Day", "target": "Great week — ${workoutsThisWeek} sessions done", "nutrition": "${macroSummary}"}
 For first-time user: {"focus": "Ready to Start", "target": "Log your first workout today", "nutrition": "${macroSummary}"}`;
 
   try {
@@ -207,8 +268,10 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
     return Response.json({
       status: 'generated',
       brief: {
-        focus: isLikelyRestDay ? 'Rest Day' : 'Training Day',
-        target: targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Log a workout to get started',
+        focus: isRestDay ? 'Rest Day' : suggestedWorkout,
+        target: isRestDay
+          ? `${workoutsThisWeek} sessions this week — recover well`
+          : (targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Time to train'),
         nutrition: macroSummary,
       },
       generatedAt: new Date().toISOString(),
