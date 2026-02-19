@@ -680,17 +680,13 @@ export default function CoachPage() {
   return (
     <div
       ref={pageRef}
-      className="flex flex-col"
+      className="flex flex-col fixed inset-0"
       style={{
         background: "#0f0f13",
         // When keyboard is open, use the visual viewport height
-        // When closed, use 100dvh minus nav bar height (80px)
+        // When closed, account for nav bar (80px)
         height: viewportHeight ? `${viewportHeight}px` : 'calc(100dvh - 80px)',
-        // Prevent iOS from scrolling the page behind the keyboard
-        position: keyboardOpen ? 'fixed' : 'relative',
-        top: 0,
-        left: 0,
-        right: 0,
+        // Always prevent page scroll - only messages should scroll
         overflow: 'hidden',
       }}
     >
