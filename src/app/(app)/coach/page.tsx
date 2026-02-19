@@ -150,6 +150,27 @@ export default function CoachPage() {
   const hasGeneratedOpeningRef = useRef(false);
   const readyToSaveRef = useRef(false); // Only save after load effect completes AND state is applied
 
+  // Check if user is near the bottom of the scroll area
+  const isNearBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 150; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // Smooth scroll to bottom, only if user is already near bottom
+  const scrollToBottom = useCallback((force = false) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (force || isNearBottom()) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [isNearBottom]);
+
   // Track keyboard visibility via Visual Viewport API
   // This is a fallback for browsers that don't support interactiveWidget viewport meta
   useEffect(() => {
@@ -194,27 +215,6 @@ export default function CoachPage() {
       window.removeEventListener("orientationchange", onOrientationChange);
     };
   }, [scrollToBottom]);
-
-  // Check if user is near the bottom of the scroll area
-  const isNearBottom = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return true;
-    const threshold = 150; // pixels from bottom
-    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-  }, []);
-
-  // Smooth scroll to bottom, only if user is already near bottom
-  const scrollToBottom = useCallback((force = false) => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    if (force || isNearBottom()) {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [isNearBottom]);
 
   // Track if we just sent a user message (to force scroll for their own messages)
   const justSentMessageRef = useRef(false);
