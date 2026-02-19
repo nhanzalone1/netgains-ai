@@ -422,11 +422,24 @@ export function WorkoutSession({
   // Add normal set
   const addSet = (exerciseId: string) => {
     setActiveExercises((prev) =>
-      prev.map((ex) =>
-        ex.id === exerciseId
-          ? { ...ex, sets: [...ex.sets, createSet()] }
-          : ex
-      )
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+
+        // Check if exercise already has L/R sets
+        const hasLRSets = ex.sets.some(
+          (s) => s.variant === "left" || s.variant === "right"
+        );
+
+        if (hasLRSets) {
+          // Auto-add R+L pair to match existing pattern
+          const rightSet = createSet("right", "", "R");
+          const leftSet = createSet("left", "", "L");
+          return { ...ex, sets: [...ex.sets, rightSet, leftSet] };
+        }
+
+        // Normal set
+        return { ...ex, sets: [...ex.sets, createSet()] };
+      })
     );
   };
 
