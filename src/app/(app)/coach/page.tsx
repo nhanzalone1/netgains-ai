@@ -684,8 +684,8 @@ export default function CoachPage() {
       style={{
         background: "#0f0f13",
         // When keyboard is open, use the visual viewport height
-        // When closed, use 100dvh
-        height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+        // When closed, use 100dvh minus nav bar height (80px)
+        height: viewportHeight ? `${viewportHeight}px` : 'calc(100dvh - 80px)',
         // Prevent iOS from scrolling the page behind the keyboard
         position: keyboardOpen ? 'fixed' : 'relative',
         top: 0,
@@ -798,12 +798,12 @@ export default function CoachPage() {
         <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* Input Area - at bottom of flex container */}
+      {/* Input Area - at bottom of flex container, above nav bar */}
       <div
         className="flex-shrink-0 p-4 border-t border-white/5"
         style={{
           background: "#0f0f13",
-          paddingBottom: keyboardOpen ? 8 : "max(calc(80px + 0.5rem), calc(80px + env(safe-area-inset-bottom)))",
+          paddingBottom: keyboardOpen ? 8 : "env(safe-area-inset-bottom, 8px)",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
