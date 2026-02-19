@@ -685,8 +685,8 @@ export default function CoachPage() {
         background: "#0f0f13",
         top: 0,
         // When keyboard is open, go to bottom of screen
-        // When closed, leave 80px for nav bar
-        bottom: keyboardOpen ? 0 : 80,
+        // When closed, leave space for floating nav bar (bottom-6 = 24px + ~70px nav height)
+        bottom: keyboardOpen ? 0 : 100,
         // Always prevent page scroll - only messages should scroll
         overflow: 'hidden',
       }}
