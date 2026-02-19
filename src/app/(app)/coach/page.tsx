@@ -207,6 +207,7 @@ export default function CoachPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const hasGeneratedOpeningRef = useRef(false);
+  const hasLoadedFromDBRef = useRef(false); // Track if we've loaded from DB this session
 
   // Check if user is near the bottom of the scroll area
   const isNearBottom = useCallback(() => {
@@ -520,9 +521,15 @@ export default function CoachPage() {
   // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
+    if (hasLoadedFromDBRef.current) return; // Already loaded this session
 
     const loadMessages = async () => {
+      console.log(">>> Loading messages from DB <<<");
       const dbMessages = await loadMessagesFromDB(user.id);
+      console.log(">>> Loaded", dbMessages.length, "messages from DB <<<");
+
+      // Mark as loaded from DB
+      hasLoadedFromDBRef.current = true;
 
       // Initialize tracking refs with loaded messages so save effect doesn't re-save them
       lastSavedContentRef.current.clear();
@@ -532,11 +539,35 @@ export default function CoachPage() {
 
       setMessages(dbMessages);
       setMessagesLoaded(true);
-      checkAndGenerateOpening(dbMessages);
+
+      // Only check for opening generation after loading
+      // Pass the loaded messages directly to avoid stale state
+      const today = getTodayString();
+      const lastOpenStr = localStorage.getItem(getLastOpenKey(user.id));
+
+      // If we have messages from today, don't generate a new opening
+      if (dbMessages.length > 0) {
+        const lastMessage = dbMessages[dbMessages.length - 1];
+        const lastMessageDate = getMessageDate(lastMessage);
+        if (lastMessageDate === today || lastOpenStr === today) {
+          console.log(">>> Messages exist from today, skipping opening generation <<<");
+          localStorage.setItem(getLastOpenKey(user.id), today);
+          return;
+        }
+      }
+
+      // No messages from today, check if we need to generate opening
+      if (!hasGeneratedOpeningRef.current) {
+        console.log(">>> No messages from today, generating opening <<<");
+        hasGeneratedOpeningRef.current = true;
+        lastGeneratedDateRef.current = today;
+        localStorage.setItem(getLastOpenKey(user.id), today);
+        generateAutoOpening();
+      }
     };
 
     loadMessages();
-  }, [user?.id, checkAndGenerateOpening]);
+  }, [user?.id, generateAutoOpening]);
 
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
@@ -553,90 +584,35 @@ export default function CoachPage() {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
 
-  // Also check on every render if the debug date has changed
-  // This catches in-app navigation where other hooks might not fire
+  // Reload messages when page becomes visible (for cross-device sync)
   useEffect(() => {
-    if (!user?.id || !messagesLoaded) return;
-    // Don't interrupt an active stream
-    if (isLoadingRef.current) return;
-    const currentDate = getTodayString();
-    if (lastCheckedDateRef.current !== currentDate) {
-      console.log("=== Date changed since last check, re-checking opening ===");
-      console.log("Previous date:", lastCheckedDateRef.current);
-      console.log("Current date:", currentDate);
-      lastCheckedDateRef.current = currentDate;
-      checkAndGenerateOpening(messages);
-    }
-  }); // No deps - runs on every render
-
-  // Re-check when page becomes visible or gains focus
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === "visible") {
-        console.log("=== Page became visible, re-checking opening ===");
-        // Don't do anything if we're currently streaming - it would interrupt the response
-        if (isLoadingRef.current) return;
-        if (user?.id) {
-          const dbMessages = await loadMessagesFromDB(user.id);
-          // Update tracking refs with loaded messages
-          for (const msg of dbMessages) {
-            if (!lastSavedContentRef.current.has(msg.id)) {
-              lastSavedContentRef.current.set(msg.id, msg.content);
-            }
-          }
-          setMessages(dbMessages);
-          checkAndGenerateOpening(dbMessages);
-        }
-      }
-    };
-
-    const handleFocus = async () => {
-      console.log("=== Window focused, re-checking opening ===");
-      // Don't do anything if we're currently streaming - it would interrupt the response
+    const reloadMessages = async () => {
+      if (!user?.id) return;
+      // Don't reload if currently streaming
       if (isLoadingRef.current) return;
-      if (user?.id) {
-        const dbMessages = await loadMessagesFromDB(user.id);
-        // Update tracking refs with loaded messages
-        for (const msg of dbMessages) {
-          if (!lastSavedContentRef.current.has(msg.id)) {
-            lastSavedContentRef.current.set(msg.id, msg.content);
-          }
+
+      console.log(">>> Reloading messages from DB <<<");
+      const dbMessages = await loadMessagesFromDB(user.id);
+
+      // Update tracking refs with loaded messages
+      for (const msg of dbMessages) {
+        if (!lastSavedContentRef.current.has(msg.id)) {
+          lastSavedContentRef.current.set(msg.id, msg.content);
         }
-        setMessages(dbMessages);
-        checkAndGenerateOpening(dbMessages);
       }
+
+      setMessages(dbMessages);
     };
 
-    // pageshow fires when navigating back to a page (including bfcache)
-    const handlePageShow = async (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        console.log("=== Page restored from cache, re-checking opening ===");
-        // Don't do anything if we're currently streaming - it would interrupt the response
-        if (isLoadingRef.current) return;
-        if (user?.id) {
-          const dbMessages = await loadMessagesFromDB(user.id);
-          // Update tracking refs with loaded messages
-          for (const msg of dbMessages) {
-            if (!lastSavedContentRef.current.has(msg.id)) {
-              lastSavedContentRef.current.set(msg.id, msg.content);
-            }
-          }
-          setMessages(dbMessages);
-          checkAndGenerateOpening(dbMessages);
-        }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        reloadMessages();
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("pageshow", handlePageShow);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("pageshow", handlePageShow);
-    };
-  }, [user?.id, checkAndGenerateOpening, messages, messagesLoaded]);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [user?.id]);
 
   // Track messages that need to be saved to DB
   const pendingSaveRef = useRef<Set<string>>(new Set());
@@ -749,6 +725,7 @@ export default function CoachPage() {
     // Reset tracking refs
     lastSavedContentRef.current.clear();
     pendingSaveRef.current.clear();
+    hasLoadedFromDBRef.current = false;
 
     // Reset local state
     setMessages([]);
@@ -776,6 +753,7 @@ export default function CoachPage() {
     // Reset tracking refs
     lastSavedContentRef.current.clear();
     pendingSaveRef.current.clear();
+    hasLoadedFromDBRef.current = false;
 
     // Reset onboarding and memories via API
     try {
