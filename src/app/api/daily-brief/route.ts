@@ -107,35 +107,56 @@ export async function POST(request: Request) {
   const daysPerWeek = parseInt(memoryMap.days_per_week || '4');
 
   // Determine the suggested next workout based on split pattern
-  let suggestedWorkout = 'Training';
-  const lastWorkoutType = lastWorkout?.exercises?.[0]?.name?.toLowerCase() || '';
+  let suggestedWorkout = 'Training Day';
 
   // Detect workout type from exercise names
   const detectWorkoutType = (exercises: { name: string }[]): string => {
     const names = exercises.map(e => e.name.toLowerCase()).join(' ');
-    if (names.includes('bench') || names.includes('chest') || names.includes('push')) return 'push';
-    if (names.includes('row') || names.includes('pull') || names.includes('lat') || names.includes('back')) return 'pull';
-    if (names.includes('squat') || names.includes('leg') || names.includes('deadlift')) return 'legs';
-    if (names.includes('shoulder') || names.includes('delt')) return 'shoulders';
-    if (names.includes('arm') || names.includes('bicep') || names.includes('tricep')) return 'arms';
-    return 'full body';
+    if (names.includes('bench') || names.includes('chest') || names.includes('fly') || names.includes('push')) return 'chest';
+    if (names.includes('row') || names.includes('lat') || names.includes('pulldown') || names.includes('pull-up') || names.includes('pullup')) return 'back';
+    if (names.includes('squat') || names.includes('leg') || names.includes('lunge') || names.includes('calf')) return 'legs';
+    if (names.includes('shoulder') || names.includes('delt') || names.includes('lateral raise') || names.includes('ohp')) return 'shoulders';
+    if (names.includes('curl') || names.includes('bicep') || names.includes('tricep') || names.includes('arm') || names.includes('pushdown')) return 'arms';
+    if (names.includes('deadlift') || names.includes('rdl')) return 'back'; // Deadlifts often on back day
+    return 'unknown';
   };
 
+  // Detect last workout type
+  const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'unknown';
+
   // Suggest next workout based on split
-  if (trainingSplit.toLowerCase().includes('push') || trainingSplit.toLowerCase().includes('ppl')) {
-    const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'legs';
-    if (lastType === 'push') suggestedWorkout = 'Pull Day';
-    else if (lastType === 'pull') suggestedWorkout = 'Leg Day';
+  const splitLower = trainingSplit.toLowerCase();
+
+  if (splitLower.includes('push') || splitLower.includes('ppl')) {
+    // Push/Pull/Legs rotation
+    if (lastType === 'chest' || lastType === 'shoulders') suggestedWorkout = 'Pull Day';
+    else if (lastType === 'back') suggestedWorkout = 'Leg Day';
+    else if (lastType === 'legs') suggestedWorkout = 'Push Day';
     else suggestedWorkout = 'Push Day';
-  } else if (trainingSplit.toLowerCase().includes('upper') || trainingSplit.toLowerCase().includes('lower')) {
-    const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'lower';
-    suggestedWorkout = lastType.includes('leg') || lastType.includes('lower') ? 'Upper Body' : 'Lower Body';
-  } else if (trainingSplit.toLowerCase().includes('bro') || trainingSplit.toLowerCase().includes('body part')) {
-    // Body part split - suggest based on what they haven't hit recently
-    suggestedWorkout = 'Training Day';
+  } else if (splitLower.includes('upper') || splitLower.includes('lower')) {
+    // Upper/Lower rotation
+    suggestedWorkout = (lastType === 'legs') ? 'Upper Body' : 'Lower Body';
   } else {
-    suggestedWorkout = 'Training Day';
+    // Body part split or unknown - suggest based on last workout type
+    // Common body part rotation: Chest → Back → Shoulders → Arms → Legs
+    if (lastType === 'chest') suggestedWorkout = 'Back Day';
+    else if (lastType === 'back') suggestedWorkout = 'Shoulder Day';
+    else if (lastType === 'shoulders') suggestedWorkout = 'Arm Day';
+    else if (lastType === 'arms') suggestedWorkout = 'Leg Day';
+    else if (lastType === 'legs') suggestedWorkout = 'Chest Day';
+    else suggestedWorkout = 'Training Day';
   }
+
+  // Log for debugging
+  console.log('[daily-brief] Debug:', {
+    trainingSplit,
+    lastType,
+    suggestedWorkout,
+    daysPerWeek,
+    workoutsThisWeek,
+    workedOutToday,
+    lastWorkoutDate: lastWorkout?.date,
+  });
 
   // Determine if today should be a rest day
   // Rest day if: already worked out today, OR hit weekly goal, OR need recovery (3+ consecutive days)
@@ -160,6 +181,17 @@ export async function POST(request: Request) {
   const needsRecovery = consecutiveWorkoutDays >= 3;
   const hitWeeklyGoal = workoutsThisWeek >= daysPerWeek;
   const isRestDay = workedOutToday || hitWeeklyGoal || needsRecovery;
+
+  // More detailed logging
+  console.log('[daily-brief] Rest day check:', {
+    workedOutToday,
+    hitWeeklyGoal,
+    needsRecovery,
+    consecutiveWorkoutDays,
+    isRestDay,
+    todayStr,
+    recentWorkoutDates: recentWorkouts.map(w => w.date),
+  });
 
   // Find best recent performance for a "beat this" target
   let targetExercise = '';
