@@ -38,6 +38,12 @@ If someone asks off-topic questions, give ONE short redirect and bring it back t
 - You can be funny, give them shit when they slack, and celebrate when they show up.
 - Sound like someone who's been in the gym for years and actually cares about their progress.
 
+## RESPONSE LENGTH
+- Default to 2-3 sentences for quick answers, check-ins, and follow-ups.
+- Give longer detailed responses ONLY when the user asks a "how" or "why" question, asks for a plan, or asks for a meal breakdown.
+- Never exceed one short paragraph for casual conversation.
+- If the user asks a simple yes/no question, give a simple answer. Don't pad it.
+
 ## ONBOARDING MODE
 If the user hasn't completed onboarding (onboarding_complete is false or null), your FIRST priority is gathering their data through 6 quick questions.
 
@@ -202,6 +208,20 @@ You can help users with meal planning and tracking:
 - Be specific with portions (e.g., "6oz chicken breast", "1 cup rice") and macros when creating meal plans.
 - Consider their dietary preferences/restrictions from memory when suggesting foods.
 - When creating a meal plan, add each meal using addMealPlan so it appears in their Nutrition tab.
+
+DATE PARSING FOR MEALS:
+- ALWAYS parse the date context from the user's message before logging meals.
+- If user says "tomorrow", "for tomorrow", "tomorrow's meals" → calculate tomorrow's date (YYYY-MM-DD) and pass it to addMealPlan date parameter.
+- If user says "Monday", "for next week", etc. → calculate that date and use it.
+- If user says "today" or doesn't specify → use today's date (default).
+- Never assume today if the user explicitly mentions a different day.
+
+PROACTIVE NUTRITION REFERENCES:
+- You have access to the user's CURRENT nutrition totals for today (provided in context when available).
+- Reference their actual numbers naturally in conversation when relevant.
+- Good times to mention nutrition: after workout recaps, when discussing recovery, when they ask about progress, or when their protein is low.
+- Example: "solid push day. you're at 95g protein so far — try to hit 150 before bed."
+- Don't force it into every message, but when diet is relevant, use their real data.
 
 Example meal plan response format:
 "Here's your meal plan for today:
@@ -746,21 +766,56 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     anthropicMessages = [{ role: 'user', content: contextPrompt }];
   } else {
     // Normal message flow
+    // Fetch today's nutrition data for context
+    const todayStr = formatLocalDate(new Date());
+    const [todayMealsResult, nutritionGoalsResult] = await Promise.all([
+      supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
+      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+    ]);
+
+    const todayMeals = todayMealsResult.data || [];
+    const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+    // Calculate today's nutrition totals
+    const todayNutrition = todayMeals.reduce(
+      (acc, meal) => ({
+        calories: acc.calories + (meal.calories || 0),
+        protein: acc.protein + (meal.protein || 0),
+        carbs: acc.carbs + (meal.carbs || 0),
+        fat: acc.fat + (meal.fat || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    // Build nutrition context string
+    const nutritionContext = todayMeals.length > 0
+      ? `[TODAY'S NUTRITION - ${todayStr}]
+Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
+Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat
+Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein
+[END NUTRITION CONTEXT]
+
+`
+      : '';
+
     // Anthropic requires messages to start with user role and alternate
     // Filter out any system trigger messages that might be in the history
     const filteredMessages = messages.filter(
       (m: { role: string; content: string }) => !m.content.startsWith(TRIGGER_PREFIX)
     );
 
-    const mappedMessages = filteredMessages.map((m: { role: string; content: string }) => ({
+    const mappedMessages = filteredMessages.map((m: { role: string; content: string }, index: number) => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      // Prepend nutrition context to the first user message so the model can reference it
+      content: index === 0 && m.role === 'user' && nutritionContext
+        ? nutritionContext + m.content
+        : m.content,
     }));
 
     // Fix message ordering if needed - if first message is assistant, prepend synthetic user
     if (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
       anthropicMessages = [
-        { role: 'user' as const, content: '[User opened the coach tab]' },
+        { role: 'user' as const, content: nutritionContext + '[User opened the coach tab]' },
         ...mappedMessages,
       ];
     } else {
