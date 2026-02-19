@@ -117,8 +117,10 @@ export default function StatsPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Collapsed sections
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  // Collapsed sections - all collapsed by default
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(["Chest", "Back", "Shoulders", "Legs", "Arms", "Core", "Other"])
+  );
 
   // Body weight tracking
   const [weighIns, setWeighIns] = useState<{ date: string; weight: number }[]>([]);
