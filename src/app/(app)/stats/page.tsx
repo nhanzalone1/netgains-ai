@@ -860,7 +860,6 @@ export default function StatsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search exercises..."
                     className="w-full bg-background/50 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-                    autoFocus
                   />
                   {searchQuery && (
                     <button
