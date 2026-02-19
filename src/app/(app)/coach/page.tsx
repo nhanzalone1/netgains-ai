@@ -521,15 +521,11 @@ export default function CoachPage() {
   // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
-    if (hasLoadedFromDBRef.current) return; // Already loaded this session
 
     const loadMessages = async () => {
       console.log(">>> Loading messages from DB <<<");
       const dbMessages = await loadMessagesFromDB(user.id);
       console.log(">>> Loaded", dbMessages.length, "messages from DB <<<");
-
-      // Mark as loaded from DB
-      hasLoadedFromDBRef.current = true;
 
       // Initialize tracking refs with loaded messages so save effect doesn't re-save them
       lastSavedContentRef.current.clear();
@@ -540,30 +536,33 @@ export default function CoachPage() {
       setMessages(dbMessages);
       setMessagesLoaded(true);
 
-      // Only check for opening generation after loading
-      // Pass the loaded messages directly to avoid stale state
+      // Check if we should generate an opening
       const today = getTodayString();
       const lastOpenStr = localStorage.getItem(getLastOpenKey(user.id));
 
-      // If we have messages from today, don't generate a new opening
+      // If we have ANY messages, just show them - don't generate new opening
+      // This ensures messages persist across tab switches
       if (dbMessages.length > 0) {
+        console.log(">>> Messages exist in DB, showing them <<<");
+        // Update localStorage to mark today as opened if we have messages from today
         const lastMessage = dbMessages[dbMessages.length - 1];
         const lastMessageDate = getMessageDate(lastMessage);
-        if (lastMessageDate === today || lastOpenStr === today) {
-          console.log(">>> Messages exist from today, skipping opening generation <<<");
+        if (lastMessageDate === today) {
           localStorage.setItem(getLastOpenKey(user.id), today);
-          return;
         }
+        return;
       }
 
-      // No messages from today, check if we need to generate opening
-      if (!hasGeneratedOpeningRef.current) {
-        console.log(">>> No messages from today, generating opening <<<");
-        hasGeneratedOpeningRef.current = true;
-        lastGeneratedDateRef.current = today;
-        localStorage.setItem(getLastOpenKey(user.id), today);
-        generateAutoOpening();
+      // No messages at all - check if we already generated today via localStorage
+      if (lastOpenStr === today) {
+        console.log(">>> Already opened today per localStorage, skipping <<<");
+        return;
       }
+
+      // No messages and haven't opened today - generate opening
+      console.log(">>> No messages, generating opening <<<");
+      localStorage.setItem(getLastOpenKey(user.id), today);
+      generateAutoOpening();
     };
 
     loadMessages();
