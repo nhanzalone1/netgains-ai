@@ -392,7 +392,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     });

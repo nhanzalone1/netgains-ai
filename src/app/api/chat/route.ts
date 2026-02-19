@@ -150,6 +150,21 @@ After completing onboarding AND delivering your first coaching response, check i
 
 This tour message should appear ONCE, immediately after onboarding completes. Never show it again.
 
+## BETA WELCOME (one-time only, after app tour)
+After showing the app tour, check if beta_welcome_shown is false or null in the user profile. If so:
+1. Call updateUserProfile with beta_welcome_shown: true
+2. Add a final message that covers:
+   - You've got everything you need to personalize their training and nutrition
+   - This is early access / beta, so they might hit a bug or two
+   - If something feels off, let Noah know
+   - There's a limit of 15 coach messages per day right now
+   - End with something like "let's get to work"
+
+Keep it casual, one paragraph, coach voice. Example:
+"alright, i've got everything i need. i'll use all of this plus anything you tell me going forward to personalize your training and nutrition. heads up — this is still early access so you might hit a bug or two. if something feels off just let Noah know. also there's a limit of 15 coach messages per day right now. let's get to work."
+
+This message should appear ONCE, immediately after the app tour. Never show it again.
+
 IMPORTANT: You MUST always include a text response after completing the tool calls. Never end your turn with only tool calls and no text.
 
 ## COACHING MODE
@@ -214,7 +229,7 @@ Never sound like a chatbot. No "certainly" or "absolutely" or "I understand." Ju
 const tools: Anthropic.Tool[] = [
   {
     name: 'getUserProfile',
-    description: 'Get the current user profile including height, weight, goal, onboarding status, and app_tour_shown',
+    description: 'Get the current user profile including height, weight, goal, onboarding status, app_tour_shown, and beta_welcome_shown',
     input_schema: {
       type: 'object',
       properties: {},
@@ -223,7 +238,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'updateUserProfile',
-    description: 'Update user profile with height, weight, goal, coaching_mode, onboarding status, and/or app_tour_shown',
+    description: 'Update user profile with height, weight, goal, coaching_mode, onboarding status, app_tour_shown, and/or beta_welcome_shown',
     input_schema: {
       type: 'object',
       properties: {
@@ -233,6 +248,7 @@ const tools: Anthropic.Tool[] = [
         coaching_mode: { type: 'string', enum: ['full', 'assist'], description: 'Coaching mode: full = coach builds program, assist = user has own program' },
         onboarding_complete: { type: 'boolean', description: 'Whether onboarding is finished' },
         app_tour_shown: { type: 'boolean', description: 'Whether the one-time app tour message has been shown' },
+        beta_welcome_shown: { type: 'boolean', description: 'Whether the one-time beta welcome message has been shown' },
       },
       required: [],
     },
@@ -344,6 +360,9 @@ const tools: Anthropic.Tool[] = [
 // Prefix used by the client to signal a system trigger (hidden from UI)
 const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
 
+// Daily message limit
+const DAILY_MESSAGE_LIMIT = 15;
+
 export async function POST(req: Request) {
   const { messages, currentWorkout } = await req.json();
 
@@ -353,6 +372,57 @@ export async function POST(req: Request) {
 
   if (authError || !user) {
     return new Response('Unauthorized', { status: 401 });
+  }
+
+  // Check daily message limit (skip for system triggers)
+  const isSystemTriggerCheck = messages.length === 1 &&
+    messages[0].role === 'user' &&
+    messages[0].content.startsWith('[SYSTEM_TRIGGER]');
+
+  if (!isSystemTriggerCheck) {
+    const today = formatLocalDate(new Date());
+    const countKey = `message_count_${today}`;
+
+    // Get current count
+    const { data: countData } = await supabase
+      .from('coach_memory')
+      .select('value')
+      .eq('user_id', user.id)
+      .eq('key', countKey)
+      .single();
+
+    const currentCount = countData ? parseInt(countData.value) : 0;
+
+    if (currentCount >= DAILY_MESSAGE_LIMIT) {
+      // Return limit reached message
+      const encoder = new TextEncoder();
+      const limitMessage = "coach is done for the day — go crush your workout and i'll be back tomorrow. resets at midnight.";
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(`0:${JSON.stringify(limitMessage)}\n`));
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Transfer-Encoding': 'chunked',
+        },
+      });
+    }
+
+    // Increment count
+    if (countData) {
+      await supabase
+        .from('coach_memory')
+        .update({ value: String(currentCount + 1) })
+        .eq('user_id', user.id)
+        .eq('key', countKey);
+    } else {
+      await supabase
+        .from('coach_memory')
+        .insert({ user_id: user.id, key: countKey, value: '1' });
+    }
   }
 
   const anthropic = new Anthropic();
@@ -705,7 +775,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
       case 'getUserProfile': {
         const { data, error } = await supabase
           .from('profiles')
-          .select('height_inches, weight_lbs, goal, coaching_mode, onboarding_complete, app_tour_shown, created_at')
+          .select('height_inches, weight_lbs, goal, coaching_mode, onboarding_complete, app_tour_shown, beta_welcome_shown, created_at')
           .eq('id', user.id)
           .single();
         if (error) return JSON.stringify({ error: error.message });
@@ -719,6 +789,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
         if (input.coaching_mode !== undefined) updateData.coaching_mode = input.coaching_mode;
         if (input.onboarding_complete !== undefined) updateData.onboarding_complete = input.onboarding_complete;
         if (input.app_tour_shown !== undefined) updateData.app_tour_shown = input.app_tour_shown;
+        if (input.beta_welcome_shown !== undefined) updateData.beta_welcome_shown = input.beta_welcome_shown;
 
         const { error } = await supabase
           .from('profiles')
