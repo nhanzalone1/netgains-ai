@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import {
   ChevronLeft,
-  ChevronDown,
   Plus,
   X,
   MoreHorizontal,
@@ -12,8 +11,6 @@ import {
   TrendingDown,
   Move,
   Trash2,
-  Pencil,
-  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -89,7 +86,6 @@ export function WorkoutSession({
 
   // Library exercises (from exercise_templates)
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
-  const [loadingLibrary, setLoadingLibrary] = useState(true);
 
   // All user's historical exercises for autocomplete
   const [allUserExercises, setAllUserExercises] = useState<{ name: string; equipment: string }[]>([]);
@@ -141,16 +137,8 @@ export function WorkoutSession({
   // Clear confirmation modal
   const [showClearModal, setShowClearModal] = useState(false);
 
-  // Library collapsed state
-  const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
-
-  // Edit mode for library
-  const [isEditingLibrary, setIsEditingLibrary] = useState(false);
-  const [editingExercise, setEditingExercise] = useState<ExerciseTemplate | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editEquipment, setEditEquipment] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Exercise picker modal state
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
 
   // Progressive overload - best sets per exercise (keyed by templateId AND name for redundancy)
   const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
@@ -194,7 +182,6 @@ export function WorkoutSession({
   }, [folderId]);
 
   const loadLibrary = async () => {
-    setLoadingLibrary(true);
     const { data } = await supabase
       .from("exercise_templates")
       .select("*")
@@ -202,7 +189,6 @@ export function WorkoutSession({
       .order("order_index", { ascending: true });
 
     setLibraryExercises((data || []) as ExerciseTemplate[]);
-    setLoadingLibrary(false);
   };
 
   // Load all user's exercise names for autocomplete
@@ -635,94 +621,6 @@ export function WorkoutSession({
     return EQUIPMENT_COLORS[equipment] || EQUIPMENT_COLORS.barbell;
   };
 
-  // Open edit modal for an exercise
-  const openEditModal = (exercise: ExerciseTemplate) => {
-    setEditingExercise(exercise);
-    setEditName(exercise.name);
-    setEditEquipment(exercise.equipment);
-  };
-
-  // Close edit modal
-  const closeEditModal = () => {
-    setEditingExercise(null);
-    setEditName("");
-    setEditEquipment("");
-    setShowDeleteConfirm(false);
-  };
-
-  // Save edited exercise
-  const handleUpdateExercise = async () => {
-    if (!editingExercise || !editName.trim()) return;
-
-    setSavingEdit(true);
-
-    const { error } = await supabase
-      .from("exercise_templates")
-      .update({
-        name: editName.trim(),
-        equipment: editEquipment,
-      })
-      .eq("id", editingExercise.id)
-      .eq("user_id", userId);
-
-    setSavingEdit(false);
-
-    if (error) {
-      console.error("Failed to update exercise:", error);
-      alert(`Failed to update exercise: ${error.message}`);
-      return;
-    }
-
-    // Update local state
-    setLibraryExercises((prev) =>
-      prev.map((ex) =>
-        ex.id === editingExercise.id
-          ? { ...ex, name: editName.trim(), equipment: editEquipment }
-          : ex
-      )
-    );
-
-    closeEditModal();
-  };
-
-  // Delete exercise permanently
-  const handleDeleteExercise = async () => {
-    if (!editingExercise) return;
-
-    setSavingEdit(true);
-
-    const { error } = await supabase
-      .from("exercise_templates")
-      .delete()
-      .eq("id", editingExercise.id)
-      .eq("user_id", userId);
-
-    setSavingEdit(false);
-
-    if (error) {
-      console.error("Failed to delete exercise:", error);
-      alert(`Failed to delete exercise: ${error.message}`);
-      return;
-    }
-
-    // Update local state
-    setLibraryExercises((prev) =>
-      prev.filter((ex) => ex.id !== editingExercise.id)
-    );
-
-    closeEditModal();
-  };
-
-  // Handle library chip click (check for edit mode or superset mode)
-  const handleLibraryChipClick = (template: ExerciseTemplate) => {
-    if (isEditingLibrary) {
-      openEditModal(template);
-    } else if (supersetForExerciseId) {
-      addExerciseForSuperset(template);
-    } else {
-      addExerciseFromLibrary(template);
-    }
-  };
 
   return (
     <div className="flex flex-col min-h-screen pb-72">
@@ -1066,7 +964,7 @@ export function WorkoutSession({
 
       {/* Finish Button */}
       {activeExercises.length > 0 && (
-        <div className={`fixed left-0 right-0 z-50 px-4 ${isLibraryCollapsed ? "bottom-36" : "bottom-72"}`}>
+        <div className="fixed left-0 right-0 z-50 px-4 bottom-44">
           <div className="max-w-lg mx-auto">
             <Button onClick={handleFinish} loading={saving}>
               Finish & Save
@@ -1081,134 +979,43 @@ export function WorkoutSession({
         style={{ background: "#0f0f13" }}
       />
 
-      {/* Exercise Library */}
+      {/* Exercise Library Button */}
       <div
         className="fixed bottom-24 left-0 right-0 z-40"
         style={{
           background: "#0f0f13",
           borderTop: "1px solid rgba(255, 255, 255, 0.05)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
         }}
       >
-        <div className="max-w-lg mx-auto px-4 py-3">
-          <div
-            className="flex items-center justify-between cursor-pointer"
-            onClick={() => !supersetForExerciseId && setIsLibraryCollapsed(!isLibraryCollapsed)}
+        <div className="max-w-lg mx-auto px-4 py-4">
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowExercisePicker(true)}
+            className="w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wide flex items-center justify-center gap-2"
+            style={{
+              background: `rgba(${theme.primaryRgb}, 0.15)`,
+              border: `1px solid rgba(${theme.primaryRgb}, 0.3)`,
+              color: theme.primary,
+            }}
           >
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-              {supersetForExerciseId ? (
-                <span className="text-purple-400">Select Superset Exercise</span>
-              ) : (
-                <>
-                  Exercise Library
-                  <ChevronDown
-                    className={`w-3 h-3 transition-transform ${isLibraryCollapsed ? "-rotate-90" : ""}`}
-                  />
-                </>
-              )}
-            </h4>
-            {!supersetForExerciseId && libraryExercises.length > 0 && (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditingLibrary(!isEditingLibrary);
-                }}
-                className="text-xs font-semibold uppercase tracking-wide px-2 py-1"
-                style={{ color: isEditingLibrary ? "#22c55e" : theme.primary }}
-              >
-                {isEditingLibrary ? "Done" : "Edit"}
-              </motion.button>
-            )}
-          </div>
-
-          {!isLibraryCollapsed && (
-            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto mt-3">
-              {/* New Exercise Chip */}
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowNewExercise(true)}
-                className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5"
-                style={{
-                  background: supersetForExerciseId
-                    ? "rgba(168, 85, 247, 0.15)"
-                    : `rgba(${theme.primaryRgb}, 0.15)`,
-                  border: supersetForExerciseId
-                    ? "1px solid rgba(168, 85, 247, 0.3)"
-                    : `1px solid rgba(${theme.primaryRgb}, 0.3)`,
-                  color: supersetForExerciseId ? "#a855f7" : theme.primary,
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                New
-              </motion.button>
-
-              {/* Cancel Superset Button */}
-              {supersetForExerciseId && (
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSupersetForExerciseId(null)}
-                  className="px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-1.5 bg-muted/30 text-muted-foreground"
-                >
-                  <X className="w-4 h-4" />
-                  Cancel
-                </motion.button>
-              )}
-
-              {/* Library Exercise Chips */}
-              {loadingLibrary ? (
-                <span className="text-sm text-muted-foreground px-4 py-2">
-                  Loading...
-                </span>
-              ) : (
-                libraryExercises.map((exercise) => {
-                  const chipStyle = getEquipmentStyle(exercise.equipment);
-                  return (
-                    <motion.button
-                      key={exercise.id}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleLibraryChipClick(exercise)}
-                      className="px-3 py-2 rounded-full text-sm font-medium flex items-center gap-1.5"
-                      style={{
-                        background: isEditingLibrary
-                          ? "rgba(255, 71, 87, 0.08)"
-                          : supersetForExerciseId
-                          ? "rgba(168, 85, 247, 0.1)"
-                          : "rgba(26, 26, 36, 0.8)",
-                        border: isEditingLibrary
-                          ? "1px dashed rgba(255, 71, 87, 0.5)"
-                          : supersetForExerciseId
-                          ? "1px solid rgba(168, 85, 247, 0.3)"
-                          : "1px solid rgba(255, 255, 255, 0.1)",
-                      }}
-                    >
-                      {isEditingLibrary && (
-                        <Pencil className="w-3 h-3 text-red-400" />
-                      )}
-                      <span>{exercise.name}</span>
-                      <span
-                        className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
-                        style={{
-                          background: chipStyle.bg,
-                          color: chipStyle.text,
-                        }}
-                      >
-                        {formatEquipment(exercise.equipment).slice(0, 2)}
-                      </span>
-                    </motion.button>
-                  );
-                })
-              )}
-
-              {!loadingLibrary && libraryExercises.length === 0 && (
-                <span className="text-sm text-muted-foreground">
-                  Tap &quot;+ New&quot; to add your first exercise
-                </span>
-              )}
-            </div>
-          )}
+            <Plus className="w-5 h-5" />
+            Add Exercise
+          </motion.button>
         </div>
       </div>
+
+      {/* Main Exercise Picker Modal */}
+      <ExercisePickerModal
+        open={showExercisePicker}
+        onClose={() => setShowExercisePicker(false)}
+        onSelect={(template) => {
+          addExerciseFromLibrary(template);
+          setShowExercisePicker(false);
+        }}
+        onCreateNew={handleSupersetCreateNew}
+        userId={userId}
+        folderId={folderId}
+      />
 
       {/* New Exercise Modal */}
       <NewExerciseModal
@@ -1298,133 +1105,6 @@ export function WorkoutSession({
         )}
       </AnimatePresence>
 
-      {/* Edit Exercise Modal */}
-      <AnimatePresence>
-        {editingExercise && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-            onClick={closeEditModal}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl p-6"
-              style={{
-                background: "#1a1a24",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-              }}
-            >
-              {showDeleteConfirm ? (
-                <>
-                  {/* Delete Confirmation View */}
-                  <div className="flex justify-center mb-4">
-                    <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center"
-                      style={{ background: "rgba(239, 68, 68, 0.15)" }}
-                    >
-                      <AlertTriangle className="w-8 h-8 text-red-500" />
-                    </div>
-                  </div>
-
-                  <h2 className="text-xl font-bold text-center text-white mb-2">
-                    Delete Exercise?
-                  </h2>
-
-                  <p className="text-sm text-gray-400 text-center mb-6">
-                    This will permanently delete "{editingExercise.name}" and remove it from your workout history. This action cannot be undone.
-                  </p>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="flex-1 py-3 rounded-xl font-semibold text-white transition-colors"
-                      style={{ background: "rgba(55, 55, 65, 0.8)" }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleDeleteExercise}
-                      disabled={savingEdit}
-                      className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                    >
-                      {savingEdit ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Edit Form View */}
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-white">Edit Exercise</h2>
-                    <motion.button
-                      whileTap={{ scale: 0.9 }}
-                      onClick={closeEditModal}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"
-                    >
-                      <X className="w-5 h-5" />
-                    </motion.button>
-                  </div>
-
-                  {/* Name Input */}
-                  <div className="mb-4">
-                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-                      placeholder="Exercise name"
-                    />
-                  </div>
-
-                  {/* Equipment Select */}
-                  <div className="mb-6">
-                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Equipment
-                    </label>
-                    <select
-                      value={editEquipment}
-                      onChange={(e) => setEditEquipment(e.target.value)}
-                      className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] appearance-none cursor-pointer"
-                    >
-                      <option value="barbell">Barbell</option>
-                      <option value="dumbbell">Dumbbell</option>
-                      <option value="cable">Cable</option>
-                      <option value="machine">Machine</option>
-                      <option value="smith">Smith</option>
-                    </select>
-                  </div>
-
-                  {/* Update Button */}
-                  <Button
-                    onClick={handleUpdateExercise}
-                    loading={savingEdit}
-                    disabled={!editName.trim()}
-                    className="mb-4"
-                  >
-                    Update
-                  </Button>
-
-                  {/* Delete Button */}
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="w-full py-3 rounded-xl font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
-                  >
-                    Delete Permanently
-                  </button>
-                </>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
