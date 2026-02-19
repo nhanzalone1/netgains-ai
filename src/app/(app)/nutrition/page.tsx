@@ -215,6 +215,16 @@ export default function NutritionPage() {
   const [editFat, setEditFat] = useState("");
   const [savingGoals, setSavingGoals] = useState(false);
 
+  // Edit meal modal
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [editMealName, setEditMealName] = useState("");
+  const [editMealCalories, setEditMealCalories] = useState("");
+  const [editMealProtein, setEditMealProtein] = useState("");
+  const [editMealCarbs, setEditMealCarbs] = useState("");
+  const [editMealFat, setEditMealFat] = useState("");
+  const [editMealServing, setEditMealServing] = useState("");
+  const [savingMealEdit, setSavingMealEdit] = useState(false);
+
 
   // Always start on today's date when page loads
   useEffect(() => {
@@ -533,6 +543,50 @@ export default function NutritionPage() {
     setShowGoalsEditor(true);
   };
 
+  const openEditMeal = (meal: Meal) => {
+    setEditingMeal(meal);
+    setEditMealName(meal.food_name);
+    setEditMealCalories(meal.calories.toString());
+    setEditMealProtein(meal.protein.toString());
+    setEditMealCarbs(meal.carbs.toString());
+    setEditMealFat(meal.fat.toString());
+    setEditMealServing(meal.serving_size || "");
+  };
+
+  const handleUpdateMeal = async () => {
+    if (!editingMeal || !editMealName.trim()) return;
+
+    setSavingMealEdit(true);
+
+    const updatedMeal = {
+      food_name: editMealName.trim(),
+      calories: parseInt(editMealCalories) || 0,
+      protein: parseInt(editMealProtein) || 0,
+      carbs: parseInt(editMealCarbs) || 0,
+      fat: parseInt(editMealFat) || 0,
+      serving_size: editMealServing.trim() || null,
+    };
+
+    const { error } = await supabase
+      .from("meals")
+      .update(updatedMeal)
+      .eq("id", editingMeal.id);
+
+    if (!error) {
+      // Update local state immediately
+      setMeals((prev) =>
+        prev.map((m) =>
+          m.id === editingMeal.id ? { ...m, ...updatedMeal } : m
+        )
+      );
+      setEditingMeal(null);
+      loadWeekData();
+      loadRecentFoods();
+    }
+
+    setSavingMealEdit(false);
+  };
+
   const handleSaveGoals = async () => {
     if (!user) return;
 
@@ -716,8 +770,11 @@ export default function NutritionPage() {
                   <span className="text-[10px]">{formatTime(meal.created_at)}</span>
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
+                {/* Info - Tappable to edit */}
+                <button
+                  onClick={() => openEditMeal(meal)}
+                  className="flex-1 min-w-0 text-left"
+                >
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{getMealLabel(meal, index)}</span>
                     {meal.ai_generated && !meal.consumed && (
@@ -730,7 +787,7 @@ export default function NutritionPage() {
                   <p className="text-[11px] text-muted-foreground">
                     {meal.calories} cal • {meal.protein}g P • {meal.carbs}g C • {meal.fat}g F
                   </p>
-                </div>
+                </button>
 
                 {/* Actions */}
                 <div className="flex items-center gap-1">
@@ -952,6 +1009,87 @@ export default function NutritionPage() {
 
           <Button onClick={handleSaveGoals} loading={savingGoals}>
             Save Goals
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Edit Meal Modal */}
+      <Modal open={!!editingMeal} onClose={() => setEditingMeal(null)} title="Edit Food">
+        <div className="space-y-4">
+          {/* Food Name */}
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-1">Name</label>
+            <input
+              type="text"
+              value={editMealName}
+              onChange={(e) => setEditMealName(e.target.value)}
+              placeholder="Food name"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              autoFocus
+            />
+          </div>
+
+          {/* Macros Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Calories</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editMealCalories}
+                onChange={(e) => setEditMealCalories(e.target.value)}
+                placeholder="0"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Protein (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editMealProtein}
+                onChange={(e) => setEditMealProtein(e.target.value)}
+                placeholder="0"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Carbs (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editMealCarbs}
+                onChange={(e) => setEditMealCarbs(e.target.value)}
+                placeholder="0"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-muted-foreground uppercase mb-1">Fat (g)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={editMealFat}
+                onChange={(e) => setEditMealFat(e.target.value)}
+                placeholder="0"
+                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-1">Serving Size (optional)</label>
+            <input
+              type="text"
+              value={editMealServing}
+              onChange={(e) => setEditMealServing(e.target.value)}
+              placeholder="e.g., 6oz, 1 cup"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+            />
+          </div>
+
+          <Button onClick={handleUpdateMeal} loading={savingMealEdit} disabled={!editMealName.trim()}>
+            Save Changes
           </Button>
         </div>
       </Modal>
