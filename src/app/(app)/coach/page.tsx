@@ -142,11 +142,12 @@ export default function CoachPage() {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [inputBottom, setInputBottom] = useState(80); // Default: above nav bar
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(messages.length);
   const hasGeneratedOpeningRef = useRef(false);
   const readyToSaveRef = useRef(false); // Only save after load effect completes AND state is applied
@@ -172,64 +173,54 @@ export default function CoachPage() {
     }
   }, [isNearBottom]);
 
-  // Track keyboard visibility via Visual Viewport API for iOS
-  // iOS Safari doesn't respect position:fixed properly when keyboard is open
+  // iOS keyboard handling using Visual Viewport API
+  // Instead of using position:fixed tricks, we resize the container to match the visual viewport
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // On iOS, position:fixed elements position relative to the layout viewport,
-    // but we need them relative to the visual viewport when keyboard is open.
-    // The solution: calculate the correct bottom offset.
+    let initialHeight = window.innerHeight;
 
-    const updatePosition = () => {
+    const updateViewport = () => {
       if (!viewport) return;
 
-      // The layout viewport is the full screen (window.innerHeight)
-      // The visual viewport shrinks when keyboard opens
-      // The difference is the keyboard height + any browser chrome changes
+      const currentHeight = viewport.height;
+      const heightDiff = initialHeight - currentHeight;
 
-      const layoutHeight = window.innerHeight;
-      const visualHeight = viewport.height;
-      const visualOffsetTop = viewport.offsetTop;
+      // Keyboard is open if viewport shrunk significantly (>150px for iOS bars)
+      const isOpen = heightDiff > 150;
+      setKeyboardOpen(isOpen);
 
-      // For a fixed element at the bottom, we need to calculate
-      // how far from the layout viewport bottom the visual viewport bottom is
-      const visualBottomFromLayoutBottom = layoutHeight - (visualOffsetTop + visualHeight);
-
-      // Keyboard is open if there's a significant difference (>150px accounts for iOS Safari bars)
-      const isKeyboardOpen = visualBottomFromLayoutBottom > 150;
-
-      setKeyboardOpen(isKeyboardOpen);
-
-      if (isKeyboardOpen) {
-        // Position input at the bottom of the visual viewport
-        // This is the distance from the layout viewport bottom to the visual viewport bottom
-        setInputBottom(visualBottomFromLayoutBottom);
-
-        // Scroll chat to bottom when keyboard opens
+      if (isOpen) {
+        // Set container height to visual viewport height
+        setViewportHeight(currentHeight);
+        // Scroll to bottom when keyboard opens
         setTimeout(() => scrollToBottom(true), 50);
       } else {
-        // Keyboard closed - position above nav bar (80px)
-        setInputBottom(80);
+        // Reset to full height
+        setViewportHeight(null);
+      }
+
+      // Keep the page scrolled to top to prevent iOS from pushing it up
+      if (isOpen && pageRef.current) {
+        window.scrollTo(0, 0);
       }
     };
 
-    // Handle orientation changes
     const onOrientationChange = () => {
-      setTimeout(updatePosition, 300);
+      setTimeout(() => {
+        initialHeight = window.innerHeight;
+        updateViewport();
+      }, 300);
     };
 
-    // Initial position
-    updatePosition();
+    updateViewport();
 
-    viewport.addEventListener("resize", updatePosition);
-    viewport.addEventListener("scroll", updatePosition);
+    viewport.addEventListener("resize", updateViewport);
     window.addEventListener("orientationchange", onOrientationChange);
 
     return () => {
-      viewport.removeEventListener("resize", updatePosition);
-      viewport.removeEventListener("scroll", updatePosition);
+      viewport.removeEventListener("resize", updateViewport);
       window.removeEventListener("orientationchange", onOrientationChange);
     };
   }, [scrollToBottom]);
@@ -687,48 +678,65 @@ export default function CoachPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh]" style={{ background: "#0f0f13" }}>
-      {/* Header - sticky with safe area padding for notch/status bar */}
-      <div
-        className="sticky top-0 z-50 flex items-center justify-between p-4 border-b border-white/5"
-        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255, 71, 87, 0.15)" }}
-          >
-            <Sparkles className="w-5 h-5 text-primary" />
+    <div
+      ref={pageRef}
+      className="flex flex-col"
+      style={{
+        background: "#0f0f13",
+        // When keyboard is open, use the visual viewport height
+        // When closed, use 100dvh
+        height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+        // Prevent iOS from scrolling the page behind the keyboard
+        position: keyboardOpen ? 'fixed' : 'relative',
+        top: 0,
+        left: 0,
+        right: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header - hide when keyboard is open to maximize space */}
+      {!keyboardOpen && (
+        <div
+          className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
+          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(255, 71, 87, 0.15)" }}
+            >
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold">Coach</h1>
+              <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold">Coach</h1>
-            <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              className="p-3 rounded-lg text-muted-foreground hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              title="Refresh conversation"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+            <UserMenu />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            className="p-3 rounded-lg text-muted-foreground hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Refresh conversation"
-          >
-            <RotateCcw className="w-5 h-5" />
-          </button>
-          <UserMenu />
+      )}
+
+      {/* Daily Brief Card - hide when keyboard is open */}
+      {!keyboardOpen && (
+        <div className="flex-shrink-0 pb-2" style={{ background: "#0f0f13" }}>
+          <DailyBriefCard />
         </div>
-      </div>
+      )}
 
-      {/* Daily Brief Card - sticky below header */}
-      <div className="sticky top-[73px] z-40 pb-2" style={{ background: "#0f0f13" }}>
-        <DailyBriefCard />
-      </div>
-
-      {/* Messages Area */}
+      {/* Messages Area - takes remaining space */}
       <div
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
         style={{
-          // Add padding for input bar + nav (when closed) or just input bar (when keyboard open)
-          paddingBottom: keyboardOpen ? 80 : 160,
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain',
         }}
@@ -790,13 +798,12 @@ export default function CoachPage() {
         <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* Input Area — repositions when keyboard is open on iOS */}
+      {/* Input Area - at bottom of flex container */}
       <div
-        className="fixed left-0 right-0 z-50 p-4 border-t border-white/5"
+        className="flex-shrink-0 p-4 border-t border-white/5"
         style={{
           background: "#0f0f13",
-          bottom: inputBottom,
-          paddingBottom: keyboardOpen ? 8 : "max(0.5rem, env(safe-area-inset-bottom))",
+          paddingBottom: keyboardOpen ? 8 : "max(calc(80px + 0.5rem), calc(80px + env(safe-area-inset-bottom)))",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
