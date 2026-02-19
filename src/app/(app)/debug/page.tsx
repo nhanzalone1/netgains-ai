@@ -384,14 +384,20 @@ export default function DebugPage() {
     const rotation = splitRotation.split(",").map(s => s.trim()).filter(Boolean);
     const jsonValue = JSON.stringify(rotation);
 
-    // Upsert the split_rotation
+    // Delete existing then insert (no unique constraint exists)
+    await supabase
+      .from("coach_memory")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("key", "split_rotation");
+
     const { error } = await supabase
       .from("coach_memory")
-      .upsert({
+      .insert({
         user_id: user.id,
         key: "split_rotation",
         value: jsonValue,
-      }, { onConflict: "user_id,key" });
+      });
 
     if (error) {
       showMessage(`Error: ${error.message}`);
