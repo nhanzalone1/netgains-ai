@@ -293,6 +293,22 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
 
     const brief = JSON.parse(jsonMatch[0]);
 
+    // Debug info to help troubleshoot
+    const debugInfo = {
+      mondayStr,
+      todayStr,
+      workoutsThisWeek,
+      daysPerWeek,
+      isRestDay,
+      workedOutToday,
+      hitWeeklyGoal,
+      needsRecovery,
+      consecutiveWorkoutDays,
+      recentWorkoutDates: recentWorkouts.map(w => w.date),
+      lastType,
+      suggestedWorkout,
+    };
+
     return Response.json({
       status: 'generated',
       brief: {
@@ -302,9 +318,27 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
         nutrition: macroSummary,
       },
       generatedAt: new Date().toISOString(),
+      debug: debugInfo,
     });
   } catch (error) {
     console.error('Daily brief generation error:', error);
+
+    // Debug info for fallback too
+    const debugInfo = {
+      mondayStr,
+      todayStr,
+      workoutsThisWeek,
+      daysPerWeek,
+      isRestDay,
+      workedOutToday,
+      hitWeeklyGoal,
+      needsRecovery,
+      consecutiveWorkoutDays,
+      recentWorkoutDates: recentWorkouts.map(w => w.date),
+      lastType,
+      suggestedWorkout,
+      error: String(error),
+    };
 
     // Fallback brief
     return Response.json({
@@ -317,6 +351,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
         nutrition: macroSummary,
       },
       generatedAt: new Date().toISOString(),
+      debug: debugInfo,
     });
   }
 }
