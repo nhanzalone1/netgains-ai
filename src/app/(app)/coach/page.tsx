@@ -142,7 +142,8 @@ export default function CoachPage() {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [inputBottom, setInputBottom] = useState(80); // Default: above nav bar
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -171,47 +172,64 @@ export default function CoachPage() {
     }
   }, [isNearBottom]);
 
-  // Track keyboard visibility via Visual Viewport API
-  // This is a fallback for browsers that don't support interactiveWidget viewport meta
+  // Track keyboard visibility via Visual Viewport API for iOS
+  // iOS Safari doesn't respect position:fixed properly when keyboard is open
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // Store initial viewport height to detect keyboard
-    let initialViewportHeight = viewport.height;
-    let lastHeight = viewport.height;
+    // On iOS, position:fixed elements position relative to the layout viewport,
+    // but we need them relative to the visual viewport when keyboard is open.
+    // The solution: calculate the correct bottom offset.
 
-    const onResize = () => {
-      const currentHeight = viewport.height;
+    const updatePosition = () => {
+      if (!viewport) return;
 
-      // Detect if keyboard just opened (significant height decrease)
-      if (currentHeight < lastHeight - 100) {
-        // Keyboard opened - scroll to bottom
-        setTimeout(() => scrollToBottom(true), 100);
+      // The layout viewport is the full screen (window.innerHeight)
+      // The visual viewport shrinks when keyboard opens
+      // The difference is the keyboard height + any browser chrome changes
+
+      const layoutHeight = window.innerHeight;
+      const visualHeight = viewport.height;
+      const visualOffsetTop = viewport.offsetTop;
+
+      // For a fixed element at the bottom, we need to calculate
+      // how far from the layout viewport bottom the visual viewport bottom is
+      const visualBottomFromLayoutBottom = layoutHeight - (visualOffsetTop + visualHeight);
+
+      // Keyboard is open if there's a significant difference (>150px accounts for iOS Safari bars)
+      const isKeyboardOpen = visualBottomFromLayoutBottom > 150;
+
+      setKeyboardOpen(isKeyboardOpen);
+
+      if (isKeyboardOpen) {
+        // Position input at the bottom of the visual viewport
+        // This is the distance from the layout viewport bottom to the visual viewport bottom
+        setInputBottom(visualBottomFromLayoutBottom);
+
+        // Scroll chat to bottom when keyboard opens
+        setTimeout(() => scrollToBottom(true), 50);
+      } else {
+        // Keyboard closed - position above nav bar (80px)
+        setInputBottom(80);
       }
-
-      // Calculate keyboard height from viewport change
-      const kbHeight = initialViewportHeight - currentHeight;
-
-      // Only set if significant (> 100px to avoid false positives from address bar)
-      setKeyboardHeight(kbHeight > 100 ? kbHeight : 0);
-
-      lastHeight = currentHeight;
     };
 
-    // Update initial height when orientation changes or on first focus
+    // Handle orientation changes
     const onOrientationChange = () => {
-      setTimeout(() => {
-        initialViewportHeight = window.visualViewport?.height || window.innerHeight;
-        lastHeight = initialViewportHeight;
-      }, 300);
+      setTimeout(updatePosition, 300);
     };
 
-    viewport.addEventListener("resize", onResize);
+    // Initial position
+    updatePosition();
+
+    viewport.addEventListener("resize", updatePosition);
+    viewport.addEventListener("scroll", updatePosition);
     window.addEventListener("orientationchange", onOrientationChange);
 
     return () => {
-      viewport.removeEventListener("resize", onResize);
+      viewport.removeEventListener("resize", updatePosition);
+      viewport.removeEventListener("scroll", updatePosition);
       window.removeEventListener("orientationchange", onOrientationChange);
     };
   }, [scrollToBottom]);
@@ -709,9 +727,8 @@ export default function CoachPage() {
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
         style={{
-          // Add extra padding when keyboard is open to account for input bar
-          // When closed, 128px covers bottom nav + input bar
-          paddingBottom: keyboardHeight > 0 ? 100 : 128,
+          // Add padding for input bar + nav (when closed) or just input bar (when keyboard open)
+          paddingBottom: keyboardOpen ? 80 : 160,
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain',
         }}
@@ -773,15 +790,13 @@ export default function CoachPage() {
         <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* Input Area — repositions when keyboard is open */}
+      {/* Input Area — repositions when keyboard is open on iOS */}
       <div
-        className="fixed left-0 right-0 z-40 p-4 border-t border-white/5"
+        className="fixed left-0 right-0 z-50 p-4 border-t border-white/5"
         style={{
           background: "#0f0f13",
-          // When keyboard is open, position relative to visual viewport bottom
-          // When closed, sit above the 96px bottom nav
-          bottom: keyboardHeight > 0 ? keyboardHeight : 96,
-          paddingBottom: keyboardHeight > 0 ? "env(safe-area-inset-bottom, 8px)" : "max(1rem, env(safe-area-inset-bottom))",
+          bottom: inputBottom,
+          paddingBottom: keyboardOpen ? 8 : "max(0.5rem, env(safe-area-inset-bottom))",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
