@@ -82,11 +82,21 @@ export async function POST(request: Request) {
     }
   }
 
-  // Count workouts this week (rolling 7 days)
-  const weekAgo = new Date(effectiveDate);
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekAgoStr = weekAgo.toISOString().split('T')[0];
-  const workoutsThisWeek = recentWorkouts.filter(w => w.date >= weekAgoStr && w.date <= todayStr).length;
+  // Count workouts this week (Monday through Sunday)
+  const getMonday = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const monday = getMonday(effectiveDate);
+  const mondayStr = monday.toISOString().split('T')[0];
+  const workoutsThisWeek = recentWorkouts.filter(w => w.date >= mondayStr && w.date <= todayStr).length;
+
+  console.log('[daily-brief] Week count:', { mondayStr, todayStr, workoutsThisWeek, recentWorkoutDates: recentWorkouts.map(w => w.date) });
 
   // Check if user already worked out today
   const workedOutToday = recentWorkouts.some(w => w.date === todayStr);
