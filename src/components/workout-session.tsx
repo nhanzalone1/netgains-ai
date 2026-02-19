@@ -90,6 +90,9 @@ export function WorkoutSession({
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
   const [loadingLibrary, setLoadingLibrary] = useState(true);
 
+  // All user's historical exercises for autocomplete
+  const [allUserExercises, setAllUserExercises] = useState<{ name: string; equipment: string }[]>([]);
+
   // Active workout state — restore from localStorage if navigating back
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>(() => {
     if (typeof window === "undefined") return [];
@@ -186,6 +189,7 @@ export function WorkoutSession({
   // Load library exercises on mount
   useEffect(() => {
     loadLibrary();
+    loadAllUserExercises();
   }, [folderId]);
 
   const loadLibrary = async () => {
@@ -198,6 +202,27 @@ export function WorkoutSession({
 
     setLibraryExercises((data || []) as ExerciseTemplate[]);
     setLoadingLibrary(false);
+  };
+
+  // Load all user's exercise names for autocomplete
+  const loadAllUserExercises = async () => {
+    // Get all exercise templates across all folders
+    const { data: templates } = await supabase
+      .from("exercise_templates")
+      .select("name, equipment")
+      .eq("user_id", userId);
+
+    if (templates) {
+      // Dedupe by name (case-insensitive), keeping the first occurrence
+      const uniqueMap = new Map<string, { name: string; equipment: string }>();
+      templates.forEach((t) => {
+        const key = t.name.toLowerCase();
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, { name: t.name, equipment: t.equipment });
+        }
+      });
+      setAllUserExercises(Array.from(uniqueMap.values()));
+    }
   };
 
   // Fetch best set for a given exercise template (using Epley formula for 1RM)
@@ -1170,6 +1195,7 @@ export function WorkoutSession({
         }}
         onSave={handleAddNewExercise}
         loading={savingNewExercise}
+        existingExercises={allUserExercises}
       />
 
       {/* Superset Picker Modal */}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Check, X } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Chip } from "./ui/chip";
@@ -31,6 +31,11 @@ const removeEquipmentTag = (name: string, allEquipment: { value: string; label: 
   return name.replace(tagPattern, "").trim();
 };
 
+interface ExistingExercise {
+  name: string;
+  equipment: string;
+}
+
 interface NewExerciseModalProps {
   open: boolean;
   onClose: () => void;
@@ -40,6 +45,7 @@ interface NewExerciseModalProps {
     exerciseType: "strength";
   }) => void;
   loading?: boolean;
+  existingExercises?: ExistingExercise[];
 }
 
 export function NewExerciseModal({
@@ -47,12 +53,29 @@ export function NewExerciseModal({
   onClose,
   onSave,
   loading = false,
+  existingExercises = [],
 }: NewExerciseModalProps) {
   const [name, setName] = useState("");
   const [equipment, setEquipment] = useState("barbell");
   const [customEquipment, setCustomEquipment] = useState<{ value: string; label: string }[]>([]);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customTagInput, setCustomTagInput] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Filter suggestions based on input
+  const suggestions = useMemo(() => {
+    if (!name.trim() || name.length < 2) return [];
+    const searchTerm = name.toLowerCase();
+    return existingExercises
+      .filter((ex) => ex.name.toLowerCase().includes(searchTerm))
+      .slice(0, 5);
+  }, [name, existingExercises]);
+
+  const handleSelectSuggestion = (ex: ExistingExercise) => {
+    setName(ex.name);
+    setEquipment(ex.equipment);
+    setShowSuggestions(false);
+  };
 
   // Combined equipment list (default + custom)
   const allEquipment = [...DEFAULT_EQUIPMENT, ...customEquipment];
@@ -135,19 +158,55 @@ export function NewExerciseModal({
   return (
     <Modal open={open} onClose={handleClose} title="New Exercise">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Name Input */}
-        <div>
+        {/* Name Input with Autocomplete */}
+        <div className="relative">
           <label className="block text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
             Exercise Name
           </label>
           <input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => {
+              // Delay to allow click on suggestion
+              setTimeout(() => setShowSuggestions(false), 150);
+            }}
             placeholder="e.g., Incline Press"
             className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
             autoFocus
           />
+
+          {/* Autocomplete Suggestions */}
+          <AnimatePresence>
+            {showSuggestions && suggestions.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden shadow-xl"
+                style={{
+                  background: "rgba(26, 26, 36, 0.98)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                {suggestions.map((ex, i) => (
+                  <button
+                    key={`${ex.name}-${i}`}
+                    type="button"
+                    onClick={() => handleSelectSuggestion(ex)}
+                    className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center justify-between"
+                  >
+                    <span className="text-sm">{ex.name}</span>
+                    <span className="text-xs text-muted-foreground capitalize">{ex.equipment}</span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Equipment Chips */}
