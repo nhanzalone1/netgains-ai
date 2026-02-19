@@ -385,6 +385,37 @@ export interface Database {
           }
         ];
       };
+      weigh_ins: {
+        Row: {
+          id: string;
+          user_id: string;
+          weight_lbs: number;
+          date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          weight_lbs: number;
+          date?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          weight_lbs?: number;
+          date?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "weigh_ins_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -403,6 +434,7 @@ export type Location = Database["public"]["Tables"]["locations"]["Row"];
 export type Folder = Database["public"]["Tables"]["folders"]["Row"];
 export type ExerciseTemplate = Database["public"]["Tables"]["exercise_templates"]["Row"];
 export type ProgramCycle = Database["public"]["Tables"]["program_cycles"]["Row"];
+export type WeighIn = Database["public"]["Tables"]["weigh_ins"]["Row"];
 
 // Insert types
 export type MaxesInsert = Database["public"]["Tables"]["maxes"]["Insert"];

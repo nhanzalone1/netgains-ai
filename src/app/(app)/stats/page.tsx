@@ -22,7 +22,11 @@ import {
   BarChart3,
   Info,
   Trophy,
+  Scale,
+  Plus,
 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
@@ -116,14 +120,71 @@ export default function StatsPage() {
   // Collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
-  // Load exercises with PRs on mount
+  // Body weight tracking
+  const [weighIns, setWeighIns] = useState<{ date: string; weight: number }[]>([]);
+  const [showWeighInModal, setShowWeighInModal] = useState(false);
+  const [weighInValue, setWeighInValue] = useState("");
+  const [savingWeighIn, setSavingWeighIn] = useState(false);
+  const [loadingWeighIns, setLoadingWeighIns] = useState(true);
+
+  // Load exercises with PRs and weigh-ins on mount
   useEffect(() => {
     if (user) {
       loadExercisesWithPRs();
+      loadWeighIns();
     } else {
       setLoadingExercises(false);
+      setLoadingWeighIns(false);
     }
   }, [user]);
+
+  const loadWeighIns = async () => {
+    setLoadingWeighIns(true);
+    const { data } = await supabase
+      .from("weigh_ins")
+      .select("date, weight_lbs")
+      .eq("user_id", user!.id)
+      .order("date", { ascending: true })
+      .limit(90); // Last ~3 months
+
+    setWeighIns(
+      (data || []).map((w) => ({
+        date: new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        weight: w.weight_lbs,
+      }))
+    );
+    setLoadingWeighIns(false);
+  };
+
+  const handleSaveWeighIn = async () => {
+    if (!weighInValue.trim() || !user) return;
+
+    setSavingWeighIn(true);
+    const weight = parseFloat(weighInValue);
+
+    if (isNaN(weight) || weight <= 0) {
+      setSavingWeighIn(false);
+      return;
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+
+    // Upsert weigh-in (one per day)
+    const { error: weighInError } = await supabase.from("weigh_ins").upsert(
+      { user_id: user.id, date: today, weight_lbs: weight },
+      { onConflict: "user_id,date" }
+    );
+
+    // Update profile weight
+    if (!weighInError) {
+      await supabase.from("profiles").update({ weight_lbs: weight }).eq("id", user.id);
+    }
+
+    setSavingWeighIn(false);
+    setShowWeighInModal(false);
+    setWeighInValue("");
+    loadWeighIns();
+  };
 
   // Load history when exercise is selected
   useEffect(() => {
@@ -406,6 +467,89 @@ export default function StatsPage() {
           </Popover>
         </div>
         <UserMenu />
+      </div>
+
+      {/* Body Weight Section */}
+      <div
+        className="mb-6 rounded-2xl overflow-hidden"
+        style={{
+          background: "#1a1a24",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
+        }}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: "rgba(147, 51, 234, 0.15)" }}
+            >
+              <Scale className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-white">Body Weight</p>
+              {weighIns.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Latest: {weighIns[weighIns.length - 1].weight} lbs
+                </p>
+              )}
+            </div>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowWeighInModal(true)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: "rgba(147, 51, 234, 0.15)" }}
+          >
+            <Plus className="w-5 h-5 text-purple-400" />
+          </motion.button>
+        </div>
+
+        {/* Weight Chart */}
+        {weighIns.length >= 2 ? (
+          <div className="p-4 h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={weighIns}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#a0a0b0"
+                  tick={{ fill: "#a0a0b0", fontSize: 9 }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  stroke="#a0a0b0"
+                  tick={{ fill: "#a0a0b0", fontSize: 9 }}
+                  domain={["dataMin - 5", "dataMax + 5"]}
+                  width={35}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "rgba(26, 26, 36, 0.95)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: "8px",
+                  }}
+                  labelStyle={{ color: "#ffffff" }}
+                  formatter={(value: number) => [`${value} lbs`, "Weight"]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  stroke="#a855f7"
+                  strokeWidth={2}
+                  dot={{ fill: "#a855f7", strokeWidth: 0, r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : weighIns.length === 1 ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">
+            Log another weigh-in to see your trend
+          </div>
+        ) : (
+          <div className="p-4 text-center text-sm text-muted-foreground">
+            Tap + to log your first weigh-in
+          </div>
+        )}
       </div>
 
       {/* Exercise Picker Button */}
@@ -805,6 +949,32 @@ export default function StatsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Weigh-In Modal */}
+      <Modal open={showWeighInModal} onClose={() => setShowWeighInModal(false)} title="Log Weight">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-1">
+              Current Weight (lbs)
+            </label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={weighInValue}
+              onChange={(e) => setWeighInValue(e.target.value)}
+              placeholder="e.g., 175"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] text-lg font-semibold"
+              autoFocus
+            />
+          </div>
+          <p className="text-xs text-muted-foreground text-center">
+            This updates your profile weight for nutrition calculations
+          </p>
+          <Button onClick={handleSaveWeighIn} loading={savingWeighIn} disabled={!weighInValue.trim()}>
+            Save Weight
+          </Button>
+        </div>
+      </Modal>
 
       {/* Spacer for nav dock */}
       <div className="h-24 w-full shrink-0" />
