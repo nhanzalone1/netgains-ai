@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export const maxDuration = 30;
 
 // Cache version - increment this to invalidate all client caches
-export const DAILY_BRIEF_VERSION = 3;
+export const DAILY_BRIEF_VERSION = 4;
 
 // Format date as YYYY-MM-DD in local time (not UTC)
 function formatLocalDate(date: Date): string {
@@ -272,35 +272,84 @@ export async function POST(request: Request) {
   });
 
   // Find best recent performance for a "beat this" target
+  // IMPORTANT: Target should match TODAY'S suggested workout, not last workout
   let targetExercise = '';
   let targetWeight = 0;
   let targetReps = 0;
 
-  if (lastWorkout && lastWorkout.exercises.length > 0) {
-    // Find the heaviest compound lift from last workout
-    const compoundLifts = ['bench', 'squat', 'deadlift', 'press', 'row'];
-    for (const exercise of lastWorkout.exercises) {
-      const isCompound = compoundLifts.some(c => exercise.name.toLowerCase().includes(c));
-      if (isCompound && exercise.sets.length > 0) {
-        const bestSet = exercise.sets.reduce((best, set) =>
-          set.weight > best.weight ? set : best, exercise.sets[0]);
-        if (bestSet.weight > targetWeight) {
-          targetExercise = exercise.name;
-          targetWeight = bestSet.weight;
-          targetReps = bestSet.reps;
+  // Map muscle group keywords to exercise patterns
+  const muscleGroupPatterns: Record<string, string[]> = {
+    'arms': ['curl', 'bicep', 'tricep', 'pushdown', 'extension', 'hammer', 'preacher', 'skullcrusher'],
+    'legs': ['squat', 'leg', 'lunge', 'calf', 'hamstring', 'quad', 'rdl', 'deadlift', 'press'],
+    'chest': ['bench', 'chest', 'fly', 'flye', 'pec', 'incline', 'decline', 'dip'],
+    'back': ['row', 'lat', 'pulldown', 'pull-up', 'pullup', 'chin-up', 'deadlift', 'shrug'],
+    'shoulders': ['shoulder', 'delt', 'lateral', 'ohp', 'press', 'raise', 'face pull'],
+    'push': ['bench', 'press', 'dip', 'fly', 'tricep', 'pushdown', 'shoulder'],
+    'pull': ['row', 'lat', 'pulldown', 'pull-up', 'curl', 'bicep', 'face pull', 'deadlift'],
+    'upper': ['bench', 'press', 'row', 'lat', 'curl', 'tricep', 'shoulder', 'delt'],
+    'lower': ['squat', 'leg', 'lunge', 'calf', 'hamstring', 'quad', 'rdl', 'deadlift'],
+    'full': ['squat', 'bench', 'deadlift', 'press', 'row'], // Compound focus for full body
+  };
+
+  // Find which muscle group today's workout targets
+  const suggestedLower = suggestedWorkout.toLowerCase();
+  let matchingPatterns: string[] = [];
+
+  for (const [group, patterns] of Object.entries(muscleGroupPatterns)) {
+    if (suggestedLower.includes(group)) {
+      matchingPatterns = patterns;
+      break;
+    }
+  }
+
+  // Search ALL recent workouts for exercises matching today's muscle group
+  if (matchingPatterns.length > 0 && workoutDetails.length > 0) {
+    for (const workout of workoutDetails) {
+      for (const exercise of workout.exercises) {
+        const exerciseLower = exercise.name.toLowerCase();
+        const matchesGroup = matchingPatterns.some(pattern => exerciseLower.includes(pattern));
+
+        if (matchesGroup && exercise.sets.length > 0) {
+          const bestSet = exercise.sets.reduce((best, set) =>
+            set.weight > best.weight ? set : best, exercise.sets[0]);
+
+          // Prioritize by weight (compound lifts will naturally be heavier)
+          if (bestSet.weight > targetWeight) {
+            targetExercise = exercise.name;
+            targetWeight = bestSet.weight;
+            targetReps = bestSet.reps;
+          }
         }
       }
     }
-    // Fallback to first exercise if no compound found
-    if (!targetExercise && lastWorkout.exercises[0].sets.length > 0) {
-      const firstEx = lastWorkout.exercises[0];
-      const bestSet = firstEx.sets.reduce((best, set) =>
-        set.weight > best.weight ? set : best, firstEx.sets[0]);
-      targetExercise = firstEx.name;
-      targetWeight = bestSet.weight;
-      targetReps = bestSet.reps;
+  }
+
+  // Fallback: if no matching exercise found, use heaviest compound from any recent workout
+  if (!targetExercise && workoutDetails.length > 0) {
+    const compoundLifts = ['bench', 'squat', 'deadlift', 'press', 'row'];
+    for (const workout of workoutDetails) {
+      for (const exercise of workout.exercises) {
+        const isCompound = compoundLifts.some(c => exercise.name.toLowerCase().includes(c));
+        if (isCompound && exercise.sets.length > 0) {
+          const bestSet = exercise.sets.reduce((best, set) =>
+            set.weight > best.weight ? set : best, exercise.sets[0]);
+          if (bestSet.weight > targetWeight) {
+            targetExercise = exercise.name;
+            targetWeight = bestSet.weight;
+            targetReps = bestSet.reps;
+          }
+        }
+      }
     }
   }
+
+  console.log('[daily-brief] Target exercise:', {
+    suggestedWorkout,
+    matchingPatterns: matchingPatterns.slice(0, 5),
+    targetExercise,
+    targetWeight,
+    targetReps,
+  });
 
   // Call Claude to generate the brief
   const anthropic = new Anthropic();
