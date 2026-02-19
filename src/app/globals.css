@@ -62,3 +62,12 @@ button, a, input, select, textarea {
   background: var(--muted);
   border-radius: 4px;
 }
+
+/* Hide scrollbar utility class */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -680,12 +680,13 @@ export default function CoachPage() {
   return (
     <div
       ref={pageRef}
-      className="flex flex-col fixed inset-0"
+      className="flex flex-col fixed left-0 right-0"
       style={{
         background: "#0f0f13",
-        // When keyboard is open, use the visual viewport height
-        // When closed, account for nav bar (80px)
-        height: viewportHeight ? `${viewportHeight}px` : 'calc(100dvh - 80px)',
+        top: 0,
+        // When keyboard is open, go to bottom of screen
+        // When closed, leave 80px for nav bar
+        bottom: keyboardOpen ? 0 : 80,
         // Always prevent page scroll - only messages should scroll
         overflow: 'hidden',
       }}
@@ -728,13 +729,15 @@ export default function CoachPage() {
         </div>
       )}
 
-      {/* Messages Area - takes remaining space */}
+      {/* Messages Area - takes remaining space, hidden scrollbar */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-hide"
         style={{
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain',
+          scrollbarWidth: 'none', // Firefox
+          msOverflowStyle: 'none', // IE/Edge
         }}
       >
         {messagesWithDividers.map((item) => {
