@@ -1,5 +1,8 @@
 // Daily Brief cache utilities
 
+// Must match the version in /api/daily-brief/route.ts
+const EXPECTED_VERSION = 2;
+
 export interface DailyBrief {
   focus: string;
   target: string;
@@ -8,6 +11,7 @@ export interface DailyBrief {
 
 export interface DailyBriefResponse {
   status: "not_onboarded" | "generated";
+  version?: number;
   brief?: DailyBrief;
   generatedAt: string;
 }
@@ -15,6 +19,7 @@ export interface DailyBriefResponse {
 interface DailyBriefCache {
   userId: string;
   date: string; // YYYY-MM-DD
+  version: number;
   data: DailyBriefResponse;
 }
 
@@ -61,6 +66,11 @@ export function getDailyBriefCache(userId: string): DailyBriefResponse | null {
       return null;
     }
 
+    // Check if version matches (invalidate cache if code changed)
+    if (cache.version !== EXPECTED_VERSION) {
+      return null;
+    }
+
     return cache.data;
   } catch {
     return null;
@@ -73,6 +83,7 @@ export function setDailyBriefCache(userId: string, data: DailyBriefResponse): vo
   const cache: DailyBriefCache = {
     userId,
     date: getTodayString(),
+    version: EXPECTED_VERSION,
     data,
   };
 

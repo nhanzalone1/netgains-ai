@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase/server';
 
 export const maxDuration = 30;
 
+// Cache version - increment this to invalidate all client caches
+export const DAILY_BRIEF_VERSION = 2;
+
+// Format date as YYYY-MM-DD in local time (not UTC)
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -26,10 +37,10 @@ export async function POST(request: Request) {
     // No body or invalid JSON, use current date
   }
 
-  const todayStr = effectiveDate.toISOString().split('T')[0];
+  const todayStr = formatLocalDate(effectiveDate);
   const yesterday = new Date(effectiveDate);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = formatLocalDate(yesterday);
 
   // Fetch all required data in parallel
   const [profileResult, memoriesResult, workoutsResult, nutritionGoalsResult] = await Promise.all([
@@ -93,10 +104,19 @@ export async function POST(request: Request) {
   };
 
   const monday = getMonday(effectiveDate);
-  const mondayStr = monday.toISOString().split('T')[0];
-  const workoutsThisWeek = recentWorkouts.filter(w => w.date >= mondayStr && w.date <= todayStr).length;
+  const mondayStr = formatLocalDate(monday);
 
-  console.log('[daily-brief] Week count:', { mondayStr, todayStr, workoutsThisWeek, recentWorkoutDates: recentWorkouts.map(w => w.date) });
+  // Filter workouts to only those in current week (Monday through today)
+  const workoutsInWeek = recentWorkouts.filter(w => w.date >= mondayStr && w.date <= todayStr);
+  const workoutsThisWeek = workoutsInWeek.length;
+
+  console.log('[daily-brief] Week count:', {
+    mondayStr,
+    todayStr,
+    workoutsThisWeek,
+    workoutsInWeekDates: workoutsInWeek.map(w => w.date),
+    allRecentWorkoutDates: recentWorkouts.map(w => w.date),
+  });
 
   // Check if user already worked out today
   const workedOutToday = recentWorkouts.some(w => w.date === todayStr);
@@ -177,7 +197,7 @@ export async function POST(request: Request) {
     checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
 
     for (let i = 0; i < 7; i++) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = formatLocalDate(checkDate);
       if (sortedWorkouts.some(w => w.date === dateStr)) {
         count++;
         checkDate.setDate(checkDate.getDate() - 1);
@@ -311,6 +331,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
 
     return Response.json({
       status: 'generated',
+      version: DAILY_BRIEF_VERSION,
       brief: {
         focus: brief.focus || 'Training Day',
         target: brief.target || 'Check in with your coach',
@@ -343,6 +364,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
     // Fallback brief
     return Response.json({
       status: 'generated',
+      version: DAILY_BRIEF_VERSION,
       brief: {
         focus: isRestDay ? 'Rest Day' : suggestedWorkout,
         target: isRestDay
