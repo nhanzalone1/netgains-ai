@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Search, Plus, X, Dumbbell, ChevronRight } from "lucide-react";
+import { Search, Plus, X, Dumbbell, ChevronRight, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
@@ -20,8 +20,8 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 // Equipment order for section display
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
-// Muscle group filter tabs
-const MUSCLE_TABS = ["Recent", "Chest", "Back", "Shoulders", "Arms", "Legs", "Core"];
+// All muscle groups
+const ALL_MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Core"];
 
 // Keywords for muscle group categorization
 const MUSCLE_KEYWORDS: Record<string, string[]> = {
@@ -31,6 +31,55 @@ const MUSCLE_KEYWORDS: Record<string, string[]> = {
   Legs: ["squat", "leg", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl"],
   Arms: ["curl", "tricep", "bicep", "arm", "pushdown", "hammer", "preacher", "skull", "dip", "extension"],
   Core: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch"],
+};
+
+// Parse workout name to determine relevant muscle groups
+const getContextualTabs = (workoutName: string): string[] => {
+  const name = workoutName.toLowerCase();
+  const relevantGroups: string[] = [];
+
+  // Check for specific patterns
+  if (name.includes("push")) {
+    relevantGroups.push("Chest", "Shoulders", "Arms");
+  } else if (name.includes("pull")) {
+    relevantGroups.push("Back", "Arms");
+  } else if (name.includes("upper")) {
+    relevantGroups.push("Chest", "Back", "Shoulders", "Arms");
+  } else if (name.includes("lower")) {
+    relevantGroups.push("Legs", "Core");
+  } else {
+    // Check for individual muscle group keywords
+    if (name.includes("chest") || name.includes("pec")) {
+      relevantGroups.push("Chest");
+    }
+    if (name.includes("back") || name.includes("lat")) {
+      relevantGroups.push("Back");
+    }
+    if (name.includes("shoulder") || name.includes("delt")) {
+      relevantGroups.push("Shoulders");
+    }
+    if (name.includes("arm") || name.includes("bicep") || name.includes("tricep")) {
+      relevantGroups.push("Arms");
+    }
+    if (name.includes("leg") || name.includes("quad") || name.includes("hamstring") || name.includes("glute")) {
+      relevantGroups.push("Legs");
+    }
+    if (name.includes("core") || name.includes("ab")) {
+      relevantGroups.push("Core");
+    }
+    // Add Legs -> Core association (common pairing)
+    if (relevantGroups.includes("Legs") && !relevantGroups.includes("Core")) {
+      relevantGroups.push("Core");
+    }
+  }
+
+  // If no specific groups found, show all
+  if (relevantGroups.length === 0) {
+    return ["Recent", ...ALL_MUSCLE_GROUPS, "All"];
+  }
+
+  // Return: Recent + relevant groups + All
+  return ["Recent", ...relevantGroups, "All"];
 };
 
 const categorizeExercise = (name: string): string => {
@@ -50,6 +99,7 @@ interface ExercisePickerModalProps {
   onCreateNew: (data: { name: string; equipment: string }) => Promise<ExerciseTemplate | null>;
   userId: string;
   folderId: string;
+  folderName?: string;
   title?: string;
   accentColor?: "purple" | "red";
 }
@@ -61,9 +111,13 @@ export function ExercisePickerModal({
   onCreateNew,
   userId,
   folderId,
+  folderName = "",
 }: ExercisePickerModalProps) {
   const supabase = createClient();
   const tabsRef = useRef<HTMLDivElement>(null);
+
+  // Get contextual tabs based on folder name
+  const contextualTabs = useMemo(() => getContextualTabs(folderName), [folderName]);
 
   // State
   const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
@@ -72,6 +126,7 @@ export function ExercisePickerModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("Recent");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -168,7 +223,7 @@ export function ExercisePickerModal({
     return filtered;
   }, [exercises, recentExercises, searchQuery, activeTab]);
 
-  // Group exercises by equipment
+  // Group exercises by equipment (for single muscle group tabs)
   const groupedExercises = useMemo(() => {
     const groups: Record<string, ExerciseTemplate[]> = {};
 
@@ -186,6 +241,51 @@ export function ExercisePickerModal({
         exercises: groups[eq].sort((a, b) => a.name.localeCompare(b.name))
       }));
   }, [filteredExercises]);
+
+  // Group exercises by muscle group (for "All" tab)
+  const groupedByMuscle = useMemo(() => {
+    if (activeTab !== "All") return [];
+
+    let filtered = exercises;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = exercises.filter((ex) =>
+        ex.name.toLowerCase().includes(query) ||
+        ex.equipment.toLowerCase().includes(query)
+      );
+    }
+
+    const muscleGroups: Record<string, ExerciseTemplate[]> = {};
+
+    filtered.forEach(ex => {
+      const group = categorizeExercise(ex.name);
+      if (!muscleGroups[group]) muscleGroups[group] = [];
+      muscleGroups[group].push(ex);
+    });
+
+    // Return in order, including "Other"
+    return [...ALL_MUSCLE_GROUPS, "Other"]
+      .filter(group => muscleGroups[group]?.length > 0)
+      .map(group => ({
+        muscleGroup: group,
+        exercises: muscleGroups[group].sort((a, b) => a.name.localeCompare(b.name))
+      }));
+  }, [exercises, searchQuery, activeTab]);
+
+  // Toggle muscle group collapse
+  const toggleMuscleGroup = (group: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
 
   // Handle selecting an exercise
   const handleSelect = (template: ExerciseTemplate) => {
@@ -284,7 +384,7 @@ export function ExercisePickerModal({
               className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
-              {MUSCLE_TABS.map(tab => (
+              {contextualTabs.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -409,8 +509,63 @@ export function ExercisePickerModal({
                     );
                   })}
                 </div>
+              ) : activeTab === "All" ? (
+                /* All - grouped by muscle group with collapsible sections */
+                <div className="space-y-4 pb-4">
+                  {groupedByMuscle.map(({ muscleGroup, exercises: muscleExercises }) => {
+                    const isCollapsed = collapsedGroups.has(muscleGroup);
+                    return (
+                      <div key={muscleGroup}>
+                        <button
+                          onClick={() => toggleMuscleGroup(muscleGroup)}
+                          className="w-full flex items-center justify-between py-2 px-1"
+                        >
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                            {muscleGroup}
+                            <span className="ml-2 text-xs font-normal text-gray-500">
+                              ({muscleExercises.length})
+                            </span>
+                          </h3>
+                          <ChevronDown
+                            className={`w-4 h-4 text-gray-500 transition-transform ${
+                              isCollapsed ? "-rotate-90" : ""
+                            }`}
+                          />
+                        </button>
+                        {!isCollapsed && (
+                          <div className="space-y-2 mt-1">
+                            {muscleExercises.map(exercise => {
+                              const equipStyle = getEquipmentStyle(exercise.equipment);
+                              return (
+                                <button
+                                  key={exercise.id}
+                                  onClick={() => handleSelect(exercise)}
+                                  className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
+                                  style={{ background: "rgba(255, 255, 255, 0.03)" }}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-white truncate">{exercise.name}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                      style={{ background: equipStyle.bg, color: equipStyle.text }}
+                                    >
+                                      {formatEquipment(exercise.equipment)}
+                                    </span>
+                                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                /* Grouped by equipment */
+                /* Grouped by equipment (single muscle group tab) */
                 <div className="space-y-6 pb-4">
                   {groupedExercises.map(group => {
                     const equipStyle = getEquipmentStyle(group.equipment);

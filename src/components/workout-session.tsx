@@ -1015,6 +1015,7 @@ export function WorkoutSession({
         onCreateNew={handleSupersetCreateNew}
         userId={userId}
         folderId={folderId}
+        folderName={folderName}
       />
 
       {/* New Exercise Modal */}
@@ -1039,6 +1040,7 @@ export function WorkoutSession({
         onCreateNew={handleSupersetCreateNew}
         userId={userId}
         folderId={folderId}
+        folderName={folderName}
         title="Select Superset Exercise"
         accentColor="purple"
       />
