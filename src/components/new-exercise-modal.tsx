@@ -14,6 +14,7 @@ const DEFAULT_EQUIPMENT = [
   { value: "cable", label: "Cable" },
   { value: "machine", label: "Machine" },
   { value: "smith", label: "Smith" },
+  { value: "bodyweight", label: "Bodyweight" },
 ];
 
 // Helper to get display label for equipment

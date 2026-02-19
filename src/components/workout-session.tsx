@@ -58,6 +58,7 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
   cable: { bg: "rgba(249, 115, 22, 0.2)", text: "#fb923c" },
   machine: { bg: "rgba(14, 165, 233, 0.2)", text: "#38bdf8" },
   smith: { bg: "rgba(255, 71, 87, 0.2)", text: "#ff4757" },
+  bodyweight: { bg: "rgba(168, 85, 247, 0.2)", text: "#a855f7" },
 };
 
 // Set variant styles - backgrounds and borders
@@ -885,7 +886,9 @@ export function WorkoutSession({
                 {/* Set Headers */}
                 <div className="grid grid-cols-[40px_1fr_1fr_32px] gap-2 px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   <span className="text-center">Set</span>
-                  <span className="text-right pr-10">Weight</span>
+                  <span className="text-right pr-10">
+                    {exercise.equipment === "bodyweight" ? "Added Wt" : "Weight"}
+                  </span>
                   <span className="text-right pr-10">Reps</span>
                   <span></span>
                 </div>
@@ -963,6 +966,11 @@ export function WorkoutSession({
 
                         {/* Weight Input */}
                         <div className="relative">
+                          {exercise.equipment === "bodyweight" && (
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-400 pointer-events-none">
+                              BW+
+                            </span>
+                          )}
                           <input
                             type="text"
                             inputMode="decimal"
@@ -970,12 +978,14 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "weight", e.target.value)
                             }
-                            placeholder="—"
-                            className="w-full rounded-lg pl-3 pr-10 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                            placeholder={exercise.equipment === "bodyweight" ? "0" : "—"}
+                            className={`w-full rounded-lg py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
+                              exercise.equipment === "bodyweight" ? "pl-10 pr-10" : "pl-3 pr-10"
+                            }`}
                             style={{ background: variantStyle.inputBg }}
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none">
-                            lbs
+                            {exercise.equipment === "bodyweight" ? "lbs" : "lbs"}
                           </span>
                         </div>
 
