@@ -680,13 +680,13 @@ export default function CoachPage() {
   return (
     <div
       ref={pageRef}
-      className="flex flex-col fixed left-0 right-0"
+      className="flex flex-col fixed left-0 right-0 z-40"
       style={{
         background: "#0f0f13",
         top: 0,
         // When keyboard is open, go to bottom of screen
-        // When closed, leave space for floating nav bar (bottom-6 = 24px + ~70px nav height)
-        bottom: keyboardOpen ? 0 : 100,
+        // When closed, leave space for floating nav bar (bottom-6 = 24px + ~80px nav height + shadow)
+        bottom: keyboardOpen ? 0 : 120,
         // Always prevent page scroll - only messages should scroll
         overflow: 'hidden',
       }}
