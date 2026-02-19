@@ -819,18 +819,18 @@ export default function StatsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-end justify-center bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
             onClick={() => {
               setShowPicker(false);
               setSearchQuery("");
             }}
           >
             <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-t-3xl max-h-[80vh] flex flex-col"
+              className="w-full max-w-lg rounded-3xl max-h-[70vh] flex flex-col"
               style={{
                 background: "#1a1a24",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
