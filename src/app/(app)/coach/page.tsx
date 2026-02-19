@@ -51,6 +51,8 @@ async function loadMessagesFromDB(userId: string): Promise<Message[]> {
 
 // Save a single message to database
 async function saveMessageToDB(userId: string, message: Message): Promise<string | null> {
+  console.log('[DB] Attempting to save message:', { userId, role: message.role, contentLength: message.content.length });
+
   const { data, error } = await supabase
     .from('chat_messages')
     .insert({
@@ -63,10 +65,11 @@ async function saveMessageToDB(userId: string, message: Message): Promise<string
     .single();
 
   if (error) {
-    console.error('Error saving message:', error);
+    console.error('[DB] Error saving message:', error.message, error.details, error.hint);
     return null;
   }
 
+  console.log('[DB] Message saved successfully:', data?.id);
   return data?.id || null;
 }
 
@@ -631,8 +634,13 @@ export default function CoachPage() {
 
         if (lastSaved === undefined) {
           // New message - save to DB
+          console.log(">>> Saving new message to DB:", message.id, message.role);
           const dbId = await saveMessageToDB(user.id, message);
+          console.log(">>> Saved, got DB ID:", dbId);
           if (dbId) {
+            // IMPORTANT: Track with the NEW DB ID, not the old temp ID
+            lastSavedContentRef.current.set(dbId, message.content);
+            // Also track old ID to prevent double-save during state update
             lastSavedContentRef.current.set(message.id, message.content);
             // Update the message ID in state if it was a temp ID
             if (dbId !== message.id) {
@@ -640,9 +648,12 @@ export default function CoachPage() {
                 m.id === message.id ? { ...m, id: dbId } : m
               ));
             }
+          } else {
+            console.error(">>> Failed to save message to DB");
           }
         } else if (lastSaved !== message.content && message.content.trim()) {
           // Content changed - update in DB
+          console.log(">>> Updating message in DB:", message.id);
           await updateMessageInDB(message.id, message.content);
           lastSavedContentRef.current.set(message.id, message.content);
         }
