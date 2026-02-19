@@ -151,23 +151,49 @@ export default function CoachPage() {
   const readyToSaveRef = useRef(false); // Only save after load effect completes AND state is applied
 
   // Track keyboard visibility via Visual Viewport API
+  // This is a fallback for browsers that don't support interactiveWidget viewport meta
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 
+    // Store initial viewport height to detect keyboard
+    let initialViewportHeight = viewport.height;
+    let lastHeight = viewport.height;
+
     const onResize = () => {
-      // Keyboard height = full window height - visible viewport height
-      const kbHeight = window.innerHeight - viewport.height;
-      setKeyboardHeight(kbHeight > 50 ? kbHeight : 0); // Only set if significant
+      const currentHeight = viewport.height;
+
+      // Detect if keyboard just opened (significant height decrease)
+      if (currentHeight < lastHeight - 100) {
+        // Keyboard opened - scroll to bottom
+        setTimeout(() => scrollToBottom(true), 100);
+      }
+
+      // Calculate keyboard height from viewport change
+      const kbHeight = initialViewportHeight - currentHeight;
+
+      // Only set if significant (> 100px to avoid false positives from address bar)
+      setKeyboardHeight(kbHeight > 100 ? kbHeight : 0);
+
+      lastHeight = currentHeight;
+    };
+
+    // Update initial height when orientation changes or on first focus
+    const onOrientationChange = () => {
+      setTimeout(() => {
+        initialViewportHeight = window.visualViewport?.height || window.innerHeight;
+        lastHeight = initialViewportHeight;
+      }, 300);
     };
 
     viewport.addEventListener("resize", onResize);
-    viewport.addEventListener("scroll", onResize);
+    window.addEventListener("orientationchange", onOrientationChange);
+
     return () => {
       viewport.removeEventListener("resize", onResize);
-      viewport.removeEventListener("scroll", onResize);
+      window.removeEventListener("orientationchange", onOrientationChange);
     };
-  }, []);
+  }, [scrollToBottom]);
 
   // Check if user is near the bottom of the scroll area
   const isNearBottom = useCallback(() => {
@@ -681,10 +707,13 @@ export default function CoachPage() {
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-scroll p-4 space-y-4 min-h-0"
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
         style={{
-          paddingBottom: keyboardHeight > 0 ? keyboardHeight + 80 : 128,
+          // Add extra padding when keyboard is open to account for input bar
+          // When closed, 128px covers bottom nav + input bar
+          paddingBottom: keyboardHeight > 0 ? 100 : 128,
           WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
         }}
       >
         {messagesWithDividers.map((item) => {
@@ -746,11 +775,13 @@ export default function CoachPage() {
 
       {/* Input Area — repositions when keyboard is open */}
       <div
-        className="fixed left-0 right-0 z-40 p-4 border-t border-white/5 transition-[bottom] duration-100"
+        className="fixed left-0 right-0 z-40 p-4 border-t border-white/5"
         style={{
           background: "#0f0f13",
-          bottom: keyboardHeight > 0 ? keyboardHeight : 96, // 96px = bottom nav height
-          paddingBottom: keyboardHeight > 0 ? 8 : "max(1rem, env(safe-area-inset-bottom))",
+          // When keyboard is open, position relative to visual viewport bottom
+          // When closed, sit above the 96px bottom nav
+          bottom: keyboardHeight > 0 ? keyboardHeight : 96,
+          paddingBottom: keyboardHeight > 0 ? "env(safe-area-inset-bottom, 8px)" : "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
@@ -763,18 +794,9 @@ export default function CoachPage() {
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
             }}
-            onTouchStart={() => {
-              // On mobile, prevent the browser from scrolling when tapping the input
-              // by temporarily locking scroll position
-              const container = messagesContainerRef.current;
-              if (container) {
-                const scrollPos = container.scrollTop;
-                const lockScroll = () => { container.scrollTop = scrollPos; };
-
-                // Lock scroll for 300ms to catch all browser scroll attempts
-                const interval = setInterval(lockScroll, 10);
-                setTimeout(() => clearInterval(interval), 300);
-              }
+            onFocus={() => {
+              // Scroll to bottom when input is focused (keyboard opening)
+              setTimeout(() => scrollToBottom(true), 100);
             }}
             onKeyDown={(e) => {
               // Submit on Enter (without Shift)

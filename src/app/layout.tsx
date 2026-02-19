@@ -31,6 +31,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#0f0f13",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
