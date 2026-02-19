@@ -15,11 +15,13 @@ import {
   TrendingUp,
   TrendingDown,
   ChevronDown,
+  ChevronRight,
   Search,
   X,
   Dumbbell,
   BarChart3,
   Info,
+  Trophy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +38,44 @@ const calculateEst1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight; // Actual 1RM
   return Math.round(weight * (1 + reps / 30));
 };
+
+// Muscle group keywords for categorization
+const MUSCLE_GROUP_KEYWORDS: Record<string, string[]> = {
+  Chest: ["bench", "fly", "chest", "pec", "pushup", "push-up", "push up", "incline press", "decline press"],
+  Back: ["row", "pull", "lat", "pulldown", "pullup", "pull-up", "pull up", "deadlift", "back", "shrug"],
+  Shoulders: ["shoulder", "ohp", "overhead press", "lateral raise", "front raise", "rear delt", "delt", "military"],
+  Legs: ["squat", "leg", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl", "extension", "curl"],
+  Arms: ["curl", "tricep", "bicep", "arm", "pushdown", "hammer", "preacher", "skull", "dip"],
+  Core: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch"],
+};
+
+// Categorize exercise by name
+const categorizeExercise = (name: string): string => {
+  const lowerName = name.toLowerCase();
+  for (const [group, keywords] of Object.entries(MUSCLE_GROUP_KEYWORDS)) {
+    if (keywords.some(kw => lowerName.includes(kw))) {
+      return group;
+    }
+  }
+  return "Other";
+};
+
+// Normalize exercise name for merging duplicates
+const normalizeExerciseName = (name: string): string => {
+  // Remove parenthetical tags like "(bodyweight)", "(dumbbell)"
+  return name.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase();
+};
+
+// Exercise with PR data
+interface ExerciseWithPR {
+  id: string;
+  name: string;
+  equipment: string;
+  normalizedName: string;
+  prWeight: number;
+  prReps: number;
+  est1RM: number;
+}
 
 interface SessionData {
   date: string;
@@ -58,12 +98,12 @@ export default function StatsPage() {
   const { theme } = useTheme();
   const supabase = createClient();
 
-  // Exercise templates for picker
-  const [templates, setTemplates] = useState<ExerciseTemplate[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  // Exercises with PR data
+  const [exercisesWithPR, setExercisesWithPR] = useState<ExerciseWithPR[]>([]);
+  const [loadingExercises, setLoadingExercises] = useState(true);
 
   // Selected exercise
-  const [selectedExercise, setSelectedExercise] = useState<ExerciseTemplate | null>(null);
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseWithPR | null>(null);
 
   // Exercise history data
   const [sessionHistory, setSessionHistory] = useState<SessionData[]>([]);
@@ -73,12 +113,15 @@ export default function StatsPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Load exercise templates on mount
+  // Collapsed sections
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  // Load exercises with PRs on mount
   useEffect(() => {
     if (user) {
-      loadTemplates();
+      loadExercisesWithPRs();
     } else {
-      setLoadingTemplates(false);
+      setLoadingExercises(false);
     }
   }, [user]);
 
@@ -89,23 +132,101 @@ export default function StatsPage() {
     }
   }, [selectedExercise]);
 
-  const loadTemplates = async () => {
-    const { data } = await supabase
+  const loadExercisesWithPRs = async () => {
+    setLoadingExercises(true);
+
+    // Get all exercise templates
+    const { data: templates } = await supabase
       .from("exercise_templates")
       .select("*")
       .eq("user_id", user!.id)
       .order("name", { ascending: true });
 
-    setTemplates((data || []) as ExerciseTemplate[]);
-    setLoadingTemplates(false);
+    if (!templates || templates.length === 0) {
+      setExercisesWithPR([]);
+      setLoadingExercises(false);
+      return;
+    }
+
+    // Get all exercises with sets to calculate PRs
+    const { data: exercises } = await supabase
+      .from("exercises")
+      .select(`
+        id,
+        name,
+        sets (
+          weight,
+          reps
+        ),
+        workouts!inner (
+          user_id
+        )
+      `)
+      .eq("workouts.user_id", user!.id);
+
+    // Build PR map by normalized exercise name
+    const prMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
+
+    (exercises || []).forEach((exercise) => {
+      const sets = exercise.sets as { weight: number; reps: number }[];
+      const normalizedName = normalizeExerciseName(exercise.name);
+
+      sets.forEach((set) => {
+        if (set.weight > 0 && set.reps > 0) {
+          const est1RM = calculateEst1RM(set.weight, set.reps);
+          const current = prMap.get(normalizedName);
+          if (!current || est1RM > current.est1RM) {
+            prMap.set(normalizedName, { weight: set.weight, reps: set.reps, est1RM });
+          }
+        }
+      });
+    });
+
+    // Merge templates by normalized name and add PR data
+    const mergedMap = new Map<string, ExerciseWithPR>();
+
+    templates.forEach((template) => {
+      const normalizedName = normalizeExerciseName(template.name);
+      const pr = prMap.get(normalizedName);
+
+      // Only add if not already in map (first occurrence wins for display name)
+      if (!mergedMap.has(normalizedName)) {
+        mergedMap.set(normalizedName, {
+          id: template.id,
+          name: template.name,
+          equipment: template.equipment,
+          normalizedName,
+          prWeight: pr?.weight || 0,
+          prReps: pr?.reps || 0,
+          est1RM: pr?.est1RM || 0,
+        });
+      }
+    });
+
+    setExercisesWithPR(Array.from(mergedMap.values()));
+    setLoadingExercises(false);
+  };
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
   };
 
   const loadExerciseHistory = async (exerciseName: string) => {
     setLoadingHistory(true);
 
-    // Query exercises directly, filtering by name at the database level
-    // This avoids loading all workouts into memory
-    const { data: exercises } = await supabase
+    // Normalize the search name to merge duplicates
+    const normalizedSearch = normalizeExerciseName(exerciseName);
+
+    // Query all exercises for this user
+    const { data: allExercises } = await supabase
       .from("exercises")
       .select(`
         id,
@@ -121,8 +242,12 @@ export default function StatsPage() {
           user_id
         )
       `)
-      .eq("workouts.user_id", user!.id)
-      .ilike("name", exerciseName);
+      .eq("workouts.user_id", user!.id);
+
+    // Filter to exercises matching the normalized name (merges duplicates)
+    const exercises = (allExercises || []).filter(
+      (ex) => normalizeExerciseName(ex.name) === normalizedSearch
+    );
 
     if (!exercises || exercises.length === 0) {
       setSessionHistory([]);
@@ -184,16 +309,41 @@ export default function StatsPage() {
     setLoadingHistory(false);
   };
 
-  // Filtered templates for search
-  const filteredTemplates = useMemo(() => {
-    if (!searchQuery.trim()) return templates;
+  // Filtered exercises for search
+  const filteredExercises = useMemo(() => {
+    if (!searchQuery.trim()) return exercisesWithPR;
     const query = searchQuery.toLowerCase();
-    return templates.filter(
-      (t) =>
-        t.name.toLowerCase().includes(query) ||
-        t.equipment.toLowerCase().includes(query)
+    return exercisesWithPR.filter(
+      (ex) =>
+        ex.name.toLowerCase().includes(query) ||
+        ex.equipment.toLowerCase().includes(query)
     );
-  }, [templates, searchQuery]);
+  }, [exercisesWithPR, searchQuery]);
+
+  // Group exercises by muscle group
+  const groupedExercises = useMemo(() => {
+    const groups: Record<string, ExerciseWithPR[]> = {};
+    const muscleGroups = ["Chest", "Back", "Shoulders", "Legs", "Arms", "Core", "Other"];
+
+    // Initialize all groups
+    muscleGroups.forEach((g) => (groups[g] = []));
+
+    filteredExercises.forEach((ex) => {
+      const group = categorizeExercise(ex.name);
+      groups[group].push(ex);
+    });
+
+    // Sort exercises within each group alphabetically
+    Object.keys(groups).forEach((g) => {
+      groups[g].sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    // Return only non-empty groups
+    return muscleGroups.filter((g) => groups[g].length > 0).map((g) => ({
+      name: g,
+      exercises: groups[g],
+    }));
+  }, [filteredExercises]);
 
   // Chart data
   const chartData: ChartDataPoint[] = useMemo(() => {
@@ -223,13 +373,13 @@ export default function StatsPage() {
   }, [sessionHistory]);
 
   // Handle exercise selection
-  const handleSelectExercise = (template: ExerciseTemplate) => {
-    setSelectedExercise(template);
+  const handleSelectExercise = (exercise: ExerciseWithPR) => {
+    setSelectedExercise(exercise);
     setShowPicker(false);
     setSearchQuery("");
   };
 
-  if (loadingTemplates) {
+  if (loadingExercises) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -418,12 +568,14 @@ export default function StatsPage() {
                         formatter={(value: number, name: string, props: any) => {
                           if (name === "est1RM") {
                             const { weight, reps } = props.payload;
+                            const isBodyweight = selectedExercise?.equipment === "bodyweight";
+                            const weightDisplay = isBodyweight ? `BW+${weight}` : `${weight}lbs`;
                             return [
                               <span key="value">
                                 <strong>{value} lbs</strong>
                                 <br />
                                 <span style={{ color: "#a0a0b0", fontSize: "12px" }}>
-                                  Performed: {weight}lbs × {reps} reps
+                                  Performed: {weightDisplay} × {reps} reps
                                 </span>
                               </span>,
                               "Est. 1RM",
@@ -480,7 +632,10 @@ export default function StatsPage() {
                         {session.dateFormatted}
                       </span>
                       <span className="text-sm text-muted-foreground text-center font-mono">
-                        {session.bestWeight} × {session.bestReps}
+                        {selectedExercise?.equipment === "bodyweight"
+                          ? `BW+${session.bestWeight}`
+                          : session.bestWeight}{" "}
+                        × {session.bestReps}
                       </span>
                       <div className="flex items-center justify-end gap-2">
                         <span className="text-sm font-semibold text-white">
@@ -572,34 +727,76 @@ export default function StatsPage() {
                 </div>
               </div>
 
-              {/* Exercise List */}
+              {/* Exercise List - Grouped by Muscle */}
               <div className="flex-1 overflow-y-auto p-2">
-                {filteredTemplates.length === 0 ? (
+                {groupedExercises.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>{searchQuery ? "No exercises match your search" : "No exercises yet"}</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    {filteredTemplates.map((template) => (
-                      <motion.button
-                        key={template.id}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleSelectExercise(template)}
-                        className="w-full p-3 rounded-xl flex items-center gap-3 text-left hover:bg-white/5 transition-colors"
-                      >
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: "rgba(255, 71, 87, 0.15)" }}
+                  <div className="space-y-2">
+                    {groupedExercises.map((group) => (
+                      <div key={group.name}>
+                        {/* Section Header */}
+                        <button
+                          onClick={() => toggleSection(group.name)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white transition-colors"
                         >
-                          <Dumbbell className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate">{template.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {template.equipment}
-                          </p>
-                        </div>
-                      </motion.button>
+                          {collapsedSections.has(group.name) ? (
+                            <ChevronRight className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                          {group.name}
+                          <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">
+                            {group.exercises.length}
+                          </span>
+                        </button>
+
+                        {/* Exercises in Section */}
+                        <AnimatePresence>
+                          {!collapsedSections.has(group.name) && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              {group.exercises.map((exercise) => (
+                                <motion.button
+                                  key={exercise.id}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => handleSelectExercise(exercise)}
+                                  className="w-full p-3 rounded-xl flex items-center gap-3 text-left hover:bg-white/5 transition-colors"
+                                >
+                                  <div
+                                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{ background: "rgba(255, 71, 87, 0.15)" }}
+                                  >
+                                    <Dumbbell className="w-5 h-5 text-primary" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold truncate">{exercise.name}</p>
+                                    {exercise.est1RM > 0 ? (
+                                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Trophy className="w-3 h-3 text-yellow-500" />
+                                        PR: {exercise.prWeight}×{exercise.prReps}
+                                        <span className="text-[10px] text-muted-foreground/60">
+                                          ({exercise.est1RM} est 1RM)
+                                        </span>
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground capitalize">
+                                        {exercise.equipment} • No data yet
+                                      </p>
+                                    )}
+                                  </div>
+                                </motion.button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     ))}
                   </div>
                 )}
