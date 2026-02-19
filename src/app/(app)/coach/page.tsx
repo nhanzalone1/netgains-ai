@@ -144,6 +144,7 @@ export default function CoachPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -173,8 +174,21 @@ export default function CoachPage() {
     }
   }, [isNearBottom]);
 
+  // Detect mobile vs desktop
+  useEffect(() => {
+    const checkMobile = () => {
+      // Check for touch capability and screen width
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isNarrow = window.innerWidth < 768;
+      setIsMobile(hasTouch && isNarrow);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // iOS keyboard handling using Visual Viewport API
-  // Instead of using position:fixed tricks, we resize the container to match the visual viewport
+  // When keyboard opens, we set container height to viewport height so input sits above keyboard
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
@@ -192,12 +206,12 @@ export default function CoachPage() {
       setKeyboardOpen(isOpen);
 
       if (isOpen) {
-        // Set container height to visual viewport height
+        // Set container height to visual viewport height so input is above keyboard
         setViewportHeight(currentHeight);
         // Scroll to bottom when keyboard opens
         setTimeout(() => scrollToBottom(true), 50);
       } else {
-        // Reset to full height
+        // Reset to null - will use bottom spacing instead
         setViewportHeight(null);
       }
 
@@ -684,9 +698,12 @@ export default function CoachPage() {
       style={{
         background: "#0f0f13",
         top: 0,
-        // When keyboard is open, go to bottom of screen
-        // When closed, leave space for floating nav bar (bottom-6 = 24px + ~80px nav height + shadow)
-        bottom: keyboardOpen ? 0 : 120,
+        // When keyboard is open, use viewport height so input sits above keyboard
+        // When closed, leave space for nav bar (more on desktop, less on mobile)
+        ...(keyboardOpen && viewportHeight
+          ? { height: viewportHeight }
+          : { bottom: isMobile ? 120 : 150 }
+        ),
         // Always prevent page scroll - only messages should scroll
         overflow: 'hidden',
       }}
