@@ -523,6 +523,13 @@ export default function CoachPage() {
 
     const loadMessages = async () => {
       const dbMessages = await loadMessagesFromDB(user.id);
+
+      // Initialize tracking refs with loaded messages so save effect doesn't re-save them
+      lastSavedContentRef.current.clear();
+      for (const msg of dbMessages) {
+        lastSavedContentRef.current.set(msg.id, msg.content);
+      }
+
       setMessages(dbMessages);
       setMessagesLoaded(true);
       checkAndGenerateOpening(dbMessages);
@@ -571,6 +578,12 @@ export default function CoachPage() {
         if (isLoadingRef.current) return;
         if (user?.id) {
           const dbMessages = await loadMessagesFromDB(user.id);
+          // Update tracking refs with loaded messages
+          for (const msg of dbMessages) {
+            if (!lastSavedContentRef.current.has(msg.id)) {
+              lastSavedContentRef.current.set(msg.id, msg.content);
+            }
+          }
           setMessages(dbMessages);
           checkAndGenerateOpening(dbMessages);
         }
@@ -583,6 +596,12 @@ export default function CoachPage() {
       if (isLoadingRef.current) return;
       if (user?.id) {
         const dbMessages = await loadMessagesFromDB(user.id);
+        // Update tracking refs with loaded messages
+        for (const msg of dbMessages) {
+          if (!lastSavedContentRef.current.has(msg.id)) {
+            lastSavedContentRef.current.set(msg.id, msg.content);
+          }
+        }
         setMessages(dbMessages);
         checkAndGenerateOpening(dbMessages);
       }
@@ -596,6 +615,12 @@ export default function CoachPage() {
         if (isLoadingRef.current) return;
         if (user?.id) {
           const dbMessages = await loadMessagesFromDB(user.id);
+          // Update tracking refs with loaded messages
+          for (const msg of dbMessages) {
+            if (!lastSavedContentRef.current.has(msg.id)) {
+              lastSavedContentRef.current.set(msg.id, msg.content);
+            }
+          }
           setMessages(dbMessages);
           checkAndGenerateOpening(dbMessages);
         }
