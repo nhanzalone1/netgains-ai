@@ -355,6 +355,117 @@ export default function DebugPage() {
     }
   };
 
+  // Split rotation editing
+  const [splitRotation, setSplitRotation] = useState("");
+  const [splitRotationSaved, setSplitRotationSaved] = useState<string[]>([]);
+
+  const loadSplitRotation = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("coach_memory")
+      .select("value")
+      .eq("user_id", user.id)
+      .eq("key", "split_rotation")
+      .single();
+    if (data?.value) {
+      try {
+        const parsed = JSON.parse(data.value);
+        setSplitRotationSaved(parsed);
+        setSplitRotation(parsed.join(", "));
+      } catch {
+        setSplitRotation(data.value);
+      }
+    }
+  };
+
+  const saveSplitRotation = async () => {
+    if (!user || !splitRotation.trim()) return;
+    // Parse comma-separated list into array
+    const rotation = splitRotation.split(",").map(s => s.trim()).filter(Boolean);
+    const jsonValue = JSON.stringify(rotation);
+
+    // Upsert the split_rotation
+    const { error } = await supabase
+      .from("coach_memory")
+      .upsert({
+        user_id: user.id,
+        key: "split_rotation",
+        value: jsonValue,
+      }, { onConflict: "user_id,key" });
+
+    if (error) {
+      showMessage(`Error: ${error.message}`);
+    } else {
+      setSplitRotationSaved(rotation);
+      // Clear daily brief cache
+      localStorage.removeItem(`netgains-daily-brief-${user.id}`);
+      showMessage(`Split saved: ${rotation.join(" → ")}`);
+    }
+  };
+
+  // Workout viewing
+  const [workouts, setWorkouts] = useState<{ id: string; date: string; notes: string | null; created_at: string }[]>([]);
+  const [showWorkouts, setShowWorkouts] = useState(false);
+
+  const loadWorkouts = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("workouts")
+      .select("id, date, notes, created_at")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false });
+    setWorkouts(data || []);
+    setShowWorkouts(true);
+  };
+
+  const deleteDebugWorkouts = async () => {
+    if (!user) return;
+    const debugWorkouts = workouts.filter(w => w.notes?.includes("[DEBUG]"));
+    if (debugWorkouts.length === 0) {
+      showMessage("No debug workouts to delete");
+      return;
+    }
+    if (!confirm(`Delete ${debugWorkouts.length} debug workouts?`)) return;
+
+    const workoutIds = debugWorkouts.map(w => w.id);
+
+    // Get exercise IDs for these workouts
+    const { data: exercises } = await supabase
+      .from("exercises")
+      .select("id")
+      .in("workout_id", workoutIds);
+
+    if (exercises && exercises.length > 0) {
+      const exerciseIds = exercises.map(e => e.id);
+      await supabase.from("sets").delete().in("exercise_id", exerciseIds);
+      await supabase.from("exercises").delete().in("workout_id", workoutIds);
+    }
+
+    await supabase.from("workouts").delete().in("id", workoutIds);
+    showMessage(`Deleted ${debugWorkouts.length} debug workouts`);
+    loadWorkouts();
+  };
+
+  const deleteWorkout = async (workoutId: string) => {
+    if (!user) return;
+
+    // Get exercise IDs for this workout
+    const { data: exercises } = await supabase
+      .from("exercises")
+      .select("id")
+      .eq("workout_id", workoutId);
+
+    if (exercises && exercises.length > 0) {
+      const exerciseIds = exercises.map(e => e.id);
+      await supabase.from("sets").delete().in("exercise_id", exerciseIds);
+      await supabase.from("exercises").delete().eq("workout_id", workoutId);
+    }
+
+    await supabase.from("workouts").delete().eq("id", workoutId);
+    showMessage("Deleted workout");
+    loadWorkouts();
+  };
+
   // Milestone testing
   const [milestones, setMilestones] = useState<{ milestone_type: string; achieved_at: string; celebrated_at: string | null }[]>([]);
 
@@ -620,6 +731,40 @@ export default function DebugPage() {
           </button>
         </Section>
 
+        {/* Split Rotation */}
+        <Section title="Split Rotation">
+          <p className="text-xs text-muted-foreground mb-2">
+            Define your training split order (comma-separated). Use &quot;Rest&quot; for rest days.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={splitRotation}
+              onChange={(e) => setSplitRotation(e.target.value)}
+              placeholder="Arms, Legs, Rest, Chest, Back, Rest"
+              className="flex-1 bg-white/10 rounded-lg px-3 py-2 text-sm"
+            />
+            <button
+              onClick={saveSplitRotation}
+              className="bg-green-600 text-white rounded-lg px-4 py-2 text-sm"
+            >
+              Save
+            </button>
+          </div>
+          <button
+            onClick={loadSplitRotation}
+            className="mt-2 text-sm text-blue-400 underline"
+          >
+            Load current
+          </button>
+          {splitRotationSaved.length > 0 && (
+            <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+              <span className="text-muted-foreground">Current: </span>
+              <span className="text-white">{splitRotationSaved.join(" → ")}</span>
+            </div>
+          )}
+        </Section>
+
         {/* Last Workout Override */}
         <Section title="Create Test Workout">
           <p className="text-xs text-muted-foreground mb-2">
@@ -642,6 +787,49 @@ export default function DebugPage() {
           <DebugButton onClick={clearAllWorkouts} variant="danger" className="mt-2">
             <Trash2 className="w-4 h-4" /> Delete ALL workouts
           </DebugButton>
+        </Section>
+
+        {/* View Workouts */}
+        <Section title="View/Manage Workouts">
+          <div className="space-y-2">
+            <DebugButton onClick={loadWorkouts} variant="default">
+              <Eye className="w-4 h-4" /> Load All Workouts
+            </DebugButton>
+            <DebugButton onClick={deleteDebugWorkouts} variant="warning">
+              <Trash2 className="w-4 h-4" /> Delete Only [DEBUG] Workouts
+            </DebugButton>
+          </div>
+
+          {showWorkouts && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                All Workouts ({workouts.length} total):
+              </h4>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {workouts.map((w) => (
+                  <div key={w.id} className="flex justify-between items-center text-xs bg-black/30 rounded px-2 py-1.5">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-white font-medium">{w.date}</span>
+                      {w.notes && (
+                        <span className={`ml-2 truncate ${w.notes.includes("[DEBUG]") ? "text-yellow-400" : "text-muted-foreground"}`}>
+                          {w.notes.slice(0, 30)}{w.notes.length > 30 ? "..." : ""}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteWorkout(w.id)}
+                      className="ml-2 p-1 text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {workouts.length === 0 && (
+                  <p className="text-muted-foreground text-xs">No workouts found</p>
+                )}
+              </div>
+            </div>
+          )}
         </Section>
 
         {/* Nutrition Override */}

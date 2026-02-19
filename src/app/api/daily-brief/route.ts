@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export const maxDuration = 30;
 
 // Cache version - increment this to invalidate all client caches
-export const DAILY_BRIEF_VERSION = 2;
+export const DAILY_BRIEF_VERSION = 3;
 
 // Format date as YYYY-MM-DD in local time (not UTC)
 function formatLocalDate(date: Date): string {
@@ -136,52 +136,99 @@ export async function POST(request: Request) {
   const trainingSplit = memoryMap.training_split || 'unknown';
   const daysPerWeek = parseInt(memoryMap.days_per_week || '4');
 
-  // Determine the suggested next workout based on split pattern
-  let suggestedWorkout = 'Training Day';
-
-  // Detect workout type from exercise names
-  const detectWorkoutType = (exercises: { name: string }[]): string => {
-    const names = exercises.map(e => e.name.toLowerCase()).join(' ');
-    if (names.includes('bench') || names.includes('chest') || names.includes('fly') || names.includes('push')) return 'chest';
-    if (names.includes('row') || names.includes('lat') || names.includes('pulldown') || names.includes('pull-up') || names.includes('pullup')) return 'back';
-    if (names.includes('squat') || names.includes('leg') || names.includes('lunge') || names.includes('calf')) return 'legs';
-    if (names.includes('shoulder') || names.includes('delt') || names.includes('lateral raise') || names.includes('ohp')) return 'shoulders';
-    if (names.includes('curl') || names.includes('bicep') || names.includes('tricep') || names.includes('arm') || names.includes('pushdown')) return 'arms';
-    if (names.includes('deadlift') || names.includes('rdl')) return 'back'; // Deadlifts often on back day
-    return 'unknown';
-  };
-
-  // Detect last workout type
-  const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'unknown';
-
-  // Suggest next workout based on split
-  const splitLower = trainingSplit.toLowerCase();
-
-  if (splitLower.includes('push') || splitLower.includes('ppl')) {
-    // Push/Pull/Legs rotation
-    if (lastType === 'chest' || lastType === 'shoulders') suggestedWorkout = 'Pull Day';
-    else if (lastType === 'back') suggestedWorkout = 'Leg Day';
-    else if (lastType === 'legs') suggestedWorkout = 'Push Day';
-    else suggestedWorkout = 'Push Day';
-  } else if (splitLower.includes('upper') || splitLower.includes('lower')) {
-    // Upper/Lower rotation
-    suggestedWorkout = (lastType === 'legs') ? 'Upper Body' : 'Lower Body';
-  } else {
-    // Body part split or unknown - suggest based on last workout type
-    // Common body part rotation: Chest → Back → Shoulders → Arms → Legs
-    if (lastType === 'chest') suggestedWorkout = 'Back Day';
-    else if (lastType === 'back') suggestedWorkout = 'Shoulder Day';
-    else if (lastType === 'shoulders') suggestedWorkout = 'Arm Day';
-    else if (lastType === 'arms') suggestedWorkout = 'Leg Day';
-    else if (lastType === 'legs') suggestedWorkout = 'Chest Day';
-    else suggestedWorkout = 'Training Day';
+  // Parse split rotation from coach_memory (JSON array)
+  // Format: ["Arms", "Legs", "Rest", "Chest and Front Delt", "Back and Rear Delt", "Rest"]
+  let splitRotation: string[] = [];
+  try {
+    if (memoryMap.split_rotation) {
+      splitRotation = JSON.parse(memoryMap.split_rotation);
+    }
+  } catch {
+    // Invalid JSON, ignore
   }
+
+  // Determine suggested workout based on split rotation
+  let suggestedWorkout = 'Training Day';
+  let lastWorkoutName = '';
+  let rotationIndex = -1;
+
+  // Get last workout name from notes field (stores folder/workout name)
+  if (recentWorkouts.length > 0 && recentWorkouts[0].notes) {
+    // Notes might be just the workout name, or "[DEBUG] something" - extract clean name
+    lastWorkoutName = recentWorkouts[0].notes.replace(/^\[DEBUG\]\s*/, '').trim();
+  }
+
+  if (splitRotation.length > 0) {
+    // Find where we are in the rotation by matching last workout name
+    const normalizedLast = lastWorkoutName.toLowerCase();
+
+    for (let i = 0; i < splitRotation.length; i++) {
+      const day = splitRotation[i].toLowerCase();
+      // Match if the workout name contains the split day name or vice versa
+      if (normalizedLast.includes(day) || day.includes(normalizedLast) ||
+          // Also match partial words (e.g., "arms" matches "Arms")
+          normalizedLast.split(/\s+/).some(word => day.includes(word)) ||
+          day.split(/\s+/).some(word => normalizedLast.includes(word))) {
+        rotationIndex = i;
+        break;
+      }
+    }
+
+    // If found, suggest next in rotation
+    if (rotationIndex >= 0) {
+      const nextIndex = (rotationIndex + 1) % splitRotation.length;
+      suggestedWorkout = splitRotation[nextIndex];
+    } else if (lastWorkoutName) {
+      // Couldn't match - just suggest first non-rest day
+      suggestedWorkout = splitRotation.find(d => d.toLowerCase() !== 'rest') || splitRotation[0];
+    } else {
+      // No last workout - start from beginning
+      suggestedWorkout = splitRotation[0];
+    }
+  } else {
+    // No split rotation defined - fall back to exercise-based detection
+    const detectWorkoutType = (exercises: { name: string }[]): string => {
+      const names = exercises.map(e => e.name.toLowerCase()).join(' ');
+      if (names.includes('bench') || names.includes('chest') || names.includes('fly') || names.includes('push')) return 'chest';
+      if (names.includes('row') || names.includes('lat') || names.includes('pulldown') || names.includes('pull-up') || names.includes('pullup')) return 'back';
+      if (names.includes('squat') || names.includes('leg') || names.includes('lunge') || names.includes('calf')) return 'legs';
+      if (names.includes('shoulder') || names.includes('delt') || names.includes('lateral raise') || names.includes('ohp')) return 'shoulders';
+      if (names.includes('curl') || names.includes('bicep') || names.includes('tricep') || names.includes('arm') || names.includes('pushdown')) return 'arms';
+      if (names.includes('deadlift') || names.includes('rdl')) return 'back';
+      return 'unknown';
+    };
+
+    const lastType = lastWorkout ? detectWorkoutType(lastWorkout.exercises) : 'unknown';
+    const splitLower = trainingSplit.toLowerCase();
+
+    if (splitLower.includes('push') || splitLower.includes('ppl')) {
+      if (lastType === 'chest' || lastType === 'shoulders') suggestedWorkout = 'Pull Day';
+      else if (lastType === 'back') suggestedWorkout = 'Leg Day';
+      else if (lastType === 'legs') suggestedWorkout = 'Push Day';
+      else suggestedWorkout = 'Push Day';
+    } else if (splitLower.includes('upper') || splitLower.includes('lower')) {
+      suggestedWorkout = (lastType === 'legs') ? 'Upper Body' : 'Lower Body';
+    } else {
+      if (lastType === 'chest') suggestedWorkout = 'Back Day';
+      else if (lastType === 'back') suggestedWorkout = 'Shoulder Day';
+      else if (lastType === 'shoulders') suggestedWorkout = 'Arm Day';
+      else if (lastType === 'arms') suggestedWorkout = 'Leg Day';
+      else if (lastType === 'legs') suggestedWorkout = 'Chest Day';
+      else suggestedWorkout = 'Training Day';
+    }
+  }
+
+  // Check if suggested workout is a rest day in the rotation
+  const isRotationRestDay = suggestedWorkout.toLowerCase() === 'rest';
 
   // Log for debugging
   console.log('[daily-brief] Debug:', {
     trainingSplit,
-    lastType,
+    splitRotation,
+    lastWorkoutName,
+    rotationIndex,
     suggestedWorkout,
+    isRotationRestDay,
     daysPerWeek,
     workoutsThisWeek,
     workedOutToday,
@@ -210,7 +257,8 @@ export async function POST(request: Request) {
 
   const needsRecovery = consecutiveWorkoutDays >= 3;
   const hitWeeklyGoal = workoutsThisWeek >= daysPerWeek;
-  const isRestDay = workedOutToday || hitWeeklyGoal || needsRecovery;
+  // Rest day if: rotation says rest, already trained today, hit weekly goal, or need recovery
+  const isRestDay = isRotationRestDay || workedOutToday || hitWeeklyGoal || needsRecovery;
 
   // More detailed logging
   console.log('[daily-brief] Rest day check:', {
@@ -260,7 +308,8 @@ export async function POST(request: Request) {
   const macroSummary = `${nutritionGoals.calories}cal | ${nutritionGoals.protein}P ${nutritionGoals.carbs}C ${nutritionGoals.fat}F`;
 
   // Build the prompt with clear training/rest day determination
-  const restDayReason = workedOutToday ? 'already trained today' :
+  const restDayReason = isRotationRestDay ? 'scheduled rest in rotation' :
+    workedOutToday ? 'already trained today' :
     hitWeeklyGoal ? `hit ${daysPerWeek}-day weekly goal` :
     needsRecovery ? `${consecutiveWorkoutDays} days straight, need recovery` : '';
 
@@ -320,12 +369,15 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       workoutsThisWeek,
       daysPerWeek,
       isRestDay,
+      isRotationRestDay,
       workedOutToday,
       hitWeeklyGoal,
       needsRecovery,
       consecutiveWorkoutDays,
       recentWorkoutDates: recentWorkouts.map(w => w.date),
-      lastType,
+      splitRotation,
+      lastWorkoutName,
+      rotationIndex,
       suggestedWorkout,
     };
 
@@ -351,12 +403,15 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       workoutsThisWeek,
       daysPerWeek,
       isRestDay,
+      isRotationRestDay,
       workedOutToday,
       hitWeeklyGoal,
       needsRecovery,
       consecutiveWorkoutDays,
       recentWorkoutDates: recentWorkouts.map(w => w.date),
-      lastType,
+      splitRotation,
+      lastWorkoutName,
+      rotationIndex,
       suggestedWorkout,
       error: String(error),
     };

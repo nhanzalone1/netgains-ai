@@ -1,7 +1,7 @@
 // Daily Brief cache utilities
 
 // Must match the version in /api/daily-brief/route.ts
-const EXPECTED_VERSION = 2;
+const EXPECTED_VERSION = 3;
 
 export interface DailyBrief {
   focus: string;
