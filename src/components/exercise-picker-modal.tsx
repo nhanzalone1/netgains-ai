@@ -1,11 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Search, Plus, X, Dumbbell } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Search, Plus, X, Dumbbell, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Modal } from "./ui/modal";
-import { Button } from "./ui/button";
-import { Chip } from "./ui/chip";
 import { createClient } from "@/lib/supabase/client";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
 
@@ -16,15 +13,35 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
   cable: { bg: "rgba(249, 115, 22, 0.2)", text: "#fb923c" },
   machine: { bg: "rgba(14, 165, 233, 0.2)", text: "#38bdf8" },
   smith: { bg: "rgba(255, 71, 87, 0.2)", text: "#ff4757" },
+  bodyweight: { bg: "rgba(168, 85, 247, 0.2)", text: "#a855f7" },
+  plate: { bg: "rgba(234, 179, 8, 0.2)", text: "#eab308" },
 };
 
-const DEFAULT_EQUIPMENT = [
-  { value: "barbell", label: "Barbell" },
-  { value: "dumbbell", label: "Dumbbell" },
-  { value: "cable", label: "Cable" },
-  { value: "machine", label: "Machine" },
-  { value: "smith", label: "Smith" },
-];
+// Equipment order for section display
+const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
+
+// Muscle group filter tabs
+const MUSCLE_TABS = ["Recent", "Chest", "Back", "Shoulders", "Arms", "Legs", "Core"];
+
+// Keywords for muscle group categorization
+const MUSCLE_KEYWORDS: Record<string, string[]> = {
+  Chest: ["bench", "fly", "chest", "pec", "pushup", "push-up", "incline press", "decline press"],
+  Back: ["row", "pull", "lat", "pulldown", "pullup", "pull-up", "deadlift", "back", "shrug"],
+  Shoulders: ["shoulder", "ohp", "overhead press", "lateral raise", "front raise", "rear delt", "delt", "military"],
+  Legs: ["squat", "leg", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl"],
+  Arms: ["curl", "tricep", "bicep", "arm", "pushdown", "hammer", "preacher", "skull", "dip", "extension"],
+  Core: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch"],
+};
+
+const categorizeExercise = (name: string): string => {
+  const lowerName = name.toLowerCase();
+  for (const [group, keywords] of Object.entries(MUSCLE_KEYWORDS)) {
+    if (keywords.some(kw => lowerName.includes(kw))) {
+      return group;
+    }
+  }
+  return "Other";
+};
 
 interface ExercisePickerModalProps {
   open: boolean;
@@ -44,35 +61,31 @@ export function ExercisePickerModal({
   onCreateNew,
   userId,
   folderId,
-  title = "Select Exercise",
-  accentColor = "purple",
 }: ExercisePickerModalProps) {
   const supabase = createClient();
+  const tabsRef = useRef<HTMLDivElement>(null);
 
-  // Tabs: "library" or "create"
-  const [activeTab, setActiveTab] = useState<"library" | "create">("library");
-
-  // Library state
+  // State
   const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
+  const [recentExercises, setRecentExercises] = useState<ExerciseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("Recent");
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Create form state
   const [newName, setNewName] = useState("");
   const [newEquipment, setNewEquipment] = useState("barbell");
   const [creating, setCreating] = useState(false);
 
-  // Accent colors
-  const colors = accentColor === "purple"
-    ? { bg: "rgba(168, 85, 247, 0.15)", border: "#a855f7", text: "#a855f7" }
-    : { bg: "rgba(239, 68, 68, 0.15)", border: "#ef4444", text: "#ef4444" };
-
   // Load exercises on mount
   useEffect(() => {
     if (open) {
       loadExercises();
-      setActiveTab("library");
+      loadRecentExercises();
+      setActiveTab("Recent");
       setSearchQuery("");
+      setShowCreateForm(false);
       setNewName("");
       setNewEquipment("barbell");
     }
@@ -90,15 +103,89 @@ export function ExercisePickerModal({
     setLoading(false);
   };
 
-  // Filtered exercises based on search
+  const loadRecentExercises = async () => {
+    // Get recent exercises from workout history
+    const { data: recentWorkouts } = await supabase
+      .from("exercises")
+      .select(`
+        name,
+        workouts!inner (
+          user_id,
+          date
+        )
+      `)
+      .eq("workouts.user_id", userId)
+      .order("workouts(date)", { ascending: false })
+      .limit(50);
+
+    if (recentWorkouts) {
+      // Get unique exercise names (most recent first)
+      const uniqueNames = new Set<string>();
+      const recentNames: string[] = [];
+      recentWorkouts.forEach((ex) => {
+        const nameLower = ex.name.toLowerCase();
+        if (!uniqueNames.has(nameLower)) {
+          uniqueNames.add(nameLower);
+          recentNames.push(ex.name);
+        }
+      });
+
+      // Match with templates
+      const { data: templates } = await supabase
+        .from("exercise_templates")
+        .select("*")
+        .eq("folder_id", folderId);
+
+      if (templates) {
+        const matched = recentNames.slice(0, 8).map(name =>
+          templates.find(t => t.name.toLowerCase() === name.toLowerCase())
+        ).filter(Boolean) as ExerciseTemplate[];
+        setRecentExercises(matched);
+      }
+    }
+  };
+
+  // Filter and group exercises
   const filteredExercises = useMemo(() => {
-    if (!searchQuery.trim()) return exercises;
-    const query = searchQuery.toLowerCase();
-    return exercises.filter((ex) =>
-      ex.name.toLowerCase().includes(query) ||
-      ex.equipment.toLowerCase().includes(query)
-    );
-  }, [exercises, searchQuery]);
+    let filtered = exercises;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = exercises.filter((ex) =>
+        ex.name.toLowerCase().includes(query) ||
+        ex.equipment.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply muscle group filter
+    if (activeTab === "Recent") {
+      return recentExercises;
+    } else if (activeTab !== "All") {
+      filtered = filtered.filter(ex => categorizeExercise(ex.name) === activeTab);
+    }
+
+    return filtered;
+  }, [exercises, recentExercises, searchQuery, activeTab]);
+
+  // Group exercises by equipment
+  const groupedExercises = useMemo(() => {
+    const groups: Record<string, ExerciseTemplate[]> = {};
+
+    filteredExercises.forEach(ex => {
+      const equip = ex.equipment.toLowerCase();
+      if (!groups[equip]) groups[equip] = [];
+      groups[equip].push(ex);
+    });
+
+    // Sort by equipment order
+    return EQUIPMENT_ORDER
+      .filter(eq => groups[eq]?.length > 0)
+      .map(eq => ({
+        equipment: eq,
+        exercises: groups[eq].sort((a, b) => a.name.localeCompare(b.name))
+      }));
+  }, [filteredExercises]);
 
   // Handle selecting an exercise
   const handleSelect = (template: ExerciseTemplate) => {
@@ -119,176 +206,271 @@ export function ExercisePickerModal({
     setCreating(false);
 
     if (result) {
-      // Add to local list
       setExercises((prev) => [...prev, result]);
-      // Select it
       onSelect(result);
       onClose();
     }
   };
 
   const getEquipmentStyle = (equipment: string) => {
-    return EQUIPMENT_COLORS[equipment] || EQUIPMENT_COLORS.barbell;
+    return EQUIPMENT_COLORS[equipment.toLowerCase()] || EQUIPMENT_COLORS.barbell;
+  };
+
+  const formatEquipment = (equipment: string) => {
+    if (equipment === "bodyweight") return "BW";
+    return equipment.charAt(0).toUpperCase() + equipment.slice(1);
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={title}>
-      <div className="space-y-4">
-        {/* Tab Switcher */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab("library")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-              activeTab === "library"
-                ? "text-white"
-                : "bg-muted/30 text-muted-foreground"
-            }`}
-            style={activeTab === "library" ? { background: colors.bg, color: colors.text } : undefined}
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200]"
+          style={{ background: "#0d1117" }}
+        >
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="h-full flex flex-col"
           >
-            Library
-          </button>
-          <button
-            onClick={() => setActiveTab("create")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-              activeTab === "create"
-                ? "text-white"
-                : "bg-muted/30 text-muted-foreground"
-            }`}
-            style={activeTab === "create" ? { background: colors.bg, color: colors.text } : undefined}
-          >
-            Create New
-          </button>
-        </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+              <button
+                onClick={onClose}
+                className="text-[#22d3ee] font-medium min-w-[60px]"
+              >
+                Cancel
+              </button>
+              <h1 className="text-lg font-bold text-white">Exercise Library</h1>
+              <button className="text-[#22d3ee] font-medium min-w-[60px] text-right">
+                Edit
+              </button>
+            </div>
 
-        {/* Library Tab */}
-        {activeTab === "library" && (
-          <div className="space-y-3">
+            {/* Hidden focus capture */}
+            <button className="sr-only" tabIndex={0} aria-hidden="true" />
+
             {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search exercises..."
-                className="w-full bg-background/50 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-                autoFocus
-              />
-              {searchQuery && (
+            <div className="px-4 py-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search exercises..."
+                  className="w-full rounded-xl pl-10 pr-10 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#22d3ee] min-h-[44px]"
+                  style={{ background: "rgba(255, 255, 255, 0.08)" }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div
+              ref={tabsRef}
+              className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              {MUSCLE_TABS.map(tab => (
                 <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                    activeTab === tab
+                      ? "bg-[#22d3ee] text-black"
+                      : "bg-white/10 text-gray-400 hover:text-white"
+                  }`}
                 >
-                  <X className="w-4 h-4" />
+                  {tab}
                 </button>
-              )}
+              ))}
             </div>
 
             {/* Exercise List */}
-            <div className="max-h-[300px] overflow-y-auto space-y-2 -mx-1 px-1">
+            <div className="flex-1 overflow-y-auto px-4">
               {loading ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading...
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-2 border-[#22d3ee] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : showCreateForm ? (
+                /* Create Form */
+                <div className="py-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
+                      Exercise Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="e.g., Incline Press"
+                      className="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#22d3ee] min-h-[44px]"
+                      style={{ background: "rgba(255, 255, 255, 0.08)" }}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                      Equipment
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {EQUIPMENT_ORDER.map((equip) => {
+                        const style = getEquipmentStyle(equip);
+                        const isActive = newEquipment === equip;
+                        return (
+                          <button
+                            key={equip}
+                            onClick={() => setNewEquipment(equip)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                              isActive ? "ring-2 ring-offset-2 ring-offset-[#0d1117]" : ""
+                            }`}
+                            style={{
+                              background: style.bg,
+                              color: style.text,
+                              ringColor: isActive ? style.text : undefined,
+                            }}
+                          >
+                            {formatEquipment(equip)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setShowCreateForm(false)}
+                      className="flex-1 py-3 rounded-xl font-semibold text-gray-400 bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreate}
+                      disabled={!newName.trim() || creating}
+                      className="flex-1 py-3 rounded-xl font-semibold text-black bg-[#22d3ee] disabled:opacity-50"
+                    >
+                      {creating ? "Creating..." : "Create & Add"}
+                    </button>
+                  </div>
                 </div>
               ) : filteredExercises.length === 0 ? (
-                <div className="text-center py-8">
-                  <Dumbbell className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-muted-foreground text-sm">
-                    {searchQuery ? "No exercises match your search" : "No exercises in library"}
+                <div className="text-center py-16">
+                  <Dumbbell className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+                  <p className="text-gray-400 mb-1">
+                    {searchQuery ? "No exercises match your search" : activeTab === "Recent" ? "No recent exercises" : "No exercises in this category"}
                   </p>
                   <button
-                    onClick={() => setActiveTab("create")}
-                    className="mt-2 text-sm font-semibold"
-                    style={{ color: colors.text }}
+                    onClick={() => setShowCreateForm(true)}
+                    className="mt-2 text-[#22d3ee] font-medium"
                   >
                     Create one →
                   </button>
                 </div>
-              ) : (
-                <AnimatePresence>
+              ) : activeTab === "Recent" ? (
+                /* Recent - flat list */
+                <div className="space-y-2 pb-4">
                   {filteredExercises.map((exercise) => {
                     const equipStyle = getEquipmentStyle(exercise.equipment);
                     return (
-                      <motion.button
+                      <button
                         key={exercise.id}
-                        initial={{ opacity: 0, y: -5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
                         onClick={() => handleSelect(exercise)}
-                        className="w-full p-3 rounded-xl flex items-center gap-3 text-left transition-colors hover:bg-white/5"
-                        style={{
-                          background: "rgba(26, 26, 36, 0.6)",
-                          border: "1px solid rgba(255, 255, 255, 0.05)",
-                        }}
+                        className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
+                        style={{ background: "rgba(255, 255, 255, 0.03)" }}
                       >
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: equipStyle.bg }}
-                        >
-                          <Dumbbell className="w-5 h-5" style={{ color: equipStyle.text }} />
-                        </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate">{exercise.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {exercise.equipment}
-                          </p>
+                          <p className="font-semibold text-white truncate">{exercise.name}</p>
+                          <p className="text-xs text-gray-500 capitalize">{exercise.equipment}</p>
                         </div>
-                        <Plus className="w-5 h-5 text-muted-foreground" />
-                      </motion.button>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                            style={{ background: equipStyle.bg, color: equipStyle.text }}
+                          >
+                            {formatEquipment(exercise.equipment)}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-gray-600" />
+                        </div>
+                      </button>
                     );
                   })}
-                </AnimatePresence>
+                </div>
+              ) : (
+                /* Grouped by equipment */
+                <div className="space-y-6 pb-4">
+                  {groupedExercises.map(group => {
+                    const equipStyle = getEquipmentStyle(group.equipment);
+                    return (
+                      <div key={group.equipment}>
+                        <h3
+                          className="text-xs font-bold uppercase tracking-wider mb-2 px-1"
+                          style={{ color: equipStyle.text }}
+                        >
+                          {formatEquipment(group.equipment)}
+                        </h3>
+                        <div className="space-y-2">
+                          {group.exercises.map(exercise => (
+                            <button
+                              key={exercise.id}
+                              onClick={() => handleSelect(exercise)}
+                              className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
+                              style={{ background: "rgba(255, 255, 255, 0.03)" }}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-white truncate">{exercise.name}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                  style={{ background: equipStyle.bg, color: equipStyle.text }}
+                                >
+                                  {formatEquipment(exercise.equipment)}
+                                </span>
+                                <ChevronRight className="w-4 h-4 text-gray-600" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* Create Tab */}
-        {activeTab === "create" && (
-          <div className="space-y-4">
-            {/* Name Input */}
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
-                Exercise Name
-              </label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g., Fly"
-                className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-                autoFocus
-              />
-            </div>
-
-            {/* Equipment Chips */}
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-                Equipment
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {DEFAULT_EQUIPMENT.map((opt) => (
-                  <Chip
-                    key={opt.value}
-                    label={opt.label}
-                    active={newEquipment === opt.value}
-                    onClick={() => setNewEquipment(opt.value)}
-                  />
-                ))}
+            {/* Create New Exercise Button */}
+            {!showCreateForm && (
+              <div className="px-4 py-4 border-t border-white/10">
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="w-full py-4 rounded-xl flex items-center justify-center gap-2 font-semibold text-[#22d3ee] transition-colors hover:bg-white/5"
+                  style={{
+                    border: "2px dashed rgba(34, 211, 238, 0.3)",
+                    background: "rgba(34, 211, 238, 0.05)"
+                  }}
+                >
+                  <Plus className="w-5 h-5" />
+                  Create New Exercise
+                </button>
               </div>
-            </div>
-
-            {/* Create Button */}
-            <Button
-              onClick={handleCreate}
-              loading={creating}
-              disabled={!newName.trim()}
-            >
-              Create & Add
-            </Button>
-          </div>
-        )}
-      </div>
-    </Modal>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
