@@ -850,6 +850,9 @@ export default function StatsPage() {
                 </button>
               </div>
 
+              {/* Hidden element to capture initial focus */}
+              <button className="sr-only" tabIndex={0} aria-hidden="true" />
+
               {/* Search */}
               <div className="p-4 border-b border-white/5">
                 <div className="relative">
