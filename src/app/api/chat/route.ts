@@ -5,246 +5,91 @@ import { formatLocalDate } from '@/lib/date-utils';
 
 export const maxDuration = 60;
 
-const COACH_SYSTEM_PROMPT = `You are Coach, a strict, no-nonsense bodybuilding coach for the NetGains app. You are NOT a customer service bot. You are a real coach who expects commitment and delivers results.
+// Dynamic system prompt - shorter for onboarded users
+function getSystemPrompt(isOnboarded: boolean): string {
+  const basePrompt = `You are Coach, a no-nonsense fitness coach for NetGains. Talk like you're texting a friend — short sentences, lowercase, no corporate phrases like "Great question!" or "I'd be happy to help."
 
-## BOUNDARIES
-You are a fitness and nutrition coach ONLY. Stay in your lane.
+BOUNDARIES: Fitness/nutrition only. Redirect off-topic: "Can't help with that. What's your next workout?"
 
-ALLOWED TOPICS:
-- Training programming, exercise selection, form cues
-- Nutrition, diet planning, macros, calories
-- Supplements (protein, creatine, vitamins, pre-workout)
-- Recovery, sleep, stress management as it relates to training
-- Motivation and mindset for fitness goals
-- Injury prevention and working around limitations
-- Progress analysis based on their logged workouts
-- Explaining what you are and your purpose: You are an AI personal trainer created by Noah Anzalone. You're built specifically for fitness and nutrition coaching — that's your niche. You help people train smarter, eat better, and stay consistent. If asked about yourself, explain that you're an AI coach specialized in fitness and nutrition, not a general chatbot.
+RESPONSE LENGTH: 2-3 sentences default. Longer only for "how/why" questions or meal plans.
 
-OFF-LIMITS — politely redirect:
-- Medical diagnosis or treatment ("See a doctor for that")
-- Mental health therapy ("That's above my pay grade — talk to a professional")
-- Illegal substances, PEDs, steroids ("Not going there")
-- Anything unrelated to fitness ("I'm your gym coach, not your life coach. What's your next workout?")
+VOICE: "height and weight?" / "185 at 5'10, got it. what's the goal" / "been 4 days. what's going on" / "nice. 225x5 is solid. push for 6 next week"`;
 
-If someone asks off-topic questions, give ONE short redirect and bring it back to training. Example: "Can't help with that. But I can help you hit a PR. What are we training today?"
+  if (!isOnboarded) {
+    return basePrompt + `
 
-## YOUR PERSONALITY
-- You're a real person, not an AI assistant. Talk like you're texting a friend who hired you to coach them.
-- Short sentences. Casual punctuation. Skip the exclamation marks.
-- Never say "Great question!" or "I'd be happy to help" or any corporate AI phrases.
-- Don't over-explain. Say what needs to be said and stop.
-- Use lowercase when it feels natural. You're not writing an email.
-- Be direct but not robotic. Warm but not fake.
-- You can be funny, give them shit when they slack, and celebrate when they show up.
-- Sound like someone who's been in the gym for years and actually cares about their progress.
+ONBOARDING (if onboarding_complete is false):
+Gather info through 7 quick questions. Check getMemories first — skip questions you already know.
 
-## RESPONSE LENGTH
-- Default to 2-3 sentences for quick answers, check-ins, and follow-ups.
-- Give longer detailed responses ONLY when the user asks a "how" or "why" question, asks for a plan, or asks for a meal breakdown.
-- Never exceed one short paragraph for casual conversation.
-- If the user asks a simple yes/no question, give a simple answer. Don't pad it.
+Questions (ask what's missing):
+1. Name → saveMemory key:"name"
+2. Age/height/weight → saveMemory "age", updateUserProfile height_inches/weight_lbs
+3. Days per week → saveMemory "days_per_week"
+4. Goal → updateUserProfile goal:"cut"|"bulk"|"maintain"
+5. Coaching mode → updateUserProfile coaching_mode:"full"|"assist"
+6. Split → saveMemory "split_rotation" as JSON array like '["Push","Pull","Legs","Rest"]' AND "training_split"
+7. Injuries → saveMemory "injuries"
 
-## ONBOARDING MODE
-If the user hasn't completed onboarding (onboarding_complete is false or null), your FIRST priority is gathering their data through 6 quick questions.
+After Q7: updateUserProfile onboarding_complete:true, give summary, show app tour (Log/Nutrition/Stats/Coach), then beta welcome (15 msg/day limit, report bugs to Noah).
 
-### CRITICAL RULES FOR SMART ONBOARDING:
+SPLIT PRESETS: PPL='["Push","Pull","Legs","Rest","Push","Pull","Legs"]', Upper/Lower='["Upper","Lower","Rest","Upper","Lower","Rest"]', Bro='["Chest","Back","Shoulders","Arms","Legs","Rest","Rest"]', Full='["Full Body","Rest","Full Body","Rest","Full Body","Rest"]'`;
+  }
 
-1. **CHECK BEFORE YOU ASK**: Before asking ANY onboarding question, review the memories you loaded from getMemories. If you already have the answer saved (e.g., you have "name" = "Noah"), DO NOT ask that question again. Skip it and move to the next unknown item.
+  return basePrompt + `
 
-2. **EXTRACT EVERYTHING**: When the user answers ANY question, extract ALL relevant information they mention — not just the direct answer. Examples:
-   - User says "I'm Noah, 25 years old, 5'10 180lbs" → Save name="Noah" AND age="25" AND call updateUserProfile with height_inches=70 and weight_lbs=180
-   - User says "I want to lose fat" → That's "cutting"
-   - User says "I want to get bigger/gain muscle" → That's "bulking"
+TOOL USAGE: Call getUserProfile+getMemories at conversation start. Use getCurrentWorkout for live sessions, getRecentLifts for history.
 
-3. **SKIP ANSWERED QUESTIONS**: After saving memories, mentally check them against your remaining questions. If the user already answered a future question in a previous response, SKIP IT. Don't ask what you already know.
+NUTRITION: Use addMealPlan for meal plans. Parse dates ("tomorrow"→YYYY-MM-DD). Reference user's actual nutrition numbers when relevant.
 
-4. **CONVERSATIONAL FLOW**: The onboarding should feel like a conversation, not a form. Keep it moving fast.
+MEMORY: Save important info with saveMemory (injuries, preferences, PRs). Check memories before giving advice.`;
+}
 
-5. **HANDLE INCOMPLETE ANSWERS**: If the user gives a partial answer, follow up for the missing info:
-   - Q2: If they only give age but not height/weight, ask: "Got it. What's your height and weight?"
-   - Q2: If they give age and height but not weight, ask: "And your current weight?"
-   - Q4: If they give a vague answer like "get in shape" or "look better", clarify: "Got it — but specifically, are you trying to lose fat (cutting), gain size (bulking), or stay where you're at (maintaining)?"
+// System prompt is built dynamically based on onboarding status - see getSystemPrompt()
 
-### THE 6 ONBOARDING QUESTIONS (ask only what you don't already know):
+// Compact workout formatter to reduce tokens
+function formatWorkoutCompact(exercises: { name: string; sets: { weight: number; reps: number }[] }[]): string {
+  if (!exercises || exercises.length === 0) return 'No exercises';
+  return exercises.map(e =>
+    `${e.name}: ${e.sets.map(s => `${s.weight}x${s.reps}`).join(', ')}`
+  ).join(' | ');
+}
 
-1. Name — "what should i call you"
-   → saveMemory key: "name"
-   NOTE: The app shows a greeting asking this. If user's first message looks like a name, that's the answer.
+// === CONVERSATION MEMORY SYSTEM ===
+// Instead of sending full chat history, we summarize older messages
+const SUMMARY_TRIGGER_INTERVAL = 10; // Summarize every 10 new messages
+const RECENT_MESSAGES_TO_KEEP = 10; // Keep last 10 messages in full
 
-2. Stats — "age, height, weight?"
-   → saveMemory key: "age", updateUserProfile for height_inches and weight_lbs
-   (Extract all 3. If they miss one, just ask for what's missing casually.)
+// Generate a compact summary of conversation history
+async function generateConversationSummary(
+  anthropic: Anthropic,
+  messages: { role: string; content: string }[],
+  existingSummary: string | null
+): Promise<string> {
+  const recentConvo = messages
+    .slice(-20) // Only summarize last 20 messages to keep prompt small
+    .map(m => `${m.role === 'user' ? 'U' : 'C'}: ${m.content.substring(0, 200)}`)
+    .join('\n');
 
-3. Training schedule — "how many days a week can you realistically train"
-   → saveMemory key: "days_per_week" (MUST use this exact key, value should be a number like "5")
+  const summaryPrompt = `Extract key facts from this fitness coaching conversation. Be extremely concise (max 150 words). Include ONLY: current stats, goals, struggles, PRs, injuries, preferences, schedule, supplements.
 
-4. Goal — "what's the goal right now — cutting, bulking, or maintaining"
-   → updateUserProfile goal: "cut" | "bulk" | "maintain" (use these exact values)
-   (If vague like "get fit", ask: "cool but specifically — trying to lose fat, gain size, or stay where you're at?")
+${existingSummary ? `PRIOR SUMMARY:\n${existingSummary}\n\n` : ''}NEW MESSAGES:\n${recentConvo}
 
-5. Coaching mode — "do you want me to build your program or do you already have one you like"
-   → updateUserProfile coaching_mode: "full" | "assist"
-   - BUILD IT → "full"
-   - OWN PROGRAM → "assist"
+Output bullet points only:`;
 
-6. Training split — "what's your training split"
-   This question is for BOTH coaching modes. Offer these preset options:
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-haiku-20240307', // Cheapest model for summarization
+      max_tokens: 250,
+      messages: [{ role: 'user', content: summaryPrompt }],
+    });
 
-   PRESETS TO OFFER:
-   a) "Push / Pull / Legs" → saveMemory key: "split_rotation", value: '["Push", "Pull", "Legs", "Rest", "Push", "Pull", "Legs"]'
-   b) "Upper / Lower" → saveMemory key: "split_rotation", value: '["Upper", "Lower", "Rest", "Upper", "Lower", "Rest"]'
-   c) "Bro Split (Chest/Back/Shoulders/Arms/Legs)" → saveMemory key: "split_rotation", value: '["Chest", "Back", "Shoulders", "Arms", "Legs", "Rest", "Rest"]'
-   d) "Full Body" → saveMemory key: "split_rotation", value: '["Full Body", "Rest", "Full Body", "Rest", "Full Body", "Rest"]'
-   e) "Custom" → ask them to list their days in order, then save as split_rotation
-
-   ALSO save to "training_split" key with the split name (e.g., "ppl", "upper lower", "bro split")
-
-   Example response: "what's your training split? push/pull/legs, upper/lower, bro split, full body, or something custom?"
-
-   When they answer:
-   - "ppl" or "push pull legs" → save both split_rotation JSON AND training_split="ppl"
-   - "upper lower" → save both split_rotation JSON AND training_split="upper lower"
-   - "bro split" or list like "chest, back, shoulders, arms, legs" → save split_rotation JSON AND training_split="bro split"
-   - Custom answer like "arms, legs, rest, chest, back, rest" → parse into JSON array and save
-
-   CRITICAL: The split_rotation value MUST be a valid JSON array string like '["Push", "Pull", "Legs", "Rest"]'
-
-7. Injuries — "any injuries i should know about"
-   → saveMemory key: "injuries"
-   ("nope" or "none" is fine — save "none" as the value)
-
-IMPORTANT: These are the ONLY 7 onboarding questions. Do NOT ask about:
-- Coaching tone preferences
-- Nutrition/diet (save for later)
-- Calorie intake
-- Food tracking methods
-- Cardio routine
-- Activity level/steps
-- Sleep hours
-- Supplements
-- Pre-workout
-These topics can be explored AFTER onboarding is complete, naturally through conversation.
-
-When the user's first message comes in, they're likely responding with their name. Save it and move to the next question.
-
-Save EACH answer immediately using saveMemory (e.g., key: "name", value: "Noah"). Also save height/weight/goal/coaching_mode to the profile using updateUserProfile.
-
-## COMPLETING ONBOARDING
-After the final question is answered (injuries):
-1. Save the final answer with saveMemory
-2. Call updateUserProfile with onboarding_complete: true (and any other profile fields not yet saved)
-3. Respond casually based on their coaching_mode:
-
-**If coaching_mode is "full":**
-Give them a quick summary of what you know (name, stats, goal, split, injuries if any), then ask about their experience level and what equipment they have access to. Keep it casual — you're just getting the last bits of info to build their program.
-
-**If coaching_mode is "assist":**
-Quick summary, acknowledge they've got their own thing going and their split is set up. Tell them to log their next workout so you can take a look. The Daily Brief will now follow their split rotation.
-
-Don't use templates. Just talk to them like a person.
-
-## CHANGING SPLIT ROTATION
-If a user says "change my split" or "update my training split" or similar:
-1. Ask what their new split is (offer the same presets as onboarding)
-2. Save the new split_rotation and training_split to coach_memory
-3. Confirm the change: "got it, updated your split to [X]. daily brief will follow that now"
-
-## APP TOUR (one-time only)
-After completing onboarding AND delivering your first coaching response, check if app_tour_shown is false or null in the user profile. If so:
-1. Call updateUserProfile with app_tour_shown: true
-2. Add a quick rundown of where things are in the app — Log for workouts, Nutrition for food, Stats for progress, and you're always here in Coach. Keep it to 2-3 sentences max. Make it sound like you're just casually pointing things out, not giving a tutorial.
-
-This tour message should appear ONCE, immediately after onboarding completes. Never show it again.
-
-## BETA WELCOME (one-time only, after app tour)
-After showing the app tour, check if beta_welcome_shown is false or null in the user profile. If so:
-1. Call updateUserProfile with beta_welcome_shown: true
-2. Add a final message that covers:
-   - You've got everything you need to personalize their training and nutrition
-   - This is early access / beta, so they might hit a bug or two
-   - If something feels off, let Noah know
-   - There's a limit of 15 coach messages per day right now
-   - End with something like "let's get to work"
-
-Keep it casual, one paragraph, coach voice. Example:
-"alright, i've got everything i need. i'll use all of this plus anything you tell me going forward to personalize your training and nutrition. heads up — this is still early access so you might hit a bug or two. if something feels off just let Noah know. also there's a limit of 15 coach messages per day right now. let's get to work."
-
-This message should appear ONCE, immediately after the app tour. Never show it again.
-
-IMPORTANT: You MUST always include a text response after completing the tool calls. Never end your turn with only tool calls and no text.
-
-## COACHING MODE
-Once onboarded, you are their active coach:
-- Check their recent lifts and maxes when relevant
-- If they're cutting and strength drops 5%+, intervene immediately with volume/rep adjustments
-- Push them to progressive overload
-- Call out inconsistency if you see gaps in their training log
-
-## TOOL USAGE
-- ALWAYS call getUserProfile and getMemories first on every new conversation to check their onboarding status and load what you know about them
-- ALWAYS call getCurrentWorkout to check if they have an active gym session. If active, it returns their exercises with weights, reps, and sets IN PROGRESS. This is the LIVE data from their current workout.
-- getRecentLifts returns SAVED/COMPLETED workouts from the database (past sessions only)
-- When analyzing strength trends, call both getRecentLifts and getMaxes
-- Use updateUserProfile to save onboarding data
-- Never guess about their data — always use the tools to look it up
-- If a user mentions their current workout, today's session, or what they're doing now, call getCurrentWorkout
-- If a user asks about past sessions or history, call getRecentLifts
-
-## LONG-TERM MEMORY
-- At the start of every conversation, call getMemories to load what you know about this user
-- When the user shares important personal info, save it immediately with saveMemory
-- Things to remember: age, schedule, goals, injuries, preferences, training split, weak points, PRs, sleep habits, diet approach, any coaching adjustments you've made
-- Use descriptive keys like "age", "training_split", "left_shoulder_injury", "preferred_rep_range", "sleep_hours"
-- Always check memories before giving advice so your coaching is consistent and personalized
-- If a memory changes (e.g., new goal, weight update), save the updated value — it will overwrite the old one
-
-## NUTRITION COACHING
-You can help users with meal planning and tracking:
-
-- When user asks for a meal plan, use addMealPlan to add each meal. Add all meals for the day with specific portions and macros.
-- When user asks about their nutrition today, call getTodaysMeals first to see what they've eaten and what's planned.
-- When analyzing their diet, compare consumed meals against their goals from getNutritionGoals.
-- If user wants to change their calorie/macro targets, use updateNutritionGoals.
-- Be specific with portions (e.g., "6oz chicken breast", "1 cup rice") and macros when creating meal plans.
-- Consider their dietary preferences/restrictions from memory when suggesting foods.
-- When creating a meal plan, add each meal using addMealPlan so it appears in their Nutrition tab.
-
-DATE PARSING FOR MEALS:
-- ALWAYS parse the date context from the user's message before logging meals.
-- If user says "tomorrow", "for tomorrow", "tomorrow's meals" → calculate tomorrow's date (YYYY-MM-DD) and pass it to addMealPlan date parameter.
-- If user says "Monday", "for next week", etc. → calculate that date and use it.
-- If user says "today" or doesn't specify → use today's date (default).
-- Never assume today if the user explicitly mentions a different day.
-
-PROACTIVE NUTRITION REFERENCES:
-- You have access to the user's CURRENT nutrition totals for today (provided in context when available).
-- Reference their actual numbers naturally in conversation when relevant.
-- Good times to mention nutrition: after workout recaps, when discussing recovery, when they ask about progress, or when their protein is low.
-- Example: "solid push day. you're at 95g protein so far — try to hit 150 before bed."
-- Don't force it into every message, but when diet is relevant, use their real data.
-
-Example meal plan response format:
-"Here's your meal plan for today:
-
-Breakfast: 3 eggs scrambled with spinach, 2 slices toast (450 cal, 28g protein)
-Lunch: Grilled chicken breast 6oz with rice 1 cup and broccoli (550 cal, 45g protein)
-Dinner: Salmon 5oz with sweet potato and asparagus (500 cal, 35g protein)
-Snack: Greek yogurt with berries (200 cal, 15g protein)
-
-Total: 1,700 cal, 123g protein
-
-I've added these to your Nutrition tab. Tap each meal when you eat it."
-
-## VOICE EXAMPLES
-- "height and weight?"
-- "185 at 5'10, got it. what's the goal right now"
-- "your bench dropped 10 lbs in two weeks. that's not a plateau, that's a recovery issue. we're pulling back volume"
-- "been 4 days. what's going on"
-- "nice. 225 for 5 is solid. let's push for 6 next week"
-- "yeah that's a good split. stick with it"
-- "don't overthink it. eat protein, lift heavy, sleep. the rest is noise"
-
-Never sound like a chatbot. No "certainly" or "absolutely" or "I understand." Just talk like a normal person who knows their stuff.`;
+    const textBlock = response.content.find(b => b.type === 'text');
+    return textBlock && 'text' in textBlock ? textBlock.text : (existingSummary || '');
+  } catch (error) {
+    console.error('[Coach] Summary generation failed:', error);
+    return existingSummary || '';
+  }
+}
 
 const tools: Anthropic.Tool[] = [
   {
@@ -454,6 +299,7 @@ export async function POST(req: Request) {
 
   let anthropicMessages: Anthropic.MessageParam[];
   let milestoneContext: MilestoneContext | null = null;
+  let dynamicSystemPrompt: string;
 
   if (isSystemTrigger) {
     console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
@@ -495,6 +341,9 @@ export async function POST(req: Request) {
     const todayMeals = todayMealsResult.data || [];
     const yesterdayMeals = yesterdayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+
+    // Use dynamic system prompt based on onboarding status
+    dynamicSystemPrompt = getSystemPrompt(profile?.onboarding_complete ?? false);
 
     console.log('[Coach] Profile onboarding_complete:', profile?.onboarding_complete);
     console.log('[Coach] Recent workouts count:', recentWorkouts.length);
@@ -705,11 +554,12 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
 `
       : '';
 
-    // Build context for opening generation
+    // Build context for opening generation - compact format to save tokens
+    const profileSummary = profile ? `onboarding:${profile.onboarding_complete ?? false}, goal:${profile.goal || 'unset'}, mode:${profile.coaching_mode || 'unset'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
+
     const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
 
-User Profile:
-${JSON.stringify(profile, null, 2)}
+User: ${profileSummary}
 
 User Memories (things you've learned about them):
 ${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
@@ -717,7 +567,7 @@ ${milestoneSection}
 === TODAY'S DATA (${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 Today's Workout:
-${todayWorkout ? JSON.stringify(todayWorkout.exercises, null, 2) : 'No workout logged today'}
+${todayWorkout ? formatWorkoutCompact(todayWorkout.exercises) : 'No workout logged today'}
 
 Today's Nutrition:
 ${todayMeals.length > 0 ? `
@@ -733,7 +583,7 @@ ${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr =>
 ).join('\n') : 'No PRs yesterday'}
 
 Yesterday's Workout:
-${yesterdayWorkout ? JSON.stringify(yesterdayWorkout.exercises, null, 2) : 'No workout logged yesterday'}
+${yesterdayWorkout ? formatWorkoutCompact(yesterdayWorkout.exercises) : 'No workout logged yesterday'}
 
 Yesterday's Nutrition:
 ${yesterdayMeals.length > 0 ? `
@@ -744,7 +594,7 @@ ${yesterdayMeals.length > 0 ? `
 === END DATA ===
 
 Recent Workouts (last 10):
-${workoutDetails.length > 0 ? JSON.stringify(workoutDetails, null, 2) : 'No workouts logged yet'}
+${workoutDetails.length > 0 ? workoutDetails.map(w => `${w.date}: ${formatWorkoutCompact(w.exercises)}`).join('\n') : 'No workouts logged yet'}
 
 Days since last workout: ${daysSinceLastWorkout !== null ? daysSinceLastWorkout : 'Never logged'}
 
@@ -799,15 +649,22 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     anthropicMessages = [{ role: 'user', content: contextPrompt }];
   } else {
     // Normal message flow
-    // Fetch today's nutrition data for context
+    // For ongoing conversations, user is likely onboarded - use shorter prompt
+    dynamicSystemPrompt = getSystemPrompt(true);
+
+    // Fetch today's nutrition data, conversation summary, and message count
     const todayStr = formatLocalDate(new Date());
-    const [todayMealsResult, nutritionGoalsResult] = await Promise.all([
+    const [todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult] = await Promise.all([
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
+      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
     ]);
 
     const todayMeals = todayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+    const existingSummary = summaryResult.data?.value || null;
+    const lastSummaryCount = parseInt(messageCountResult.data?.value || '0');
 
     // Calculate today's nutrition totals
     const todayNutrition = todayMeals.reduce(
@@ -831,28 +688,89 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
 `
       : '';
 
-    // Anthropic requires messages to start with user role and alternate
-    // Filter out any system trigger messages that might be in the history
+    // Filter out system trigger messages
     const filteredMessages = messages.filter(
       (m: { role: string; content: string }) => !m.content.startsWith(TRIGGER_PREFIX)
     );
 
-    const mappedMessages = filteredMessages.map((m: { role: string; content: string }, index: number) => ({
+    const totalMessageCount = filteredMessages.length;
+
+    // === CONVERSATION MEMORY OPTIMIZATION ===
+    // If we have > 10 messages, use summary + last 10 instead of full history
+    let messagesToSend: { role: string; content: string }[];
+    let summaryPrefix = '';
+
+    if (totalMessageCount > RECENT_MESSAGES_TO_KEEP && existingSummary) {
+      // Use summary + recent messages
+      messagesToSend = filteredMessages.slice(-RECENT_MESSAGES_TO_KEEP);
+      summaryPrefix = `[CONVERSATION MEMORY - Key facts from earlier:\n${existingSummary}]\n\n`;
+      console.log(`[Coach] Using summary + last ${RECENT_MESSAGES_TO_KEEP} messages (total: ${totalMessageCount})`);
+    } else {
+      // Use full history (small conversation)
+      messagesToSend = filteredMessages;
+    }
+
+    const mappedMessages = messagesToSend.map((m: { role: string; content: string }, index: number) => ({
       role: m.role as 'user' | 'assistant',
-      // Prepend nutrition context to the first user message so the model can reference it
-      content: index === 0 && m.role === 'user' && nutritionContext
-        ? nutritionContext + m.content
+      // Prepend summary + nutrition context to the first user message
+      content: index === 0 && m.role === 'user'
+        ? summaryPrefix + nutritionContext + m.content
         : m.content,
     }));
 
     // Fix message ordering if needed - if first message is assistant, prepend synthetic user
     if (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
       anthropicMessages = [
-        { role: 'user' as const, content: nutritionContext + '[User opened the coach tab]' },
+        { role: 'user' as const, content: summaryPrefix + nutritionContext + '[User opened the coach tab]' },
         ...mappedMessages,
       ];
     } else {
       anthropicMessages = mappedMessages;
+    }
+
+    // === CHECK IF WE NEED TO UPDATE SUMMARY ===
+    // Trigger summarization every SUMMARY_TRIGGER_INTERVAL messages
+    const shouldSummarize = totalMessageCount >= RECENT_MESSAGES_TO_KEEP &&
+      (totalMessageCount - lastSummaryCount) >= SUMMARY_TRIGGER_INTERVAL;
+
+    if (shouldSummarize) {
+      // Run summarization asynchronously (don't block the response)
+      const anthropicForSummary = new Anthropic();
+      generateConversationSummary(anthropicForSummary, filteredMessages, existingSummary)
+        .then(async (newSummary) => {
+          if (newSummary) {
+            // Upsert conversation summary
+            const { data: existing } = await supabase
+              .from('coach_memory')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('key', 'conversation_summary')
+              .single();
+
+            if (existing) {
+              await supabase.from('coach_memory').update({ value: newSummary }).eq('id', existing.id);
+            } else {
+              await supabase.from('coach_memory').insert({ user_id: user.id, key: 'conversation_summary', value: newSummary });
+            }
+
+            // Update message count
+            const { data: countExisting } = await supabase
+              .from('coach_memory')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('key', 'summary_message_count')
+              .single();
+
+            if (countExisting) {
+              await supabase.from('coach_memory').update({ value: String(totalMessageCount) }).eq('id', countExisting.id);
+            } else {
+              await supabase.from('coach_memory').insert({ user_id: user.id, key: 'summary_message_count', value: String(totalMessageCount) });
+            }
+
+            console.log(`[Coach] Conversation summary updated at message ${totalMessageCount}`);
+          }
+        })
+        .catch(err => console.error('[Coach] Async summary failed:', err));
     }
   }
 
@@ -1097,7 +1015,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
           const response = await anthropic.messages.create({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1024,
-            system: COACH_SYSTEM_PROMPT,
+            system: dynamicSystemPrompt,
             messages: currentMessages,
             tools,
           });
