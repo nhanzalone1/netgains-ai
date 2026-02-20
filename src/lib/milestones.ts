@@ -80,10 +80,14 @@ export async function detectMilestones(
   const today = effectiveDate || formatLocalDate(new Date());
 
   // Get existing milestones
-  const { data: existingMilestones } = await supabase
+  const { data: existingMilestones, error: milestonesError } = await supabase
     .from('milestones')
     .select('milestone_type, celebrated_at')
     .eq('user_id', userId);
+
+  if (milestonesError) {
+    console.error('[Milestones] Existing milestones query error:', milestonesError);
+  }
 
   const achieved = new Set((existingMilestones || []).map(m => m.milestone_type));
   const uncelebrated = (existingMilestones || [])
@@ -111,6 +115,11 @@ export async function detectMilestones(
       .gte('date', formatLocalDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)))
       .order('date', { ascending: false }),
   ]);
+
+  // Log any query errors
+  if (workoutsResult.error) console.error('[Milestones] Workouts count error:', workoutsResult.error);
+  if (mealsResult.error) console.error('[Milestones] Meals count error:', mealsResult.error);
+  if (workoutDatesResult.error) console.error('[Milestones] Workout dates error:', workoutDatesResult.error);
 
   const workoutCount = workoutsResult.count || 0;
   const mealCount = mealsResult.count || 0;

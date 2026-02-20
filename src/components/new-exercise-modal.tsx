@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Plus, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Modal } from "./ui/modal";
@@ -62,6 +62,16 @@ export function NewExerciseModal({
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customTagInput, setCustomTagInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Filter suggestions based on input
   const suggestions = useMemo(() => {
@@ -173,8 +183,11 @@ export function NewExerciseModal({
             }}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => {
-              // Delay to allow click on suggestion
-              setTimeout(() => setShowSuggestions(false), 150);
+              // Delay to allow click on suggestion (clear previous timeout first)
+              if (blurTimeoutRef.current) {
+                clearTimeout(blurTimeoutRef.current);
+              }
+              blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 150);
             }}
             placeholder="e.g., Incline Press"
             className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { AI_MODELS, AI_TOKEN_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
 
 export const maxDuration = 30;
 
@@ -50,10 +51,21 @@ export async function POST(request: Request) {
     supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
   ]);
 
+  // Log any query errors (don't fail the request, use defaults)
+  if (profileResult.error) {
+    console.error('[daily-brief] Profile query error:', profileResult.error);
+  }
+  if (memoriesResult.error) {
+    console.error('[daily-brief] Memories query error:', memoriesResult.error);
+  }
+  if (workoutsResult.error) {
+    console.error('[daily-brief] Workouts query error:', workoutsResult.error);
+  }
+
   const profile = profileResult.data;
   const memories = memoriesResult.data || [];
   const recentWorkouts = workoutsResult.data || [];
-  const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+  const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
 
   // Check if onboarding is complete
   if (!profile?.onboarding_complete) {
@@ -392,8 +404,8 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 150,
+      model: AI_MODELS.DAILY_BRIEF,
+      max_tokens: AI_TOKEN_LIMITS.DAILY_BRIEF,
       messages: [{ role: 'user', content: prompt }],
     });
 

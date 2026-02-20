@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { AlertTriangle, RefreshCw, Trash2, Play, Eye, EyeOff } from "lucide-react";
@@ -36,6 +36,16 @@ export default function DebugPage() {
   const [message, setMessage] = useState("");
   const [dateOverride, setDateOverride] = useState("");
   const [lastWorkoutOverride, setLastWorkoutOverride] = useState("");
+  const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (messageTimeoutRef.current) {
+        clearTimeout(messageTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load profile and memories
   const loadData = async () => {
@@ -57,8 +67,12 @@ export default function DebugPage() {
   }, [user]);
 
   const showMessage = (msg: string) => {
+    // Clear any existing timeout to prevent stacking
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
     setMessage(msg);
-    setTimeout(() => setMessage(""), 3000);
+    messageTimeoutRef.current = setTimeout(() => setMessage(""), 3000);
   };
 
   // Reset flags

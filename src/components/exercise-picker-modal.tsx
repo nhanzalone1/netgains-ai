@@ -115,6 +115,7 @@ export function ExercisePickerModal({
 }: ExercisePickerModalProps) {
   const supabase = createClient();
   const tabsRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
 
   // Get contextual tabs based on folder name
   const contextualTabs = useMemo(() => getContextualTabs(folderName), [folderName]);
@@ -132,6 +133,14 @@ export function ExercisePickerModal({
   const [newName, setNewName] = useState("");
   const [newEquipment, setNewEquipment] = useState("barbell");
   const [creating, setCreating] = useState(false);
+
+  // Track mount state for async operations
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load exercises on mount
   useEffect(() => {
@@ -154,6 +163,8 @@ export function ExercisePickerModal({
       .eq("folder_id", folderId)
       .order("name", { ascending: true });
 
+    // Check if component is still mounted before updating state
+    if (!isMountedRef.current) return;
     setExercises((data || []) as ExerciseTemplate[]);
     setLoading(false);
   };
@@ -191,7 +202,7 @@ export function ExercisePickerModal({
         .select("*")
         .eq("folder_id", folderId);
 
-      if (templates) {
+      if (templates && isMountedRef.current) {
         const matched = recentNames.slice(0, 8).map(name =>
           templates.find(t => t.name.toLowerCase() === name.toLowerCase())
         ).filter(Boolean) as ExerciseTemplate[];

@@ -248,6 +248,12 @@ export default function CoachPage() {
   const hasGeneratedOpeningRef = useRef(false);
   const hasLoadedFromDBRef = useRef(false); // Track if we've loaded from DB this session
 
+  // Timeout refs for cleanup (prevent memory leaks)
+  const keyboardScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const orientationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const focusScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Check if user is near the bottom of the scroll area
   const isNearBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -303,8 +309,11 @@ export default function CoachPage() {
       if (isOpen) {
         // Set container height to visual viewport height so input is above keyboard
         setViewportHeight(currentHeight);
-        // Scroll to bottom when keyboard opens
-        setTimeout(() => scrollToBottom(true), 50);
+        // Scroll to bottom when keyboard opens (clear previous timeout first)
+        if (keyboardScrollTimeoutRef.current) {
+          clearTimeout(keyboardScrollTimeoutRef.current);
+        }
+        keyboardScrollTimeoutRef.current = setTimeout(() => scrollToBottom(true), 50);
       } else {
         // Reset to null - will use bottom spacing instead
         setViewportHeight(null);
@@ -317,7 +326,10 @@ export default function CoachPage() {
     };
 
     const onOrientationChange = () => {
-      setTimeout(() => {
+      if (orientationTimeoutRef.current) {
+        clearTimeout(orientationTimeoutRef.current);
+      }
+      orientationTimeoutRef.current = setTimeout(() => {
         initialHeight = window.innerHeight;
         updateViewport();
       }, 300);
@@ -331,6 +343,13 @@ export default function CoachPage() {
     return () => {
       viewport.removeEventListener("resize", updateViewport);
       window.removeEventListener("orientationchange", onOrientationChange);
+      // Clear any pending timeouts
+      if (keyboardScrollTimeoutRef.current) {
+        clearTimeout(keyboardScrollTimeoutRef.current);
+      }
+      if (orientationTimeoutRef.current) {
+        clearTimeout(orientationTimeoutRef.current);
+      }
     };
   }, [scrollToBottom]);
 
@@ -610,8 +629,16 @@ export default function CoachPage() {
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
     return () => {
+      // Cleanup abort controller
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      // Cleanup all pending timeouts to prevent memory leaks
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+      }
+      if (focusScrollTimeoutRef.current) {
+        clearTimeout(focusScrollTimeoutRef.current);
       }
     };
   }, []);
@@ -780,8 +807,11 @@ export default function CoachPage() {
     lastGeneratedDateRef.current = null;
     lastCheckedDateRef.current = null;
 
-    // Trigger fresh daily greeting
-    setTimeout(() => {
+    // Trigger fresh daily greeting (clear previous timeout first)
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+    }
+    resetTimeoutRef.current = setTimeout(() => {
       generateAutoOpening();
     }, 100);
   };
@@ -813,8 +843,11 @@ export default function CoachPage() {
     hasGeneratedOpeningRef.current = false;
     lastGeneratedDateRef.current = null;
     lastCheckedDateRef.current = null;
-    // Trigger new opening after reset
-    setTimeout(() => {
+    // Trigger new opening after reset (clear previous timeout first)
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+    }
+    resetTimeoutRef.current = setTimeout(() => {
       generateAutoOpening();
     }, 100);
   };
@@ -986,7 +1019,10 @@ export default function CoachPage() {
             }}
             onFocus={() => {
               // Scroll to bottom when input is focused (keyboard opening)
-              setTimeout(() => scrollToBottom(true), 100);
+              if (focusScrollTimeoutRef.current) {
+                clearTimeout(focusScrollTimeoutRef.current);
+              }
+              focusScrollTimeoutRef.current = setTimeout(() => scrollToBottom(true), 100);
             }}
             onKeyDown={(e) => {
               // Submit on Enter (without Shift)

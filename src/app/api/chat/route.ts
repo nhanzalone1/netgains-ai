@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
 import { formatLocalDate } from '@/lib/date-utils';
+import { AI_MODELS, AI_TOKEN_LIMITS, RATE_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
 
 export const maxDuration = 60;
 
@@ -56,8 +57,7 @@ function formatWorkoutCompact(exercises: { name: string; sets: { weight: number;
 
 // === CONVERSATION MEMORY SYSTEM ===
 // Instead of sending full chat history, we summarize older messages
-const SUMMARY_TRIGGER_INTERVAL = 10; // Summarize every 10 new messages
-const RECENT_MESSAGES_TO_KEEP = 10; // Keep last 10 messages in full
+const { SUMMARY_TRIGGER_INTERVAL, RECENT_MESSAGES_TO_KEEP } = RATE_LIMITS;
 
 // Generate a compact summary of conversation history
 async function generateConversationSummary(
@@ -78,8 +78,8 @@ Output bullet points only:`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307', // Cheapest model for summarization
-      max_tokens: 250,
+      model: AI_MODELS.SUMMARIZATION,
+      max_tokens: AI_TOKEN_LIMITS.SUMMARIZATION,
       messages: [{ role: 'user', content: summaryPrompt }],
     });
 
@@ -225,8 +225,8 @@ const tools: Anthropic.Tool[] = [
 // Prefix used by the client to signal a system trigger (hidden from UI)
 const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
 
-// Daily message limit
-const DAILY_MESSAGE_LIMIT = 15;
+// Daily message limit from constants
+const { DAILY_MESSAGE_LIMIT, MAX_TOOL_ROUNDS } = RATE_LIMITS;
 
 export async function POST(req: Request) {
   // Parse request body with error handling
@@ -353,12 +353,19 @@ export async function POST(req: Request) {
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
     ]);
 
+    // Log any query errors (don't fail, use defaults)
+    if (profileResult.error) console.error('[Coach] Profile query error:', profileResult.error);
+    if (memoriesResult.error) console.error('[Coach] Memories query error:', memoriesResult.error);
+    if (workoutsResult.error) console.error('[Coach] Workouts query error:', workoutsResult.error);
+    if (todayMealsResult.error) console.error('[Coach] Today meals query error:', todayMealsResult.error);
+    if (yesterdayMealsResult.error) console.error('[Coach] Yesterday meals query error:', yesterdayMealsResult.error);
+
     const profile = profileResult.data;
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
     const todayMeals = todayMealsResult.data || [];
     const yesterdayMeals = yesterdayMealsResult.data || [];
-    const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+    const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
 
     // Use dynamic system prompt based on onboarding status
     dynamicSystemPrompt = getSystemPrompt(profile?.onboarding_complete ?? false);
@@ -679,8 +686,11 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
     ]);
 
+    // Log non-critical query errors (summary/count can fail silently)
+    if (todayMealsResult.error) console.error('[Coach] Today meals error:', todayMealsResult.error);
+
     const todayMeals = todayMealsResult.data || [];
-    const nutritionGoals = nutritionGoalsResult.data || { calories: 2000, protein: 150, carbs: 200, fat: 65 };
+    const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
     const existingSummary = summaryResult.data?.value || null;
     const lastSummaryCount = parseInt(messageCountResult.data?.value || '0');
 
@@ -958,7 +968,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
           .single();
         if (error) {
           // Return defaults if no goals set
-          return JSON.stringify({ calories: 2000, protein: 150, carbs: 200, fat: 65 });
+          return JSON.stringify(DEFAULT_NUTRITION_GOALS);
         }
         return JSON.stringify(data);
       }
@@ -1027,12 +1037,11 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         const currentMessages = [...anthropicMessages];
         let textStreamed = false;
 
-        // Loop to handle tool calls (max 10 iterations to prevent infinite loops)
-        const MAX_TOOL_ROUNDS = 10;
+        // Loop to handle tool calls (max iterations to prevent infinite loops)
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1024,
+            model: AI_MODELS.COACHING,
+            max_tokens: AI_TOKEN_LIMITS.COACHING,
             system: dynamicSystemPrompt,
             messages: currentMessages,
             tools,

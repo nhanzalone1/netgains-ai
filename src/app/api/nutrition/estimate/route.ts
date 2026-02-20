@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { AI_MODELS, AI_TOKEN_LIMITS } from '@/lib/constants';
 
 export async function POST(req: Request) {
   const { foodDescription } = await req.json();
@@ -20,8 +21,8 @@ export async function POST(req: Request) {
     const anthropic = new Anthropic();
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 256,
+      model: AI_MODELS.NUTRITION_ESTIMATE,
+      max_tokens: AI_TOKEN_LIMITS.NUTRITION_ESTIMATE,
       messages: [
         {
           role: 'user',
