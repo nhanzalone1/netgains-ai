@@ -102,15 +102,13 @@ export function DailyBriefCard() {
     };
   }, [fetchBriefFromApi]);
 
-  // Re-check when page becomes visible (catches date changes, overnight stale cache)
+  // Re-check when page becomes visible (catches date changes, workout logs, cross-tab invalidation)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        const currentDate = getDebugDate();
-        // Only refetch if date changed since last fetch
-        if (lastFetchedDateRef.current !== currentDate) {
-          checkAndFetch();
-        }
+        // Always re-check cache on visibility change
+        // The cache utility handles invalidation timestamp checks
+        checkAndFetch();
       }
     };
 

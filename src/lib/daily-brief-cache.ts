@@ -1,7 +1,7 @@
 // Daily Brief cache utilities
 
 // Must match the version in /api/daily-brief/route.ts
-const EXPECTED_VERSION = 4;
+const EXPECTED_VERSION = 5;
 
 export interface DailyBrief {
   focus: string;
@@ -20,6 +20,7 @@ interface DailyBriefCache {
   userId: string;
   date: string; // YYYY-MM-DD
   version: number;
+  cachedAt: number; // timestamp when cached
   data: DailyBriefResponse;
 }
 
@@ -27,6 +28,16 @@ export const DAILY_BRIEF_INVALIDATE_EVENT = "netgains-daily-brief-invalidate";
 
 function getCacheKey(userId: string): string {
   return `netgains-daily-brief-${userId}`;
+}
+
+function getInvalidationKey(userId: string): string {
+  return `netgains-daily-brief-invalidated-${userId}`;
+}
+
+function getLastInvalidationTime(userId: string): number {
+  if (typeof window === "undefined") return 0;
+  const stored = localStorage.getItem(getInvalidationKey(userId));
+  return stored ? parseInt(stored, 10) : 0;
 }
 
 function getDebugDate(): Date {
@@ -71,6 +82,12 @@ export function getDailyBriefCache(userId: string): DailyBriefResponse | null {
       return null;
     }
 
+    // Check if cache was created before last invalidation (cross-tab support)
+    const lastInvalidation = getLastInvalidationTime(userId);
+    if (cache.cachedAt && cache.cachedAt < lastInvalidation) {
+      return null;
+    }
+
     return cache.data;
   } catch {
     return null;
@@ -84,6 +101,7 @@ export function setDailyBriefCache(userId: string, data: DailyBriefResponse): vo
     userId,
     date: getTodayString(),
     version: EXPECTED_VERSION,
+    cachedAt: Date.now(),
     data,
   };
 
@@ -95,7 +113,11 @@ export function invalidateDailyBriefCache(userId: string): void {
 
   localStorage.removeItem(getCacheKey(userId));
 
-  // Dispatch event so other components can react
+  // Set invalidation timestamp for cross-tab cache busting
+  // Other tabs will see this and know their cache is stale
+  localStorage.setItem(getInvalidationKey(userId), Date.now().toString());
+
+  // Dispatch event so other components can react (same-tab)
   window.dispatchEvent(new CustomEvent(DAILY_BRIEF_INVALIDATE_EVENT, {
     detail: { userId }
   }));
