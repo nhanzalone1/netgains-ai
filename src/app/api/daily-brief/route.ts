@@ -5,7 +5,7 @@ import { AI_MODELS, AI_TOKEN_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/const
 export const maxDuration = 30;
 
 // Cache version - increment this to invalidate all client caches
-export const DAILY_BRIEF_VERSION = 4;
+export const DAILY_BRIEF_VERSION = 5;
 
 // Format date as YYYY-MM-DD in local time (not UTC)
 function formatLocalDate(date: Date): string {
@@ -161,40 +161,51 @@ export async function POST(request: Request) {
 
   // Determine suggested workout based on split rotation
   let suggestedWorkout = 'Training Day';
-  let lastWorkoutName = '';
   let rotationIndex = -1;
 
-  // Get last workout name from notes field (stores folder/workout name)
-  if (recentWorkouts.length > 0 && recentWorkouts[0].notes) {
-    // Notes might be just the workout name, or "[DEBUG] something" - extract clean name
-    lastWorkoutName = recentWorkouts[0].notes.replace(/^\[DEBUG\]\s*/, '').trim();
+  // For rotation calculation, use the last workout BEFORE today
+  // This ensures the rotation only advances at midnight, not when a workout is logged
+  const workoutsBeforeToday = recentWorkouts.filter(w => w.date < todayStr);
+  const todaysWorkout = recentWorkouts.find(w => w.date === todayStr);
+
+  // Get the workout name to base rotation on (last workout before today)
+  let rotationBaseWorkoutName = '';
+  if (workoutsBeforeToday.length > 0 && workoutsBeforeToday[0].notes) {
+    rotationBaseWorkoutName = workoutsBeforeToday[0].notes.replace(/^\[DEBUG\]\s*/, '').trim();
+  }
+
+  // Also track today's workout name for display purposes
+  let todaysWorkoutName = '';
+  if (todaysWorkout?.notes) {
+    todaysWorkoutName = todaysWorkout.notes.replace(/^\[DEBUG\]\s*/, '').trim();
   }
 
   if (splitRotation.length > 0) {
-    // Find where we are in the rotation by matching last workout name
-    const normalizedLast = lastWorkoutName.toLowerCase();
+    // Find where we are in the rotation by matching the last workout BEFORE today
+    // This ensures rotation only advances at midnight, not on workout completion
+    const normalizedBase = rotationBaseWorkoutName.toLowerCase();
 
     for (let i = 0; i < splitRotation.length; i++) {
       const day = splitRotation[i].toLowerCase();
       // Match if the workout name contains the split day name or vice versa
-      if (normalizedLast.includes(day) || day.includes(normalizedLast) ||
+      if (normalizedBase.includes(day) || day.includes(normalizedBase) ||
           // Also match partial words (e.g., "arms" matches "Arms")
-          normalizedLast.split(/\s+/).some(word => day.includes(word)) ||
-          day.split(/\s+/).some(word => normalizedLast.includes(word))) {
+          normalizedBase.split(/\s+/).some(word => day.includes(word)) ||
+          day.split(/\s+/).some(word => normalizedBase.includes(word))) {
         rotationIndex = i;
         break;
       }
     }
 
-    // If found, suggest next in rotation
+    // If found, suggest next in rotation (based on last workout before today)
     if (rotationIndex >= 0) {
       const nextIndex = (rotationIndex + 1) % splitRotation.length;
       suggestedWorkout = splitRotation[nextIndex];
-    } else if (lastWorkoutName) {
+    } else if (rotationBaseWorkoutName) {
       // Couldn't match - just suggest first non-rest day
       suggestedWorkout = splitRotation.find(d => d.toLowerCase() !== 'rest') || splitRotation[0];
     } else {
-      // No last workout - start from beginning
+      // No previous workout - start from beginning
       suggestedWorkout = splitRotation[0];
     }
   } else {
@@ -237,7 +248,8 @@ export async function POST(request: Request) {
   console.log('[daily-brief] Debug:', {
     trainingSplit,
     splitRotation,
-    lastWorkoutName,
+    rotationBaseWorkoutName,
+    todaysWorkoutName,
     rotationIndex,
     suggestedWorkout,
     isRotationRestDay,
@@ -269,8 +281,9 @@ export async function POST(request: Request) {
 
   const needsRecovery = consecutiveWorkoutDays >= 3;
   const hitWeeklyGoal = workoutsThisWeek >= daysPerWeek;
-  // Rest day if: rotation says rest, already trained today, hit weekly goal, or need recovery
-  const isRestDay = isRotationRestDay || workedOutToday || hitWeeklyGoal || needsRecovery;
+  // Rest day if: rotation says rest, hit weekly goal, or need recovery
+  // NOTE: workedOutToday is NOT a reason to show rest - we still show today's workout type
+  const isRestDay = isRotationRestDay || hitWeeklyGoal || needsRecovery;
 
   // More detailed logging
   console.log('[daily-brief] Rest day check:', {
@@ -437,7 +450,8 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       consecutiveWorkoutDays,
       recentWorkoutDates: recentWorkouts.map(w => w.date),
       splitRotation,
-      lastWorkoutName,
+      rotationBaseWorkoutName,
+      todaysWorkoutName,
       rotationIndex,
       suggestedWorkout,
     };
@@ -471,7 +485,8 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       consecutiveWorkoutDays,
       recentWorkoutDates: recentWorkouts.map(w => w.date),
       splitRotation,
-      lastWorkoutName,
+      rotationBaseWorkoutName,
+      todaysWorkoutName,
       rotationIndex,
       suggestedWorkout,
       error: String(error),
