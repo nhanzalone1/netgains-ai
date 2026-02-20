@@ -229,7 +229,25 @@ const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
 const DAILY_MESSAGE_LIMIT = 15;
 
 export async function POST(req: Request) {
-  const { messages, currentWorkout } = await req.json();
+  // Parse request body with error handling
+  let messages, currentWorkout;
+  try {
+    const body = await req.json();
+    messages = body.messages;
+    currentWorkout = body.currentWorkout;
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!messages || !Array.isArray(messages)) {
+    return new Response(JSON.stringify({ error: 'Messages array required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   // Get authenticated user
   const supabase = await createClient();

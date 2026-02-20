@@ -108,6 +108,8 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
   // Validation
   const [validationIssue, setValidationIssue] = useState<ValidationIssue | null>(null);
   const [useUserNumbers, setUseUserNumbers] = useState<boolean | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleCalorieAwareness = (value: "knows" | "fresh") => {
     setAnswers((prev) => ({ ...prev, calorieAwareness: value }));
@@ -257,17 +259,27 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
       return;
     }
 
+    setIsSaving(true);
+    setSaveError(null);
+
     try {
-      await fetch("/api/nutrition-onboarding/save", {
+      const response = await fetch("/api/nutrition-onboarding/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goals: finalGoals }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save goals');
+      }
+
+      onComplete(finalGoals);
     } catch (error) {
       console.error("Failed to save goals:", error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save. Please try again.');
+      setIsSaving(false);
     }
-
-    onComplete(finalGoals);
   };
 
   const currentGoals = useUserNumbers && answers.userMacros
@@ -530,14 +542,30 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
               </div>
             </CoachBubble>
 
-            <div className="ml-[52px]">
+            <div className="ml-[52px] space-y-2">
+              {saveError && (
+                <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  {saveError}
+                </div>
+              )}
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={handleSaveGoals}
-                className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 min-h-[44px]"
+                disabled={isSaving}
+                className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
               >
-                <Check className="w-5 h-5" />
-                Save & Start Tracking
+                {isSaving ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    Save & Start Tracking
+                  </>
+                )}
               </motion.button>
             </div>
           </motion.div>

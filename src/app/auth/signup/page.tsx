@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -15,6 +15,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -34,7 +35,7 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -45,11 +46,63 @@ export default function SignupPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
+    } else if (data.user && !data.session) {
+      // Email confirmation required - show confirmation message
+      setEmailSent(true);
+      setLoading(false);
+    } else if (data.session) {
+      // Auto-confirmed (email confirmation disabled in Supabase) - redirect
       router.push("/coach");
       router.refresh();
+    } else {
+      setLoading(false);
     }
   };
+
+  // Show email confirmation screen
+  if (emailSent) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-sm"
+        >
+          <div className="flex flex-col items-center mb-8">
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1 }}
+              className="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center mb-4 shadow-lg shadow-primary/30"
+            >
+              <Mail className="w-10 h-10 text-primary-foreground" />
+            </motion.div>
+            <h1 className="text-3xl font-black uppercase tracking-tighter">Check Your Email</h1>
+            <p className="text-muted-foreground text-center mt-2">
+              We sent a confirmation link to <span className="text-foreground font-medium">{email}</span>
+            </p>
+          </div>
+
+          <GlassCard>
+            <div className="text-center space-y-4">
+              <p className="text-muted-foreground">
+                Click the link in your email to verify your account and start tracking your gains.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Didn&apos;t get the email? Check your spam folder.
+              </p>
+            </div>
+          </GlassCard>
+
+          <p className="text-center text-muted-foreground mt-6">
+            <Link href="/auth/login" className="text-primary font-semibold">
+              Back to sign in
+            </Link>
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">

@@ -9,8 +9,14 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Parse request body
-  const body = await request.json();
+  // Parse request body with error handling
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+  }
+
   const {
     calorieAwareness,
     userMacros,
@@ -128,14 +134,23 @@ export async function POST(request: Request) {
     memoriesToSave.push({ key: 'food_restrictions', value: restrictions.trim() });
   }
 
-  // Upsert memories
+  // Upsert memories with error handling
+  const memoryErrors: string[] = [];
   for (const memory of memoriesToSave) {
-    await supabase
+    const { error } = await supabase
       .from('coach_memory')
       .upsert(
         { user_id: user.id, key: memory.key, value: memory.value },
         { onConflict: 'user_id,key' }
       );
+    if (error) {
+      console.error(`[nutrition-onboarding] Failed to save memory ${memory.key}:`, error);
+      memoryErrors.push(memory.key);
+    }
+  }
+
+  if (memoryErrors.length > 0) {
+    console.warn(`[nutrition-onboarding] Some memories failed to save: ${memoryErrors.join(', ')}`);
   }
 
   return Response.json({
