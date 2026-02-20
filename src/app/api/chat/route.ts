@@ -230,11 +230,12 @@ const { DAILY_MESSAGE_LIMIT, MAX_TOOL_ROUNDS } = RATE_LIMITS;
 
 export async function POST(req: Request) {
   // Parse request body with error handling
-  let messages, currentWorkout;
+  let messages, currentWorkout, localDate;
   try {
     const body = await req.json();
     messages = body.messages;
     currentWorkout = body.currentWorkout;
+    localDate = body.localDate; // Client's local date (YYYY-MM-DD) for timezone-aware queries
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
       status: 400,
@@ -677,8 +678,14 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     // For ongoing conversations, user is likely onboarded - use shorter prompt
     dynamicSystemPrompt = getSystemPrompt(true);
 
+    // Use client's local date if provided, otherwise fall back to server date
+    const todayStr = localDate || formatLocalDate(new Date());
+    console.log('[Coach] === NUTRITION CONTEXT DEBUG ===');
+    console.log('[Coach] Client localDate:', localDate);
+    console.log('[Coach] Using todayStr:', todayStr);
+    console.log('[Coach] Server date:', formatLocalDate(new Date()));
+
     // Fetch today's nutrition data, conversation summary, and message count
-    const todayStr = formatLocalDate(new Date());
     const [todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult] = await Promise.all([
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
@@ -686,8 +693,15 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
     ]);
 
-    // Log non-critical query errors (summary/count can fail silently)
-    if (todayMealsResult.error) console.error('[Coach] Today meals error:', todayMealsResult.error);
+    // Log query results for debugging
+    if (todayMealsResult.error) {
+      console.error('[Coach] Today meals error:', todayMealsResult.error);
+    } else {
+      console.log('[Coach] Meals found:', todayMealsResult.data?.length || 0);
+      if (todayMealsResult.data && todayMealsResult.data.length > 0) {
+        console.log('[Coach] Meal names:', todayMealsResult.data.map(m => m.food_name).join(', '));
+      }
+    }
 
     const todayMeals = todayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
@@ -715,6 +729,13 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
 
 `
       : '';
+
+    console.log('[Coach] Nutrition context length:', nutritionContext.length);
+    if (nutritionContext) {
+      console.log('[Coach] Nutrition context:', nutritionContext);
+    } else {
+      console.log('[Coach] No nutrition context (no meals found for', todayStr, ')');
+    }
 
     // Filter out system trigger messages
     const filteredMessages = messages.filter(
@@ -950,7 +971,9 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         }
       }
       case 'getTodaysMeals': {
-        const targetDate = (input.date as string) || formatLocalDate(new Date());
+        // Use explicit date param, then client's localDate, then server fallback
+        const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        console.log('[Coach] getTodaysMeals - targetDate:', targetDate, 'localDate:', localDate);
         const { data, error } = await supabase
           .from('meals')
           .select('*')
@@ -958,6 +981,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
           .eq('date', targetDate)
           .order('meal_type');
         if (error) return JSON.stringify({ error: error.message });
+        console.log('[Coach] getTodaysMeals - found', data?.length || 0, 'meals');
         return JSON.stringify(data || []);
       }
       case 'getNutritionGoals': {
@@ -973,7 +997,8 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         return JSON.stringify(data);
       }
       case 'addMealPlan': {
-        const targetDate = (input.date as string) || formatLocalDate(new Date());
+        // Use explicit date param, then client's localDate, then server fallback
+        const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
         const { error } = await supabase
           .from('meals')
           .insert({

@@ -416,6 +416,7 @@ export default function CoachPage() {
             return null;
           }
         })(),
+        localDate: formatLocalDate(new Date()), // Client's local date for timezone-aware queries
       }),
       signal,
     });
