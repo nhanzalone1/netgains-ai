@@ -145,14 +145,29 @@ function formatDebugDate(): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function getMessageDate(message: Message): string | null {
+function getMessageDate(message: Message): string {
+  const today = getDebugDate().toDateString();
+
+  // Try created_at first
   if (message.created_at) {
-    return new Date(message.created_at).toDateString();
+    const date = new Date(message.created_at);
+    // Validate the date is reasonable (after year 2020)
+    if (!isNaN(date.getTime()) && date.getFullYear() >= 2020) {
+      return date.toDateString();
+    }
   }
+
   // Fallback for old messages with timestamp IDs
   const timestamp = parseInt(message.id);
-  if (isNaN(timestamp)) return null;
-  return new Date(timestamp).toDateString();
+  if (!isNaN(timestamp) && timestamp > 1577836800000) { // After Jan 1, 2020
+    const date = new Date(timestamp);
+    if (!isNaN(date.getTime())) {
+      return date.toDateString();
+    }
+  }
+
+  // Default to today if no valid date found
+  return today;
 }
 
 // Get timestamp for new messages - uses debug date if set
