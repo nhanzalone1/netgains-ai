@@ -11,6 +11,8 @@ import {
   TrendingDown,
   Move,
   Trash2,
+  Flame,        // For warmup sets
+  Target,       // For failure sets
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -21,7 +23,13 @@ import { useTheme } from "./theme-provider";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
 
 // Set variant types for special sets
-type SetVariant = "normal" | "assisted-parent" | "assisted-child" | "drop" | "drop-parent" | "left" | "right";
+type SetVariant =
+  | "normal"
+  | "warmup"        // Warm-up sets (excluded from PRs)
+  | "failure"       // Sets taken to failure
+  | "drop" | "drop-parent"
+  | "assisted-parent" | "assisted-child"
+  | "left" | "right";
 
 interface WorkoutSet {
   id: string;
@@ -61,6 +69,8 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 // Set variant styles - backgrounds and borders
 const SET_VARIANT_STYLES: Record<SetVariant, { bg: string; inputBg: string; borderLeft?: string }> = {
   normal: { bg: "transparent", inputBg: "#0f0f13" },
+  warmup: { bg: "rgba(234, 179, 8, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #eab308" },      // Yellow
+  failure: { bg: "rgba(249, 115, 22, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #f97316" },    // Orange
   "assisted-parent": { bg: "rgba(59, 130, 246, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #3b82f6" },
   "assisted-child": { bg: "rgba(59, 130, 246, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #3b82f6" },
   drop: { bg: "rgba(239, 68, 68, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #ef4444" },
@@ -495,6 +505,52 @@ export function WorkoutSession({
     setOpenOptionsMenuId(null);
   };
 
+  // Toggle warmup variant on last set (or add new warmup set)
+  const addWarmupSet = (exerciseId: string) => {
+    setActiveExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+        const lastSet = ex.sets[ex.sets.length - 1];
+
+        // If last set is normal, convert it to warmup
+        if (lastSet && lastSet.variant === "normal") {
+          const updatedSets = ex.sets.map((s, i) =>
+            i === ex.sets.length - 1 ? { ...s, variant: "warmup" as SetVariant, label: "W" } : s
+          );
+          return { ...ex, sets: updatedSets };
+        }
+
+        // Otherwise add a new warmup set
+        const warmupSet = createSet("warmup", "", "W");
+        return { ...ex, sets: [...ex.sets, warmupSet] };
+      })
+    );
+    setOpenOptionsMenuId(null);
+  };
+
+  // Toggle failure variant on last set (or add new failure set)
+  const addFailureSet = (exerciseId: string) => {
+    setActiveExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+        const lastSet = ex.sets[ex.sets.length - 1];
+
+        // If last set is normal, convert it to failure
+        if (lastSet && lastSet.variant === "normal") {
+          const updatedSets = ex.sets.map((s, i) =>
+            i === ex.sets.length - 1 ? { ...s, variant: "failure" as SetVariant, label: "F" } : s
+          );
+          return { ...ex, sets: updatedSets };
+        }
+
+        // Otherwise add a new failure set
+        const failureSet = createSet("failure", "", "F");
+        return { ...ex, sets: [...ex.sets, failureSet] };
+      })
+    );
+    setOpenOptionsMenuId(null);
+  };
+
   // Start superset flow - open the picker modal
   const startSuperset = (exerciseId: string) => {
     setSupersetForExerciseId(exerciseId);
@@ -764,6 +820,21 @@ export function WorkoutSession({
                               <Move className="w-4 h-4" />
                               R + L
                             </button>
+                            <div className="border-t border-white/10 my-1" />
+                            <button
+                              onClick={() => addWarmupSet(exercise.id)}
+                              className="flex items-center gap-3 px-4 py-3 text-sm w-full hover:bg-yellow-500/10 transition-colors text-yellow-400"
+                            >
+                              <Flame className="w-4 h-4" />
+                              Warm-up
+                            </button>
+                            <button
+                              onClick={() => addFailureSet(exercise.id)}
+                              className="flex items-center gap-3 px-4 py-3 text-sm w-full hover:bg-orange-500/10 transition-colors text-orange-400"
+                            >
+                              <Target className="w-4 h-4" />
+                              To Failure
+                            </button>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -827,6 +898,8 @@ export function WorkoutSession({
 
                     // Get label color based on variant type
                     const getLabelColor = () => {
+                      if (set.variant === "warmup") return "#eab308";      // Yellow
+                      if (set.variant === "failure") return "#f97316";     // Orange
                       if (set.variant.includes("assisted")) return "#3b82f6";
                       if (set.variant.includes("drop")) return "#ef4444";
                       if (set.variant === "left" || set.variant === "right") return "#22c55e";

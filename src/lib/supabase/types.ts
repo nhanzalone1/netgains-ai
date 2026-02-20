@@ -135,6 +135,7 @@ export interface Database {
           exercise_id: string;
           weight: number;
           reps: number;
+          variant: string;  // 'normal' | 'warmup' | 'failure' | 'drop' | 'drop-parent' | 'assisted-parent' | 'assisted-child' | 'left' | 'right'
           order_index: number;
           created_at: string;
         };
@@ -143,6 +144,7 @@ export interface Database {
           exercise_id: string;
           weight: number;
           reps: number;
+          variant?: string;
           order_index?: number;
           created_at?: string;
         };
@@ -151,6 +153,7 @@ export interface Database {
           exercise_id?: string;
           weight?: number;
           reps?: number;
+          variant?: string;
           order_index?: number;
           created_at?: string;
         };

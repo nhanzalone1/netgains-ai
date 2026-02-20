@@ -47,11 +47,17 @@ MEMORY: Save important info with saveMemory (injuries, preferences, PRs). Check 
 
 // System prompt is built dynamically based on onboarding status - see getSystemPrompt()
 
-// Compact workout formatter to reduce tokens
-function formatWorkoutCompact(exercises: { name: string; sets: { weight: number; reps: number }[] }[]): string {
+// Compact workout formatter to reduce tokens - now includes set variants
+function formatWorkoutCompact(exercises: { name: string; sets: { weight: number; reps: number; variant?: string }[] }[]): string {
   if (!exercises || exercises.length === 0) return 'No exercises';
   return exercises.map(e =>
-    `${e.name}: ${e.sets.map(s => `${s.weight}x${s.reps}`).join(', ')}`
+    `${e.name}: ${e.sets.map(s => {
+      // Add variant tag for non-normal sets (e.g., [warmup], [drop], [failure])
+      const tag = s.variant && s.variant !== 'normal'
+        ? `[${s.variant.replace('-parent', '').replace('-child', '')}]`
+        : '';
+      return `${s.weight}x${s.reps}${tag}`;
+    }).join(', ')}`
   ).join(' | ');
 }
 
@@ -412,7 +418,7 @@ export async function POST(req: Request) {
         const exerciseIds = exercises.map(e => e.id);
         const { data: sets } = await supabase
           .from('sets')
-          .select('exercise_id, weight, reps')
+          .select('exercise_id, weight, reps, variant')
           .in('exercise_id', exerciseIds);
 
         workoutDetails = recentWorkouts.map(w => ({
@@ -423,7 +429,7 @@ export async function POST(req: Request) {
               name: e.name,
               sets: (sets || [])
                 .filter(s => s.exercise_id === e.id)
-                .map(s => ({ weight: s.weight, reps: s.reps }))
+                .map(s => ({ weight: s.weight, reps: s.reps, variant: s.variant || 'normal' }))
             }))
         }));
       }
@@ -460,9 +466,11 @@ export async function POST(req: Request) {
         .lt('date', yesterdayStr)
         .order('date', { ascending: false });
 
-      // Helper to get best set from yesterday for an exercise
-      const getYesterdayBest = (exercise: { name: string; sets: { weight: number; reps: number }[] }) => {
-        return exercise.sets.reduce(
+      // Helper to get best set from yesterday for an exercise (excluding warmup sets)
+      const getYesterdayBest = (exercise: { name: string; sets: { weight: number; reps: number; variant?: string }[] }) => {
+        // Filter out warmup sets - they shouldn't count for PRs
+        const workingSets = exercise.sets.filter(s => s.variant !== 'warmup');
+        return workingSets.reduce(
           (best, set) => {
             if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
               return { weight: set.weight, reps: set.reps };
@@ -487,14 +495,16 @@ export async function POST(req: Request) {
 
           const { data: historicalSets } = await supabase
             .from('sets')
-            .select('exercise_id, weight, reps')
+            .select('exercise_id, weight, reps, variant')
             .in('exercise_id', historicalExerciseIds);
 
-          // Build historical bests per exercise
+          // Build historical bests per exercise (excluding warmup sets from PR consideration)
           const historicalBests: Record<string, { weight: number; reps: number }> = {};
 
           for (const exercise of historicalExercises) {
-            const exerciseSets = (historicalSets || []).filter(s => s.exercise_id === exercise.id);
+            // Filter out warmup sets - they shouldn't count for historical bests
+            const exerciseSets = (historicalSets || [])
+              .filter(s => s.exercise_id === exercise.id && s.variant !== 'warmup');
             for (const set of exerciseSets) {
               const current = historicalBests[exercise.name];
               // Compare by weight first, then by reps at same weight
@@ -901,7 +911,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         const { data: sets, error: setsError } = exerciseIds.length > 0
           ? await supabase
               .from('sets')
-              .select('id, exercise_id, weight, reps, order_index')
+              .select('id, exercise_id, weight, reps, variant, order_index')
               .in('exercise_id', exerciseIds)
               .order('order_index', { ascending: true })
           : { data: [], error: null };
@@ -911,7 +921,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         }
         console.log(`[Coach] Sets query returned: ${sets?.length ?? 0} sets`);
 
-        // Assemble the data
+        // Assemble the data - include variant for set type awareness
         const result = workouts.map((workout) => ({
           ...workout,
           exercises: (exercises || [])
@@ -920,7 +930,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
               name: exercise.name,
               sets: (sets || [])
                 .filter((s) => s.exercise_id === exercise.id)
-                .map((s) => ({ weight: s.weight, reps: s.reps })),
+                .map((s) => ({ weight: s.weight, reps: s.reps, variant: s.variant || 'normal' })),
             })),
         }));
 
