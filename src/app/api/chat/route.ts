@@ -950,7 +950,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         }
       }
       case 'getTodaysMeals': {
-        const targetDate = (input.date as string) || new Date().toISOString().split('T')[0];
+        const targetDate = (input.date as string) || formatLocalDate(new Date());
         const { data, error } = await supabase
           .from('meals')
           .select('*')
@@ -973,7 +973,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         return JSON.stringify(data);
       }
       case 'addMealPlan': {
-        const targetDate = (input.date as string) || new Date().toISOString().split('T')[0];
+        const targetDate = (input.date as string) || formatLocalDate(new Date());
         const { error } = await supabase
           .from('meals')
           .insert({
