@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { motion, PanInfo } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
+import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
@@ -487,18 +488,24 @@ export default function NutritionPage() {
     loadData();
     loadWeekData();
     loadRecentFoods();
+    // Invalidate daily brief cache so nutrition updates appear
+    invalidateDailyBriefCache(user.id);
   };
 
   const markAsConsumed = async (mealId: string) => {
+    if (!user) return;
     await supabase.from("meals").update({ consumed: true }).eq("id", mealId);
     setMeals((prev) => prev.map((m) => (m.id === mealId ? { ...m, consumed: true } : m)));
     loadWeekData();
+    invalidateDailyBriefCache(user.id);
   };
 
   const deleteMeal = async (mealId: string) => {
+    if (!user) return;
     await supabase.from("meals").delete().eq("id", mealId);
     setMeals((prev) => prev.filter((m) => m.id !== mealId));
     loadWeekData();
+    invalidateDailyBriefCache(user.id);
   };
 
   const copyMeal = async (meal: Meal) => {
@@ -532,6 +539,7 @@ export default function NutritionPage() {
         setMeals((prev) => [...prev, data as Meal]);
       }
       loadWeekData();
+      invalidateDailyBriefCache(user.id);
     }
   };
 
@@ -582,6 +590,10 @@ export default function NutritionPage() {
       setEditingMeal(null);
       loadWeekData();
       loadRecentFoods();
+      // Invalidate daily brief cache so nutrition updates appear
+      if (user) {
+        invalidateDailyBriefCache(user.id);
+      }
     }
 
     setSavingMealEdit(false);

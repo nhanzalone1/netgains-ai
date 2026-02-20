@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS, AI_TOKEN_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
+import { detectPRs, type PR, type WorkoutExercise } from '@/lib/pr-detection';
 
 export const maxDuration = 30;
 
 // Cache version - increment this to invalidate all client caches
-export const DAILY_BRIEF_VERSION = 5;
+export const DAILY_BRIEF_VERSION = 6;
 
 // Format date as YYYY-MM-DD in local time (not UTC)
 function formatLocalDate(date: Date): string {
@@ -13,6 +14,52 @@ function formatLocalDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// Motivational line templates (no AI needed)
+const PR_LINES = [
+  "That {exercise} PR is going to pay off.",
+  "New {exercise} best. The work is working.",
+];
+
+const GENERIC_LINES = [
+  "Another one in the books.",
+  "Consistent work, consistent results.",
+  "Recovery starts now. Eat up.",
+];
+
+function getMotivationalLine(prs: PR[]): string {
+  if (prs.length > 0) {
+    const template = PR_LINES[Math.floor(Math.random() * PR_LINES.length)];
+    return template.replace('{exercise}', prs[0].exercise);
+  }
+  return GENERIC_LINES[Math.floor(Math.random() * GENERIC_LINES.length)];
+}
+
+// Format achievement from today's workout
+function formatAchievement(exercises: WorkoutExercise[]): string {
+  if (!exercises || exercises.length === 0) return '';
+
+  // Find heaviest lift
+  let heaviest = { exercise: '', weight: 0, reps: 0 };
+  for (const ex of exercises) {
+    for (const set of ex.sets) {
+      if (set.variant !== 'warmup' && set.weight > heaviest.weight) {
+        heaviest = { exercise: ex.name, weight: set.weight, reps: set.reps };
+      }
+    }
+  }
+
+  if (heaviest.weight === 0) return exercises[0]?.name || '';
+  return `${heaviest.exercise} ${heaviest.weight}x${heaviest.reps}`;
+}
+
+// Format nutrition progress display
+function formatNutritionProgress(
+  consumed: { calories: number; protein: number; carbs: number; fat: number },
+  goals: { calories: number; protein: number; carbs: number; fat: number }
+): string {
+  return `${consumed.calories.toLocaleString()} / ${goals.calories.toLocaleString()} cal | ${consumed.protein}P ${consumed.carbs}C ${consumed.fat}F`;
 }
 
 export async function POST(request: Request) {
@@ -43,12 +90,13 @@ export async function POST(request: Request) {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = formatLocalDate(yesterday);
 
-  // Fetch all required data in parallel
-  const [profileResult, memoriesResult, workoutsResult, nutritionGoalsResult] = await Promise.all([
+  // Fetch all required data in parallel (added meals query)
+  const [profileResult, memoriesResult, workoutsResult, nutritionGoalsResult, mealsResult] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
     supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
     supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+    supabase.from('meals').select('calories, protein, carbs, fat, consumed').eq('user_id', user.id).eq('date', todayStr),
   ]);
 
   // Log any query errors (don't fail the request, use defaults)
@@ -66,6 +114,20 @@ export async function POST(request: Request) {
   const memories = memoriesResult.data || [];
   const recentWorkouts = workoutsResult.data || [];
   const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
+  const todaysMeals = mealsResult.data || [];
+
+  // Calculate nutrition consumed today
+  const nutritionConsumed = todaysMeals
+    .filter((m: { consumed: boolean }) => m.consumed)
+    .reduce(
+      (acc: { calories: number; protein: number; carbs: number; fat: number }, meal: { calories: number; protein: number; carbs: number; fat: number }) => ({
+        calories: acc.calories + meal.calories,
+        protein: acc.protein + meal.protein,
+        carbs: acc.carbs + meal.carbs,
+        fat: acc.fat + meal.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
 
   // Check if onboarding is complete
   if (!profile?.onboarding_complete) {
@@ -75,8 +137,8 @@ export async function POST(request: Request) {
     });
   }
 
-  // Get workout details with exercises and sets
-  let workoutDetails: { date: string; exercises: { name: string; sets: { weight: number; reps: number }[] }[] }[] = [];
+  // Get workout details with exercises and sets (added variant to sets query)
+  let workoutDetails: { date: string; exercises: WorkoutExercise[] }[] = [];
   if (recentWorkouts.length > 0) {
     const workoutIds = recentWorkouts.map(w => w.id);
     const { data: exercises } = await supabase
@@ -88,7 +150,7 @@ export async function POST(request: Request) {
       const exerciseIds = exercises.map(e => e.id);
       const { data: sets } = await supabase
         .from('sets')
-        .select('exercise_id, weight, reps')
+        .select('exercise_id, weight, reps, variant')
         .in('exercise_id', exerciseIds);
 
       workoutDetails = recentWorkouts.map(w => ({
@@ -99,7 +161,7 @@ export async function POST(request: Request) {
             name: e.name,
             sets: (sets || [])
               .filter(s => s.exercise_id === e.id)
-              .map(s => ({ weight: s.weight, reps: s.reps }))
+              .map(s => ({ weight: s.weight, reps: s.reps, variant: s.variant }))
           }))
       }));
     }
@@ -132,6 +194,13 @@ export async function POST(request: Request) {
 
   // Check if user already worked out today
   const workedOutToday = recentWorkouts.some(w => w.date === todayStr);
+  const todaysWorkoutDetails = workoutDetails.find(w => w.date === todayStr);
+
+  // Detect PRs for today's workout if applicable
+  let todaysPRs: PR[] = [];
+  if (workedOutToday && todaysWorkoutDetails && todaysWorkoutDetails.exercises.length > 0) {
+    todaysPRs = await detectPRs(supabase, user.id, todayStr, todaysWorkoutDetails.exercises);
+  }
 
   // Get last workout info (excluding today if they already worked out)
   const lastWorkout = workoutDetails[0];
@@ -282,8 +351,18 @@ export async function POST(request: Request) {
   const needsRecovery = consecutiveWorkoutDays >= 3;
   const hitWeeklyGoal = workoutsThisWeek >= daysPerWeek;
   // Rest day if: rotation says rest, hit weekly goal, or need recovery
-  // NOTE: workedOutToday is NOT a reason to show rest - we still show today's workout type
-  const isRestDay = isRotationRestDay || hitWeeklyGoal || needsRecovery;
+  // NOTE: workedOutToday is NOT a reason to show rest - we show post_workout mode instead
+  const isRestDay = isRotationRestDay || (!workedOutToday && (hitWeeklyGoal || needsRecovery));
+
+  // Determine mode: pre_workout, post_workout, or rest_day
+  let mode: 'pre_workout' | 'post_workout' | 'rest_day';
+  if (workedOutToday) {
+    mode = 'post_workout';
+  } else if (isRestDay) {
+    mode = 'rest_day';
+  } else {
+    mode = 'pre_workout';
+  }
 
   // More detailed logging
   console.log('[daily-brief] Rest day check:', {
@@ -292,6 +371,7 @@ export async function POST(request: Request) {
     needsRecovery,
     consecutiveWorkoutDays,
     isRestDay,
+    mode,
     todayStr,
     recentWorkoutDates: recentWorkouts.map(w => w.date),
   });
@@ -335,14 +415,18 @@ export async function POST(request: Request) {
         const matchesGroup = matchingPatterns.some(pattern => exerciseLower.includes(pattern));
 
         if (matchesGroup && exercise.sets.length > 0) {
-          const bestSet = exercise.sets.reduce((best, set) =>
-            set.weight > best.weight ? set : best, exercise.sets[0]);
+          // Filter out warmup sets when finding best set
+          const workingSets = exercise.sets.filter(s => s.variant !== 'warmup');
+          if (workingSets.length > 0) {
+            const bestSet = workingSets.reduce((best, set) =>
+              set.weight > best.weight ? set : best, workingSets[0]);
 
-          // Prioritize by weight (compound lifts will naturally be heavier)
-          if (bestSet.weight > targetWeight) {
-            targetExercise = exercise.name;
-            targetWeight = bestSet.weight;
-            targetReps = bestSet.reps;
+            // Prioritize by weight (compound lifts will naturally be heavier)
+            if (bestSet.weight > targetWeight) {
+              targetExercise = exercise.name;
+              targetWeight = bestSet.weight;
+              targetReps = bestSet.reps;
+            }
           }
         }
       }
@@ -356,12 +440,15 @@ export async function POST(request: Request) {
       for (const exercise of workout.exercises) {
         const isCompound = compoundLifts.some(c => exercise.name.toLowerCase().includes(c));
         if (isCompound && exercise.sets.length > 0) {
-          const bestSet = exercise.sets.reduce((best, set) =>
-            set.weight > best.weight ? set : best, exercise.sets[0]);
-          if (bestSet.weight > targetWeight) {
-            targetExercise = exercise.name;
-            targetWeight = bestSet.weight;
-            targetReps = bestSet.reps;
+          const workingSets = exercise.sets.filter(s => s.variant !== 'warmup');
+          if (workingSets.length > 0) {
+            const bestSet = workingSets.reduce((best, set) =>
+              set.weight > best.weight ? set : best, workingSets[0]);
+            if (bestSet.weight > targetWeight) {
+              targetExercise = exercise.name;
+              targetWeight = bestSet.weight;
+              targetReps = bestSet.reps;
+            }
           }
         }
       }
@@ -380,10 +467,10 @@ export async function POST(request: Request) {
   const anthropic = new Anthropic();
 
   const macroSummary = `${nutritionGoals.calories}cal | ${nutritionGoals.protein}P ${nutritionGoals.carbs}C ${nutritionGoals.fat}F`;
+  const nutritionDisplay = formatNutritionProgress(nutritionConsumed, nutritionGoals);
 
   // Build the prompt with clear training/rest day determination
   const restDayReason = isRotationRestDay ? 'scheduled rest in rotation' :
-    workedOutToday ? 'already trained today' :
     hitWeeklyGoal ? `hit ${daysPerWeek}-day weekly goal` :
     needsRecovery ? `${consecutiveWorkoutDays} days straight, need recovery` : '';
 
@@ -399,7 +486,7 @@ USER CONTEXT:
 - Best recent lift to beat: ${targetExercise ? `${targetExercise} ${targetWeight}x${targetReps}` : 'none yet'}
 - Daily macro goals: ${macroSummary}
 
-TODAY'S STATUS: ${isRestDay ? `REST DAY (${restDayReason})` : `TRAINING DAY — suggested: ${suggestedWorkout}`}
+TODAY'S STATUS: ${isRestDay ? `REST DAY (${restDayReason})` : workedOutToday ? `ALREADY TRAINED — ${todaysWorkoutName || suggestedWorkout}` : `TRAINING DAY — suggested: ${suggestedWorkout}`}
 
 IMPORTANT: Follow the TODAY'S STATUS above. If it says TRAINING DAY, do NOT output "Rest Day".
 
@@ -434,7 +521,7 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       throw new Error('No JSON in response');
     }
 
-    const brief = JSON.parse(jsonMatch[0]);
+    const aiBrief = JSON.parse(jsonMatch[0]);
 
     // Debug info to help troubleshoot
     const debugInfo = {
@@ -454,17 +541,45 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       todaysWorkoutName,
       rotationIndex,
       suggestedWorkout,
+      mode,
+      todaysPRs: todaysPRs.map(p => `${p.exercise} ${p.weight}x${p.reps}`),
+      nutritionConsumed,
+    };
+
+    // Build the new response structure
+    const brief = {
+      mode,
+      focus: mode === 'post_workout'
+        ? `${todaysWorkoutName || suggestedWorkout} Complete`
+        : (aiBrief.focus || 'Training Day'),
+      target: mode === 'pre_workout'
+        ? (aiBrief.target || (targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Time to train'))
+        : undefined,
+      achievement: mode === 'post_workout'
+        ? formatAchievement(todaysWorkoutDetails?.exercises || [])
+        : undefined,
+      prs: todaysPRs.length > 0
+        ? todaysPRs.map(p => ({ exercise: p.exercise, weight: p.weight, reps: p.reps }))
+        : undefined,
+      motivationalLine: mode === 'post_workout'
+        ? getMotivationalLine(todaysPRs)
+        : undefined,
+      nutrition: {
+        consumed: nutritionConsumed,
+        goals: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+        },
+        display: nutritionDisplay,
+      },
     };
 
     return Response.json({
       status: 'generated',
       version: DAILY_BRIEF_VERSION,
-      brief: {
-        focus: brief.focus || 'Training Day',
-        target: brief.target || 'Check in with your coach',
-        // Always use actual macro goals, don't let AI make up numbers
-        nutrition: macroSummary,
-      },
+      brief,
       generatedAt: new Date().toISOString(),
       debug: debugInfo,
     });
@@ -489,20 +604,46 @@ For first-time user: {"focus": "Ready to Start", "target": "Log your first worko
       todaysWorkoutName,
       rotationIndex,
       suggestedWorkout,
+      mode,
+      todaysPRs: todaysPRs.map(p => `${p.exercise} ${p.weight}x${p.reps}`),
+      nutritionConsumed,
       error: String(error),
     };
 
-    // Fallback brief
+    // Fallback brief with new structure
+    const brief = {
+      mode,
+      focus: mode === 'post_workout'
+        ? `${todaysWorkoutName || suggestedWorkout} Complete`
+        : (isRestDay ? 'Rest Day' : suggestedWorkout),
+      target: mode === 'pre_workout'
+        ? (targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Time to train')
+        : undefined,
+      achievement: mode === 'post_workout'
+        ? formatAchievement(todaysWorkoutDetails?.exercises || [])
+        : undefined,
+      prs: todaysPRs.length > 0
+        ? todaysPRs.map(p => ({ exercise: p.exercise, weight: p.weight, reps: p.reps }))
+        : undefined,
+      motivationalLine: mode === 'post_workout'
+        ? getMotivationalLine(todaysPRs)
+        : undefined,
+      nutrition: {
+        consumed: nutritionConsumed,
+        goals: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+        },
+        display: nutritionDisplay,
+      },
+    };
+
     return Response.json({
       status: 'generated',
       version: DAILY_BRIEF_VERSION,
-      brief: {
-        focus: isRestDay ? 'Rest Day' : suggestedWorkout,
-        target: isRestDay
-          ? `${workoutsThisWeek} sessions this week — recover well`
-          : (targetExercise ? `Beat: ${targetExercise} ${targetWeight}x${targetReps}` : 'Time to train'),
-        nutrition: macroSummary,
-      },
+      brief,
       generatedAt: new Date().toISOString(),
       debug: debugInfo,
     });

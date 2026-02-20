@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Trophy } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import {
   getDailyBriefCache,
@@ -170,25 +170,76 @@ export function DailyBriefCard() {
 
   // Generated brief state
   if (brief?.status === "generated" && brief.brief) {
+    const { mode, focus, target, achievement, prs, motivationalLine, nutrition } = brief.brief;
+    const isPostWorkout = mode === 'post_workout';
+    const hasPRs = prs && prs.length > 0;
+
     return (
       <div
         className="mx-4 mt-4 rounded-2xl p-4"
         style={{
           background: "#1a1a24",
-          border: "1px solid rgba(255, 255, 255, 0.05)",
+          border: isPostWorkout
+            ? "1px solid rgba(34, 197, 94, 0.2)"
+            : "1px solid rgba(255, 255, 255, 0.05)",
         }}
       >
         {/* Focus line */}
-        <p className="text-sm font-bold text-primary">
-          {brief.brief.focus}
+        <p className={`text-sm font-bold ${isPostWorkout ? 'text-green-400' : 'text-primary'}`}>
+          {focus}
         </p>
-        {/* Target line */}
-        <p className="text-sm text-white mt-1">
-          {brief.brief.target}
-        </p>
+
+        {/* Pre-workout: Show target */}
+        {mode === 'pre_workout' && target && (
+          <p className="text-sm text-white mt-1">
+            {target}
+          </p>
+        )}
+
+        {/* Post-workout: Show achievement */}
+        {isPostWorkout && achievement && (
+          <p className="text-sm text-white mt-1">
+            {achievement}
+          </p>
+        )}
+
+        {/* Post-workout: PR badges */}
+        {isPostWorkout && hasPRs && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {prs.map((pr, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+                style={{
+                  background: "rgba(234, 179, 8, 0.15)",
+                  color: "#eab308",
+                  border: "1px solid rgba(234, 179, 8, 0.3)",
+                }}
+              >
+                <Trophy className="w-3 h-3" />
+                {pr.exercise} {pr.weight}x{pr.reps}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Post-workout: Motivational line */}
+        {isPostWorkout && motivationalLine && (
+          <p className="text-xs text-muted-foreground italic mt-2">
+            {motivationalLine}
+          </p>
+        )}
+
+        {/* Rest day message */}
+        {mode === 'rest_day' && (
+          <p className="text-sm text-white mt-1">
+            Recovery day — let your muscles rebuild.
+          </p>
+        )}
+
         {/* Nutrition line */}
-        <p className="text-xs text-muted-foreground mt-1">
-          {brief.brief.nutrition}
+        <p className="text-xs text-muted-foreground mt-2">
+          {nutrition.display}
         </p>
       </div>
     );

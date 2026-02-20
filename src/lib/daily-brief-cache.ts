@@ -1,12 +1,28 @@
 // Daily Brief cache utilities
 
 // Must match the version in /api/daily-brief/route.ts
-const EXPECTED_VERSION = 5;
+const EXPECTED_VERSION = 6;
+
+export interface NutritionData {
+  consumed: { calories: number; protein: number; carbs: number; fat: number };
+  goals: { calories: number; protein: number; carbs: number; fat: number };
+  display: string;
+}
+
+export interface PR {
+  exercise: string;
+  weight: number;
+  reps: number;
+}
 
 export interface DailyBrief {
+  mode: 'pre_workout' | 'post_workout' | 'rest_day';
   focus: string;
-  target: string;
-  nutrition: string;
+  target?: string;           // Pre-workout: "Beat: Squat 225x5"
+  achievement?: string;      // Post-workout: "Squat 225x5"
+  prs?: PR[];
+  motivationalLine?: string; // Post-workout: "That PR is going to pay off."
+  nutrition: NutritionData;
 }
 
 export interface DailyBriefResponse {
