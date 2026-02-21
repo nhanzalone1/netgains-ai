@@ -253,6 +253,43 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     }
   };
 
+  // Client-side parsing for simple responses (skip API call)
+  const tryClientParse = (questionIndex: number, response: string): Record<string, unknown> | null => {
+    const lower = response.toLowerCase().trim();
+
+    // Question 0: Name - single word or short name, just accept it
+    if (questionIndex === 0) {
+      // Accept if it's 1-3 words and no numbers
+      const words = response.trim().split(/\s+/);
+      if (words.length <= 3 && !/\d/.test(response)) {
+        return { name: response.trim() };
+      }
+    }
+
+    // Question 6: Injuries - handle "no" variations
+    if (questionIndex === 6) {
+      const noVariations = ['no', 'nope', 'nah', 'none', 'nothing', 'n/a', 'na', 'all good', 'im good', "i'm good", 'good', 'negative'];
+      if (noVariations.includes(lower) || lower.startsWith('no ') || lower.startsWith('nope ')) {
+        return { injuries: 'none' };
+      }
+    }
+
+    // Question 3: Coaching mode - handle clear yes/no for "want me to set one up?"
+    if (questionIndex === 3) {
+      const assistVariations = ['i have my own', 'have my own', 'my own', 'own program', 'i have one', 'have one', 'already have', 'got one', 'yes i have', 'running my own'];
+      const fullVariations = ['build one', 'set one up', 'make one', 'create one', 'you build', 'yes please', 'please', 'yeah', 'yes', 'sure'];
+
+      if (assistVariations.some(v => lower.includes(v))) {
+        return { coaching_mode: 'assist' };
+      }
+      if (fullVariations.some(v => lower.includes(v)) && !lower.includes('have')) {
+        return { coaching_mode: 'full' };
+      }
+    }
+
+    return null; // Fall back to API parsing
+  };
+
   const saveOnboarding = async (finalData: OnboardingData): Promise<boolean> => {
     const payload = {
       name: finalData.name,
@@ -306,10 +343,20 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     // Add user's message to chat
     addMessage("user", userResponse);
 
-    // Parse the response with Haiku
-    setIsParsing(true);
-    const parsed = await parseResponse(userResponse);
-    setIsParsing(false);
+    // Try client-side parsing first for simple responses
+    const clientParsed = tryClientParse(currentQuestionIndex, userResponse);
+
+    let parsed: Record<string, unknown> | null;
+    if (clientParsed) {
+      // Client-side parsing succeeded, skip API call
+      console.log('[onboarding] Client-side parsed:', clientParsed);
+      parsed = clientParsed;
+    } else {
+      // Call API for complex responses
+      setIsParsing(true);
+      parsed = await parseResponse(userResponse);
+      setIsParsing(false);
+    }
 
     // Get current question's defaults
     const currentQuestion = ONBOARDING_QUESTIONS[currentQuestionIndex];
