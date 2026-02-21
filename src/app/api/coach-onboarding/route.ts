@@ -1,9 +1,17 @@
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
   try {
+    // Use regular client for auth check
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    // Use service role client for DB operations (bypasses RLS)
+    const supabaseAdmin = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     if (authError || !user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +53,7 @@ export async function POST(request: Request) {
     // Profile already exists from signup trigger (or nuclear reset which uses update, not delete)
     console.log('[coach-onboarding] Updating profile for user:', user.id);
 
-    const { data: updateData, error: profileError } = await supabase
+    const { data: updateData, error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({
         height_inches: finalHeight,
@@ -83,7 +91,7 @@ export async function POST(request: Request) {
 
       // Profile doesn't exist - create it
       console.log('[coach-onboarding] Creating profile for user:', user.id);
-      const { error: insertError } = await supabase
+      const { error: insertError } = await supabaseAdmin
         .from('profiles')
         .insert({
           id: user.id,
@@ -130,7 +138,7 @@ export async function POST(request: Request) {
 
     for (const memory of memories) {
       // Upsert each memory
-      const { error: memoryError } = await supabase
+      const { error: memoryError } = await supabaseAdmin
         .from('coach_memory')
         .upsert(
           {
