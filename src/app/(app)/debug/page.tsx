@@ -107,11 +107,33 @@ export default function DebugPage() {
 
   const markOnboardingComplete = async () => {
     if (!user) return;
-    await supabase.from("profiles").update({
-      onboarding_complete: true,
-      app_tour_shown: true, // Also mark tour as shown so we skip that too
-    }).eq("id", user.id);
-    showMessage("Onboarding marked complete!");
+
+    // Try update first
+    const { data: updateData } = await supabase
+      .from("profiles")
+      .update({
+        onboarding_complete: true,
+        app_tour_shown: true,
+      })
+      .eq("id", user.id)
+      .select();
+
+    if (!updateData || updateData.length === 0) {
+      // Profile doesn't exist - create it
+      const { error: insertError } = await supabase.from("profiles").insert({
+        id: user.id,
+        onboarding_complete: true,
+        app_tour_shown: true,
+      });
+
+      if (insertError) {
+        showMessage(`Error creating profile: ${insertError.message}`);
+        return;
+      }
+      showMessage("Profile created and onboarding marked complete!");
+    } else {
+      showMessage("Onboarding marked complete!");
+    }
     loadData();
   };
 
