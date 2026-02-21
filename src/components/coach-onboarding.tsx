@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -53,10 +53,22 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [data, setData] = useState<OnboardingData>({});
   const [error, setError] = useState<string | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const keyboardScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const orientationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback((force = false) => {
+    if (force) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -69,6 +81,66 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       inputRef.current?.focus();
     }
   }, [messages.length, isParsing, isSaving]);
+
+  // iOS keyboard handling using Visual Viewport API
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let initialHeight = window.innerHeight;
+
+    const updateViewport = () => {
+      if (!viewport) return;
+
+      const currentHeight = viewport.height;
+      const heightDiff = initialHeight - currentHeight;
+
+      // Keyboard is open if viewport shrunk significantly (>150px for iOS bars)
+      const isOpen = heightDiff > 150;
+      setKeyboardOpen(isOpen);
+
+      if (isOpen) {
+        setViewportHeight(currentHeight);
+        if (keyboardScrollTimeoutRef.current) {
+          clearTimeout(keyboardScrollTimeoutRef.current);
+        }
+        keyboardScrollTimeoutRef.current = setTimeout(() => scrollToBottom(true), 50);
+      } else {
+        setViewportHeight(null);
+      }
+
+      // Keep page scrolled to top to prevent iOS from pushing it up
+      if (isOpen && containerRef.current) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    const onOrientationChange = () => {
+      if (orientationTimeoutRef.current) {
+        clearTimeout(orientationTimeoutRef.current);
+      }
+      orientationTimeoutRef.current = setTimeout(() => {
+        initialHeight = window.innerHeight;
+        updateViewport();
+      }, 300);
+    };
+
+    updateViewport();
+
+    viewport.addEventListener("resize", updateViewport);
+    window.addEventListener("orientationchange", onOrientationChange);
+
+    return () => {
+      viewport.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", onOrientationChange);
+      if (keyboardScrollTimeoutRef.current) {
+        clearTimeout(keyboardScrollTimeoutRef.current);
+      }
+      if (orientationTimeoutRef.current) {
+        clearTimeout(orientationTimeoutRef.current);
+      }
+    };
+  }, [scrollToBottom]);
 
   const addMessage = (role: "coach" | "user", content: string) => {
     const id = Date.now().toString();
@@ -226,7 +298,13 @@ you're one of the first people using netgains — if anything's confusing, broke
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      ref={containerRef}
+      className="flex flex-col"
+      style={{
+        height: keyboardOpen && viewportHeight ? viewportHeight : '100%',
+      }}
+    >
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
@@ -327,7 +405,10 @@ you're one of the first people using netgains — if anything's confusing, broke
       {/* Input Area */}
       <div
         className="flex-shrink-0 p-4 border-t border-white/5"
-        style={{ background: "#0f0f13" }}
+        style={{
+          background: "#0f0f13",
+          paddingBottom: keyboardOpen ? 8 : "env(safe-area-inset-bottom, 8px)",
+        }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
           <textarea
