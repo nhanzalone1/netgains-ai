@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { DailyBriefCard } from "@/components/daily-brief-card";
+import { CoachOnboarding } from "@/components/coach-onboarding";
 import { createClient } from "@/lib/supabase/client";
 
 interface Message {
@@ -245,6 +246,7 @@ export default function CoachPage() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null); // null = loading
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -293,6 +295,42 @@ export default function CoachPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Check onboarding status on mount
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const checkOnboarding = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarding_complete')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('[Coach] Error checking onboarding:', error);
+        setOnboardingComplete(false); // Assume not complete on error
+        return;
+      }
+
+      setOnboardingComplete(data?.onboarding_complete ?? false);
+    };
+
+    checkOnboarding();
+  }, [user?.id]);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    setOnboardingComplete(true);
+    // Clear any existing messages - user just saw closing message in onboarding UI
+    setMessages([]);
+    lastSavedContentRef.current.clear();
+    // Mark today as opened so we don't generate another greeting
+    // The onboarding closing message already told them what to do
+    hasGeneratedOpeningRef.current = true;
+    const today = new Date().toDateString();
+    localStorage.setItem(getLastOpenKey(user?.id), today);
+  };
 
   // iOS keyboard handling using Visual Viewport API
   // When keyboard opens, we set container height to viewport height so input sits above keyboard
@@ -885,6 +923,63 @@ export default function CoachPage() {
       lastDate = messageDate;
     }
     messagesWithDividers.push({ type: 'message', message });
+  }
+
+  // Show loading state while checking onboarding
+  if (onboardingComplete === null) {
+    return (
+      <div
+        className="flex flex-col fixed left-0 right-0 z-40 items-center justify-center"
+        style={{
+          background: "#0f0f13",
+          top: 0,
+          bottom: isMobile ? 120 : 150,
+        }}
+      >
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show structured onboarding if not complete
+  if (!onboardingComplete) {
+    return (
+      <div
+        ref={pageRef}
+        className="flex flex-col fixed left-0 right-0 z-40"
+        style={{
+          background: "#0f0f13",
+          top: 0,
+          bottom: isMobile ? 120 : 150,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
+          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(255, 71, 87, 0.15)" }}
+            >
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold">Coach</h1>
+              <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+            </div>
+          </div>
+          <UserMenu />
+        </div>
+
+        {/* Onboarding Flow */}
+        <div className="flex-1 overflow-y-auto">
+          <CoachOnboarding onComplete={handleOnboardingComplete} />
+        </div>
+      </div>
+    );
   }
 
   return (
