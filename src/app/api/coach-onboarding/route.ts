@@ -10,6 +10,8 @@ export async function POST(request: Request) {
     // Use service role client for DB operations (bypasses RLS)
     // Falls back to regular client if service role key not available
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    console.log('[coach-onboarding] Service role key available:', !!serviceRoleKey, 'length:', serviceRoleKey?.length ?? 0);
+
     const supabaseAdmin = serviceRoleKey
       ? createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
       : supabase;
