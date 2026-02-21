@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 
 interface CoachOnboardingProps {
   onComplete: () => void;
@@ -290,6 +291,25 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     return null; // Fall back to API parsing
   };
 
+  // Save closing message to DB so it persists in regular chat
+  const saveClosingMessageToDb = async (message: string): Promise<void> => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: message,
+      });
+      console.log('[onboarding] Closing message saved to DB');
+    } catch (err) {
+      console.error('[onboarding] Failed to save closing message:', err);
+      // Don't block onboarding completion if this fails
+    }
+  };
+
   const saveOnboarding = async (finalData: OnboardingData): Promise<boolean> => {
     const payload = {
       name: finalData.name,
@@ -428,9 +448,12 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         return;
       }
 
-      // Show closing message
+      // Show closing message and save to DB so it persists after transition
       const closingMessage = buildClosingMessage(finalData);
       addMessage("coach", closingMessage);
+
+      // Save closing message to chat_messages table
+      await saveClosingMessageToDb(closingMessage);
       setIsSaving(false);
 
       // Give user time to read closing message, then transition to normal chat
