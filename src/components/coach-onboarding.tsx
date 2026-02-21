@@ -164,15 +164,16 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         }),
       });
 
-      console.log('[onboarding] API response status:', response.status);
+      console.log('[onboarding] Parse API response status:', response.status);
 
       if (!response.ok) {
-        console.error('[onboarding] API error:', response.status, response.statusText);
+        const errorText = await response.text().catch(() => 'no body');
+        console.error('[onboarding] Parse API error:', response.status, response.statusText, errorText);
         return null;
       }
 
       const result = await response.json();
-      console.log('[onboarding] API result:', result);
+      console.log('[onboarding] Parse API result:', result);
 
       if (!result.success) {
         console.error('[onboarding] Parse failed:', result.error);
@@ -253,12 +254,14 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     // Merge parsed data into collected data
     const updatedData = { ...data, ...parsed } as OnboardingData;
     setData(updatedData);
+    console.log('[onboarding] Updated data after step', currentStep, ':', updatedData);
 
     const nextStep = currentStep + 1;
 
     // Check if we've completed all questions
     if (nextStep >= COACH_QUESTIONS.length) {
       // All questions answered - save and show closing message
+      console.log('[onboarding] All questions answered, saving...');
       setIsSaving(true);
 
       const saved = await saveOnboarding(updatedData);
@@ -266,6 +269,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       if (!saved) {
         setIsSaving(false);
         setError("something went wrong saving your info. tap send to try again.");
+        console.error('[onboarding] Save failed, staying on current step');
         // Don't advance step so they can retry
         return;
       }
