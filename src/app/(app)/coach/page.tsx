@@ -520,12 +520,6 @@ export default function CoachPage() {
       const response = await sendRequest([triggerMessage], abortController.signal);
       await streamResponse(response, assistantMessageId);
       console.log(">>> Auto-opening streamed successfully <<<");
-
-      // Force a state update to trigger the save effect
-      // Small delay ensures streaming state is fully settled
-      setTimeout(() => {
-        setMessages((prev) => [...prev]);
-      }, 100);
     } catch (error) {
       // Ignore abort errors - they're expected when we cancel requests
       if (error instanceof Error && error.name === 'AbortError') {
@@ -713,16 +707,10 @@ export default function CoachPage() {
           const dbId = await saveMessageToDB(user.id, message);
           console.log(">>> Saved, got DB ID:", dbId);
           if (dbId) {
-            // IMPORTANT: Track with the NEW DB ID, not the old temp ID
+            // Track both IDs to prevent double-save
+            // Don't change message ID in state - it causes UI issues during streaming
             lastSavedContentRef.current.set(dbId, message.content);
-            // Also track old ID to prevent double-save during state update
             lastSavedContentRef.current.set(message.id, message.content);
-            // Update the message ID in state if it was a temp ID
-            if (dbId !== message.id) {
-              setMessages(prev => prev.map(m =>
-                m.id === message.id ? { ...m, id: dbId } : m
-              ));
-            }
           } else {
             console.error(">>> Failed to save message to DB");
           }
