@@ -53,22 +53,48 @@ export async function POST(request: Request) {
     const finalDaysPerWeek = daysPerWeek || 4;
 
     // Update profile with height, weight, goal, coaching_mode, and mark onboarding complete
-    // Profile already exists from signup trigger (or nuclear reset which uses update, not delete)
+    const updatePayload = {
+      height_inches: finalHeight,
+      weight_lbs: finalWeight,
+      goal,
+      coaching_mode: finalCoachingMode,
+      onboarding_complete: true,
+    };
+
     console.log('[coach-onboarding] Updating profile for user:', user.id);
+    console.log('[coach-onboarding] Update payload:', JSON.stringify(updatePayload));
 
-    const { data: updateData, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        height_inches: finalHeight,
-        weight_lbs: finalWeight,
-        goal,
-        coaching_mode: finalCoachingMode,
-        onboarding_complete: true,
-      })
-      .eq('id', user.id)
-      .select();
+    let updateData;
+    let profileError;
 
-    console.log('[coach-onboarding] Update result:', { updateData, profileError });
+    try {
+      const result = await supabaseAdmin
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', user.id)
+        .select();
+
+      updateData = result.data;
+      profileError = result.error;
+
+      console.log('[coach-onboarding] Update result:', {
+        data: updateData,
+        error: profileError ? {
+          message: profileError.message,
+          code: profileError.code,
+          details: profileError.details,
+          hint: profileError.hint
+        } : null
+      });
+    } catch (err) {
+      console.error('[coach-onboarding] Update threw exception:', err);
+      return Response.json({
+        error: 'Failed to update profile',
+        details: {
+          exception: err instanceof Error ? err.message : String(err)
+        }
+      }, { status: 500 });
+    }
 
     if (profileError) {
       console.error('[coach-onboarding] Profile update failed:', {
@@ -83,6 +109,7 @@ export async function POST(request: Request) {
         details: {
           message: profileError.message,
           code: profileError.code,
+          details: profileError.details,
           hint: profileError.hint
         }
       }, { status: 500 });
