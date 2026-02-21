@@ -15,34 +15,41 @@ interface Message {
 }
 
 // Questions mapped to the fields they're asking about
-const ONBOARDING_QUESTIONS: { question: string; fields: string[] }[] = [
+const ONBOARDING_QUESTIONS: { question: string; fields: string[]; defaults: Record<string, unknown> }[] = [
   {
     question: "i'm your ai coach. i'll track your workouts, nutrition, and help you hit your goals. let's get you set up — what should i call you?",
-    fields: ['name']
+    fields: ['name'],
+    defaults: { name: 'there' }
   },
   {
-    question: "what's your age, height, and weight?",
-    fields: ['age', 'height_inches', 'weight_lbs']
+    question: "cool. how old are you, and what's your height and weight? ballpark is fine.",
+    fields: ['age', 'height_inches', 'weight_lbs'],
+    defaults: { age: 25, height_inches: 70, weight_lbs: 170 }
   },
   {
-    question: "what's your main goal right now — building muscle, losing fat, or maintaining?",
-    fields: ['goal']
+    question: "what are you going for right now — trying to put on size, lean out, or just maintain where you're at?",
+    fields: ['goal'],
+    defaults: { goal: 'cutting' }
   },
   {
-    question: "do you want me to build your program, or do you already have one?",
-    fields: ['coaching_mode']
+    question: "you running your own program or want me to set one up?",
+    fields: ['coaching_mode'],
+    defaults: { coaching_mode: 'assist' }
   },
   {
-    question: "what split do you run?",
-    fields: ['training_split', 'split_rotation']
+    question: "what's your split look like? ppl, upper/lower, bro split, whatever you're running.",
+    fields: ['training_split', 'split_rotation'],
+    defaults: { training_split: 'PPL', split_rotation: ['Push', 'Pull', 'Legs', 'Rest', 'Push', 'Pull', 'Legs'] }
   },
   {
-    question: "how many days a week can you realistically train?",
-    fields: ['days_per_week']
+    question: "how many days a week are you actually getting in the gym?",
+    fields: ['days_per_week'],
+    defaults: { days_per_week: 4 }
   },
   {
-    question: "any injuries or limitations i should know about?",
-    fields: ['injuries']
+    question: "any injuries or stuff i should work around? bad shoulder, knee issues, anything like that?",
+    fields: ['injuries'],
+    defaults: { injuries: 'none' }
   },
 ];
 
@@ -111,6 +118,8 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [data, setData] = useState<OnboardingData>({});
   const [error, setError] = useState<string | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
@@ -302,11 +311,50 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     const parsed = await parseResponse(userResponse);
     setIsParsing(false);
 
+    // Get current question's defaults
+    const currentQuestion = ONBOARDING_QUESTIONS[currentQuestionIndex];
+
     if (!parsed) {
-      // Parsing failed - ask user to try again
-      setError("i didn't quite catch that. could you rephrase?");
+      // Parsing failed
+      if (retryCount >= 1) {
+        // Already retried once - use defaults and move on
+        console.log('[onboarding] Parse failed twice, using defaults:', currentQuestion?.defaults);
+        const updatedData = { ...data, ...(currentQuestion?.defaults || {}) } as OnboardingData;
+        setData(updatedData);
+        setRetryCount(0);
+
+        // Move to next question or finish
+        if (hasAllFields(updatedData)) {
+          console.log('[onboarding] All fields collected with defaults, saving...');
+          setIsSaving(true);
+          const saved = await saveOnboarding(updatedData);
+          if (!saved) {
+            setIsSaving(false);
+            setError("something went wrong saving your info. tap send to try again.");
+            return;
+          }
+          const closingMessage = buildClosingMessage(updatedData);
+          addMessage("coach", closingMessage);
+          setIsSaving(false);
+          setTimeout(() => onComplete(), 4000);
+        } else {
+          const next = getNextQuestion(updatedData);
+          if (next) {
+            setCurrentQuestionIndex(next.index);
+            addMessage("coach", next.question);
+          }
+        }
+        return;
+      }
+
+      // First failure - increment retry and let user try again
+      setRetryCount(retryCount + 1);
+      setError("didn't catch that. give it one more shot.");
       return;
     }
+
+    // Parsing succeeded - reset retry count
+    setRetryCount(0);
 
     // Merge parsed data into collected data
     const updatedData = { ...data, ...parsed } as OnboardingData;
@@ -342,6 +390,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       const next = getNextQuestion(updatedData);
       if (next) {
         console.log('[onboarding] Next question:', next.index, next.question);
+        setCurrentQuestionIndex(next.index);
         addMessage("coach", next.question);
       }
     }

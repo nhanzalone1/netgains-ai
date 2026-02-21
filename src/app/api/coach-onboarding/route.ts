@@ -55,8 +55,21 @@ export async function POST(request: Request) {
       }, { onConflict: 'id' });
 
     if (profileError) {
-      console.error('[coach-onboarding] Profile update failed:', profileError);
-      return Response.json({ error: 'Failed to update profile' }, { status: 500 });
+      console.error('[coach-onboarding] Profile update failed:', {
+        message: profileError.message,
+        code: profileError.code,
+        details: profileError.details,
+        hint: profileError.hint,
+        full: JSON.stringify(profileError, null, 2)
+      });
+      return Response.json({
+        error: 'Failed to update profile',
+        details: {
+          message: profileError.message,
+          code: profileError.code,
+          hint: profileError.hint
+        }
+      }, { status: 500 });
     }
 
     // Save memories: name, age, training_split, split_rotation, injuries, days_per_week
