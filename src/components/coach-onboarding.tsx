@@ -156,7 +156,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: { error?: string } = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to save");
       }
 
@@ -237,7 +237,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
                     value={data.age}
                     onChange={(e) => setData((prev) => ({ ...prev, age: e.target.value }))}
                     placeholder="25"
-                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -250,7 +250,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
                         setData((prev) => ({ ...prev, heightFeet: e.target.value }))
                       }
                       placeholder="5"
-                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div className="flex-1">
@@ -262,7 +262,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
                         setData((prev) => ({ ...prev, heightInches: e.target.value }))
                       }
                       placeholder="10"
-                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                 </div>
@@ -273,7 +273,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
                     value={data.weight}
                     onChange={(e) => setData((prev) => ({ ...prev, weight: e.target.value }))}
                     placeholder="180"
-                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
