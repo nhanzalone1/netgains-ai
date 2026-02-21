@@ -520,6 +520,12 @@ export default function CoachPage() {
       const response = await sendRequest([triggerMessage], abortController.signal);
       await streamResponse(response, assistantMessageId);
       console.log(">>> Auto-opening streamed successfully <<<");
+
+      // Force a state update to trigger the save effect
+      // Small delay ensures streaming state is fully settled
+      setTimeout(() => {
+        setMessages((prev) => [...prev]);
+      }, 100);
     } catch (error) {
       // Ignore abort errors - they're expected when we cancel requests
       if (error instanceof Error && error.name === 'AbortError') {
