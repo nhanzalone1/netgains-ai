@@ -952,39 +952,32 @@ export default function CoachPage() {
         style={{
           background: "#0f0f13",
           top: 0,
-          // When keyboard is open, use viewport height so input sits above keyboard
-          // When closed, leave space for nav bar
-          ...(keyboardOpen && viewportHeight
-            ? { height: viewportHeight }
-            : { bottom: isMobile ? 120 : 150 }
-          ),
+          bottom: isMobile ? 120 : 150,
           overflow: 'hidden',
         }}
       >
-        {/* Header - hide when keyboard is open to maximize space */}
-        {!keyboardOpen && (
-          <div
-            className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
-            style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center"
-                style={{ background: "rgba(255, 71, 87, 0.15)" }}
-              >
-                <Sparkles className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold">Coach</h1>
-                <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
-              </div>
+        {/* Header */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
+          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(255, 71, 87, 0.15)" }}
+            >
+              <Sparkles className="w-5 h-5 text-primary" />
             </div>
-            <UserMenu />
+            <div>
+              <h1 className="text-lg font-bold">Coach</h1>
+              <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+            </div>
           </div>
-        )}
+          <UserMenu />
+        </div>
 
         {/* Onboarding Flow */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           <CoachOnboarding onComplete={handleOnboardingComplete} />
         </div>
       </div>
