@@ -977,7 +977,7 @@ export default function CoachPage() {
         </div>
 
         {/* Onboarding Flow - component manages its own layout */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <CoachOnboarding onComplete={handleOnboardingComplete} />
         </div>
       </div>

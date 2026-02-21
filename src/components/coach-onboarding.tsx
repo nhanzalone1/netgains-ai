@@ -100,8 +100,8 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       setKeyboardOpen(isOpen);
 
       if (isOpen) {
-        // Subtract extra space for iOS keyboard accessory bar (~44px)
-        setViewportHeight(currentHeight - 44);
+        // Subtract extra space for iOS keyboard accessory bar
+        setViewportHeight(currentHeight - 88);
         if (keyboardScrollTimeoutRef.current) {
           clearTimeout(keyboardScrollTimeoutRef.current);
         }
@@ -304,15 +304,17 @@ you're one of the first people using netgains — if anything's confusing, broke
       className="flex flex-col"
       style={{
         height: keyboardOpen && viewportHeight ? viewportHeight : '100%',
+        overflow: 'hidden',
       }}
     >
-      {/* Messages Area */}
+      {/* Messages Area - only this area scrolls */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide"
+        className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide min-h-0"
         style={{
           WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'none',
+          overscrollBehavior: 'contain',
         }}
       >
         {messages.map((message) => (
