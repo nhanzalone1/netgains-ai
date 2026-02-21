@@ -14,20 +14,40 @@ interface Message {
   content: string;
 }
 
-// The 7 fixed onboarding questions - coach never improvises
-const COACH_QUESTIONS = [
-  "i'm your ai coach. i'll track your workouts, nutrition, and help you hit your goals. let's get you set up — what should i call you?",
-  "what's your age, height, and weight?",
-  "what's your main goal right now — building muscle, losing fat, or maintaining?",
-  "do you want me to build your program, or do you already have one?",
-  "what split do you run? ppl, upper/lower, bro split, full body?",
-  "how many days a week can you realistically train?",
-  "any injuries or limitations i should know about?",
+// Questions mapped to the fields they're asking about
+const ONBOARDING_QUESTIONS: { question: string; fields: string[] }[] = [
+  {
+    question: "i'm your ai coach. i'll track your workouts, nutrition, and help you hit your goals. let's get you set up — what should i call you?",
+    fields: ['name']
+  },
+  {
+    question: "what's your age, height, and weight?",
+    fields: ['age', 'height_inches', 'weight_lbs']
+  },
+  {
+    question: "what's your main goal right now — building muscle, losing fat, or maintaining?",
+    fields: ['goal']
+  },
+  {
+    question: "do you want me to build your program, or do you already have one?",
+    fields: ['coaching_mode']
+  },
+  {
+    question: "what split do you run?",
+    fields: ['training_split', 'split_rotation']
+  },
+  {
+    question: "how many days a week can you realistically train?",
+    fields: ['days_per_week']
+  },
+  {
+    question: "any injuries or limitations i should know about?",
+    fields: ['injuries']
+  },
 ];
 
-// Map step index to parse step type
-type StepType = 'name' | 'stats' | 'goal' | 'coaching_mode' | 'split' | 'days' | 'injuries';
-const STEP_TYPES: StepType[] = ['name', 'stats', 'goal', 'coaching_mode', 'split', 'days', 'injuries'];
+// All required fields for onboarding
+const REQUIRED_FIELDS = ['name', 'age', 'height_inches', 'weight_lbs', 'goal', 'coaching_mode', 'training_split', 'split_rotation', 'days_per_week', 'injuries'];
 
 // Collected data throughout onboarding
 interface OnboardingData {
@@ -43,11 +63,49 @@ interface OnboardingData {
   injuries?: string;
 }
 
+// Get list of fields we already have
+function getCollectedFields(data: OnboardingData): string[] {
+  const fields: string[] = [];
+  if (data.name) fields.push('name');
+  if (data.age) fields.push('age');
+  if (data.height_inches) fields.push('height_inches');
+  if (data.weight_lbs) fields.push('weight_lbs');
+  if (data.goal) fields.push('goal');
+  if (data.coaching_mode) fields.push('coaching_mode');
+  if (data.training_split) fields.push('training_split');
+  if (data.split_rotation) fields.push('split_rotation');
+  if (data.days_per_week) fields.push('days_per_week');
+  if (data.injuries) fields.push('injuries');
+  return fields;
+}
+
+// Find next question that asks for fields we're missing
+function getNextQuestion(data: OnboardingData): { question: string; index: number } | null {
+  const collected = getCollectedFields(data);
+
+  for (let i = 0; i < ONBOARDING_QUESTIONS.length; i++) {
+    const q = ONBOARDING_QUESTIONS[i];
+    // Check if any of the fields for this question are missing
+    const needsAny = q.fields.some(field => !collected.includes(field));
+    if (needsAny) {
+      return { question: q.question, index: i };
+    }
+  }
+  return null; // All fields collected
+}
+
+// Check if we have all required fields
+function hasAllFields(data: OnboardingData): boolean {
+  return REQUIRED_FIELDS.every(field => {
+    const value = data[field as keyof OnboardingData];
+    return value !== undefined && value !== null && value !== '';
+  });
+}
+
 export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
   const [messages, setMessages] = useState<Message[]>([
-    { id: '0', role: 'coach', content: COACH_QUESTIONS[0] }
+    { id: '0', role: 'coach', content: ONBOARDING_QUESTIONS[0].question }
   ]);
-  const [currentStep, setCurrentStep] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -148,19 +206,18 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     setMessages(prev => [...prev, { id, role, content }]);
   };
 
-  const parseResponse = async (userResponse: string): Promise<Record<string, string | number> | null> => {
-    const stepType = STEP_TYPES[currentStep];
+  const parseResponse = async (userResponse: string): Promise<Record<string, unknown> | null> => {
+    const alreadyHave = getCollectedFields(data);
 
-    console.log('[onboarding] Parsing step:', stepType, 'response:', userResponse);
+    console.log('[onboarding] Parsing response:', userResponse, 'Already have:', alreadyHave);
 
     try {
       const response = await fetch('/api/onboarding-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          step: stepType,
           userResponse,
-          context: data, // Pass collected data for context
+          alreadyHave,
         }),
       });
 
@@ -254,14 +311,12 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     // Merge parsed data into collected data
     const updatedData = { ...data, ...parsed } as OnboardingData;
     setData(updatedData);
-    console.log('[onboarding] Updated data after step', currentStep, ':', updatedData);
+    console.log('[onboarding] Updated data:', updatedData);
 
-    const nextStep = currentStep + 1;
-
-    // Check if we've completed all questions
-    if (nextStep >= COACH_QUESTIONS.length) {
-      // All questions answered - save and show closing message
-      console.log('[onboarding] All questions answered, saving...');
+    // Check if we have all required fields
+    if (hasAllFields(updatedData)) {
+      // All data collected - save and show closing message
+      console.log('[onboarding] All fields collected, saving...');
       setIsSaving(true);
 
       const saved = await saveOnboarding(updatedData);
@@ -269,8 +324,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       if (!saved) {
         setIsSaving(false);
         setError("something went wrong saving your info. tap send to try again.");
-        console.error('[onboarding] Save failed, staying on current step');
-        // Don't advance step so they can retry
+        console.error('[onboarding] Save failed');
         return;
       }
 
@@ -284,9 +338,12 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         onComplete();
       }, 4000);
     } else {
-      // Move to next question
-      setCurrentStep(nextStep);
-      addMessage("coach", COACH_QUESTIONS[nextStep]);
+      // Find next question for missing fields
+      const next = getNextQuestion(updatedData);
+      if (next) {
+        console.log('[onboarding] Next question:', next.index, next.question);
+        addMessage("coach", next.question);
+      }
     }
   };
 
