@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, ArrowRight, Check, AlertTriangle } from "lucide-react";
+import { Sparkles, ArrowRight, Check, AlertTriangle, Send } from "lucide-react";
 
 function CoachBubble({ children }: { children: React.ReactNode }) {
   return (
@@ -176,305 +176,323 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     return `${feet}'${inches}"`;
   };
 
-  return (
-    <div className="p-4 space-y-4">
-      <AnimatePresence mode="wait">
-        {/* Step 0: Name */}
-        {step === 0 && (
-          <motion.div
-            key="name"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <CoachBubble>
-              <p className="text-sm text-white">
-                i&apos;m your ai coach. i&apos;ll track your workouts, nutrition, and help
-                you hit your goals. let&apos;s get you set up — what should i call you?
-              </p>
-            </CoachBubble>
-            <div className="flex gap-2 ml-[52px]">
-              <input
-                type="text"
-                value={data.name}
-                onChange={(e) => setData((prev) => ({ ...prev, name: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && handleNameSubmit()}
-                placeholder="Your name"
-                autoFocus
-                className="flex-1 px-4 py-3 rounded-xl text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              />
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={handleNameSubmit}
-                disabled={!data.name.trim()}
-                className="px-4 py-3 rounded-xl bg-primary text-primary-foreground disabled:opacity-50 min-h-[44px]"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </motion.button>
-            </div>
-          </motion.div>
-        )}
+  // Render the coach bubble content for current step
+  const renderBubble = () => {
+    switch (step) {
+      case 0:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">
+              i&apos;m your ai coach. i&apos;ll track your workouts, nutrition, and help
+              you hit your goals. let&apos;s get you set up — what should i call you?
+            </p>
+          </CoachBubble>
+        );
+      case 1:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">
+              got it, {data.name}. what&apos;s your age, height, and weight?
+            </p>
+          </CoachBubble>
+        );
+      case 2:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">
+              what&apos;s your main goal right now?
+            </p>
+          </CoachBubble>
+        );
+      case 3:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">
+              do you have your own program, or want me to guide your training?
+            </p>
+          </CoachBubble>
+        );
+      case 4:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">what split do you run?</p>
+          </CoachBubble>
+        );
+      case 5:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white">
+              any injuries or limitations i should know about?
+            </p>
+          </CoachBubble>
+        );
+      case 6:
+        return (
+          <CoachBubble>
+            <p className="text-sm text-white mb-3">
+              you&apos;re all set. here&apos;s what i&apos;ve got: {data.age} years old,{" "}
+              {formatHeight()} at {data.weight} lbs,{" "}
+              {data.goal === "bulking"
+                ? "building muscle"
+                : data.goal === "cutting"
+                ? "losing fat"
+                : "maintaining"}
+              , running {SPLIT_LABELS[data.split!]}.
+              {data.injuries.trim() && data.injuries.trim().toLowerCase() !== "none"
+                ? ` watching out for ${data.injuries.trim()}.`
+                : ""}
+            </p>
+            <p className="text-sm text-white mb-3">
+              bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs, and
+              Coach is me. tap Log and hit + to start your first workout. tap Nutrition
+              to set up your meal targets.
+            </p>
+            <p className="text-sm text-muted-foreground italic">
+              you&apos;re one of the first people using netgains — if anything&apos;s
+              confusing, broken, or you have ideas, tell noah. you&apos;re helping build
+              this.
+            </p>
+          </CoachBubble>
+        );
+    }
+  };
 
-        {/* Step 1: Age/Height/Weight */}
-        {step === 1 && (
-          <motion.div
-            key="measurements"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
+  // Render the input area for current step
+  const renderInput = () => {
+    switch (step) {
+      case 0:
+        return (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleNameSubmit();
+            }}
+            className="flex gap-2 max-w-lg mx-auto items-end"
           >
-            <CoachBubble>
-              <p className="text-sm text-white mb-4">
-                got it, {data.name}. what&apos;s your age, height, and weight?
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-muted-foreground">Age</label>
-                  <input
-                    type="number"
-                    value={data.age}
-                    onChange={(e) => setData((prev) => ({ ...prev, age: e.target.value }))}
-                    placeholder="25"
-                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-xs text-muted-foreground">Height (ft)</label>
-                    <input
-                      type="number"
-                      value={data.heightFeet}
-                      onChange={(e) =>
-                        setData((prev) => ({ ...prev, heightFeet: e.target.value }))
-                      }
-                      placeholder="5"
-                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-muted-foreground">Height (in)</label>
-                    <input
-                      type="number"
-                      value={data.heightInches}
-                      onChange={(e) =>
-                        setData((prev) => ({ ...prev, heightInches: e.target.value }))
-                      }
-                      placeholder="10"
-                      className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Weight (lbs)</label>
-                  <input
-                    type="number"
-                    value={data.weight}
-                    onChange={(e) => setData((prev) => ({ ...prev, weight: e.target.value }))}
-                    placeholder="180"
-                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
+            <input
+              type="text"
+              value={data.name}
+              onChange={(e) => setData((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Your name"
+              autoFocus
+              className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+              style={{ background: "#1a1a24" }}
+            />
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              type="submit"
+              disabled={!data.name.trim()}
+              className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            >
+              <Send className="w-5 h-5" />
+            </motion.button>
+          </form>
+        );
+
+      case 1:
+        return (
+          <div className="max-w-lg mx-auto space-y-3">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Age</label>
+                <input
+                  type="number"
+                  value={data.age}
+                  onChange={(e) => setData((prev) => ({ ...prev, age: e.target.value }))}
+                  placeholder="25"
+                  className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+                  style={{ background: "#1a1a24" }}
+                />
               </div>
-            </CoachBubble>
-            <div className="ml-[52px]">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Height (ft)</label>
+                <input
+                  type="number"
+                  value={data.heightFeet}
+                  onChange={(e) => setData((prev) => ({ ...prev, heightFeet: e.target.value }))}
+                  placeholder="5"
+                  className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+                  style={{ background: "#1a1a24" }}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Height (in)</label>
+                <input
+                  type="number"
+                  value={data.heightInches}
+                  onChange={(e) => setData((prev) => ({ ...prev, heightInches: e.target.value }))}
+                  placeholder="10"
+                  className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+                  style={{ background: "#1a1a24" }}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Weight (lbs)</label>
+                <input
+                  type="number"
+                  value={data.weight}
+                  onChange={(e) => setData((prev) => ({ ...prev, weight: e.target.value }))}
+                  placeholder="180"
+                  className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+                  style={{ background: "#1a1a24" }}
+                />
+              </div>
               <motion.button
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={handleMeasurementsSubmit}
                 disabled={!data.age || !data.heightFeet || !data.weight}
-                className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground disabled:opacity-50 min-h-[44px] font-medium flex items-center justify-center gap-2"
+                className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               >
-                Continue
-                <ArrowRight className="w-5 h-5" />
+                <Send className="w-5 h-5" />
               </motion.button>
             </div>
-          </motion.div>
-        )}
+          </div>
+        );
 
-        {/* Step 2: Goal */}
-        {step === 2 && (
-          <motion.div
-            key="goal"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <CoachBubble>
-              <p className="text-sm text-white">
-                what&apos;s your main goal right now?
-              </p>
-            </CoachBubble>
-            <div className="flex flex-wrap gap-2 ml-[52px]">
-              <QuickReplyButton onClick={() => handleGoalSelect("bulking")}>
-                Build muscle
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleGoalSelect("cutting")}>
-                Lose fat
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleGoalSelect("maintaining")}>
-                Maintain
-              </QuickReplyButton>
-            </div>
-          </motion.div>
-        )}
+      case 2:
+        return (
+          <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+            <QuickReplyButton onClick={() => handleGoalSelect("bulking")}>
+              Build muscle
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleGoalSelect("cutting")}>
+              Lose fat
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleGoalSelect("maintaining")}>
+              Maintain
+            </QuickReplyButton>
+          </div>
+        );
 
-        {/* Step 3: Coaching Mode */}
-        {step === 3 && (
-          <motion.div
-            key="coaching-mode"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <CoachBubble>
-              <p className="text-sm text-white">
-                do you have your own program, or want me to guide your training?
-              </p>
-            </CoachBubble>
-            <div className="flex flex-wrap gap-2 ml-[52px]">
-              <QuickReplyButton onClick={() => handleCoachingModeSelect("assist")}>
-                I have my own program
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleCoachingModeSelect("full")}>
-                Guide me
-              </QuickReplyButton>
-            </div>
-          </motion.div>
-        )}
+      case 3:
+        return (
+          <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+            <QuickReplyButton onClick={() => handleCoachingModeSelect("assist")}>
+              I have my own program
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleCoachingModeSelect("full")}>
+              Guide me
+            </QuickReplyButton>
+          </div>
+        );
 
-        {/* Step 4: Split */}
-        {step === 4 && (
-          <motion.div
-            key="split"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <CoachBubble>
-              <p className="text-sm text-white">what split do you run?</p>
-            </CoachBubble>
-            <div className="flex flex-wrap gap-2 ml-[52px]">
-              <QuickReplyButton onClick={() => handleSplitSelect("ppl")}>
-                PPL
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleSplitSelect("upper_lower")}>
-                Upper/Lower
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleSplitSelect("bro")}>
-                Bro Split
-              </QuickReplyButton>
-              <QuickReplyButton onClick={() => handleSplitSelect("full_body")}>
-                Full Body
-              </QuickReplyButton>
-            </div>
-          </motion.div>
-        )}
+      case 4:
+        return (
+          <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+            <QuickReplyButton onClick={() => handleSplitSelect("ppl")}>
+              PPL
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleSplitSelect("upper_lower")}>
+              Upper/Lower
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleSplitSelect("bro")}>
+              Bro Split
+            </QuickReplyButton>
+            <QuickReplyButton onClick={() => handleSplitSelect("full_body")}>
+              Full Body
+            </QuickReplyButton>
+          </div>
+        );
 
-        {/* Step 5: Injuries */}
-        {step === 5 && (
-          <motion.div
-            key="injuries"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <CoachBubble>
-              <p className="text-sm text-white">
-                any injuries or limitations i should know about?
-              </p>
-            </CoachBubble>
-            <div className="flex gap-2 ml-[52px]">
+      case 5:
+        return (
+          <div className="max-w-lg mx-auto">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleInjuriesSubmit();
+              }}
+              className="flex gap-2 items-end"
+            >
               <input
                 type="text"
                 value={data.injuries}
                 onChange={(e) => setData((prev) => ({ ...prev, injuries: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && handleInjuriesSubmit()}
-                placeholder="e.g., bad left shoulder, lower back issues"
-                className="flex-1 px-4 py-3 rounded-xl text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                placeholder="e.g., bad shoulder (or leave blank)"
+                className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px]"
+                style={{ background: "#1a1a24" }}
               />
               <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={handleInjuriesSubmit}
-                className="px-4 py-3 rounded-xl bg-primary text-primary-foreground min-h-[44px]"
+                whileTap={{ scale: 0.9 }}
+                type="submit"
+                className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground flex-shrink-0"
               >
-                <ArrowRight className="w-5 h-5" />
+                <Send className="w-5 h-5" />
               </motion.button>
-            </div>
-            <p className="text-xs text-muted-foreground ml-[52px]">
-              Leave blank if none
-            </p>
-          </motion.div>
-        )}
+            </form>
+          </div>
+        );
 
-        {/* Step 6: Summary */}
-        {step === 6 && (
+      case 6:
+        return (
+          <div className="max-w-lg mx-auto space-y-2">
+            {saveError && (
+              <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {saveError}
+              </div>
+            )}
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleSave}
+              disabled={isSaving}
+              className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 min-h-[48px] disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-5 h-5" />
+                  Let&apos;s Go
+                </>
+              )}
+            </motion.button>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages Area - scrollable, takes remaining space */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <AnimatePresence mode="wait">
           <motion.div
-            key="summary"
+            key={step}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
           >
-            <CoachBubble>
-              <p className="text-sm text-white mb-3">
-                you&apos;re all set. here&apos;s what i&apos;ve got: {data.age} years old,{" "}
-                {formatHeight()} at {data.weight} lbs,{" "}
-                {data.goal === "bulking"
-                  ? "building muscle"
-                  : data.goal === "cutting"
-                  ? "losing fat"
-                  : "maintaining"}
-                , running {SPLIT_LABELS[data.split!]}.
-                {data.injuries.trim() && data.injuries.trim().toLowerCase() !== "none"
-                  ? ` watching out for ${data.injuries.trim()}.`
-                  : ""}
-              </p>
-              <p className="text-sm text-white mb-3">
-                bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs, and
-                Coach is me. tap Log and hit + to start your first workout. tap Nutrition
-                to set up your meal targets.
-              </p>
-              <p className="text-sm text-muted-foreground italic">
-                you&apos;re one of the first people using netgains — if anything&apos;s
-                confusing, broken, or you have ideas, tell noah. you&apos;re helping build
-                this.
-              </p>
-            </CoachBubble>
-
-            <div className="ml-[52px] space-y-2">
-              {saveError && (
-                <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  {saveError}
-                </div>
-              )}
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSave}
-                disabled={isSaving}
-                className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Let&apos;s Go
-                  </>
-                )}
-              </motion.button>
-            </div>
+            {renderBubble()}
           </motion.div>
-        )}
-      </AnimatePresence>
+        </AnimatePresence>
+      </div>
+
+      {/* Input Area - pinned at bottom, matches regular chat styling */}
+      <div
+        className="flex-shrink-0 p-4 border-t border-white/5"
+        style={{
+          background: "#0f0f13",
+          paddingBottom: "env(safe-area-inset-bottom, 8px)",
+        }}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`input-${step}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            {renderInput()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
