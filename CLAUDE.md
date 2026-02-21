@@ -110,60 +110,70 @@ RLS policies: users can only access their own data
 - Use `formatLocalDate()` from `date-utils.ts` for all date operations
 - Coach system prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`
 
-## Current State (Feb 21, 3AM)
+## NEXT SESSION: Rebuild Coach Onboarding
+
+### What to DELETE and rebuild from scratch
+- `src/components/coach-onboarding.tsx`
+- `src/app/api/coach-onboarding/route.ts`
+- `src/app/api/onboarding-parse/route.ts`
+
+### What to NOT touch (these work)
+- `src/app/api/chat/route.ts` — coach chat engine, working
+- System prompt, tools, memory summarization — working
+- Nutrition, Log, Stats tabs — working
+- Daily Brief — working
+
+### The save endpoint MUST use
+```typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+```
+- **NOT** the `@/lib/supabase/server` client (that uses anon key + RLS)
+- `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel env vars
+
+### Known working pattern for Supabase writes
+- Service role client bypasses RLS
+- `profiles` table primary key is `id` which matches `auth.uid()`
+- `coach_memory` table uses `user_id`
+
+### Onboarding requirements
+1. 7 fixed questions, chat-style UI
+2. Sonnet tool_use for parsing open-ended responses
+3. Max retry of 1 per question — if parsing fails twice, use default and move on
+4. User should NEVER see the same question twice
+5. Closing message saved to `chat_messages` table before transition
+6. Questions should sound like a real coach, not a survey
+
+### Defaults if parsing fails
+- `coaching_mode` → `"assist"`
+- `training_split` → `"PPL"`
+- `goal` → `"cutting"`
+- `name` → `"there"`
+- `injuries` → `"none"`
+
+## Current State (Feb 21)
 
 ### What's Working
-- **Coach onboarding rebuilt as chat-style flow** with 7 fixed questions
-- **Sonnet tool_use parsing** for extracting structured data from open-ended responses
-- **Chat bubble UI** with input pinned at bottom — feels like a conversation
-- **Nuclear reset SQL** saved in Supabase
-- **Error handling improved** in chat route
-- **Food staples memory** spec in `specs/food-staples-memory.md`
 - **Workout logging** with set variants (warmup, drop, failure)
 - **Nutrition logging** with calorie ring and macro tracking
-- **AI coach** with persistent memory and cross-device sync
+- **AI coach chat** with persistent memory and cross-device sync
 - **Dynamic Daily Brief** — Pre-workout/post-workout/rest day modes
 - **PR detection** — Shared utility, excludes warmup sets
 - **15 message daily limit** per user
+- **Nuclear reset** via `/debug` page
 
-### Bugs to Fix Tomorrow (Priority Order)
-1. **ALL onboarding steps need max retry of 1** — if parsing fails, accept default and move on. User should NEVER see the same question twice
-2. **coaching_mode step loops infinitely** — most broken step
-3. **Final save fails with 500 "Failed to update profile"** — need to log exact Supabase error
-
-### Tomorrow's Plan
-1. Fix the retry/default logic on all parsing steps
-2. Fix the profile save 500 error
-3. Rewrite all 7 onboarding questions to sound like a real coach talking, not a survey
-4. After the 7 questions + closing message with beta feedback line, Sonnet gets full freedom as an AI fitness/nutrition/health coach
-5. The onboarding is the structured part. After that, the coach is a capable vertical AI that learns about its client over time
-6. **ALL AI uses Sonnet** — no Haiku anywhere
-7. Test full flow, then prep for dad & uncle beta
-
-### Architecture Notes
-
-**Onboarding flow:**
-1. User opens Coach tab → `CoachOnboarding` component shown (not AI chat)
-2. User answers 7 questions via chat-style UI
-3. Sonnet tool_use extracts structured data from open-ended responses
-4. `/api/coach-onboarding` saves to profile + coach_memory
-5. `onboarding_complete` set to true → switches to regular Sonnet chat
-6. User taps Nutrition → sees nutrition onboarding (macro setup)
-
-**Daily Brief modes:**
-- `pre_workout` — Shows focus ("Legs") + beat-this target + nutrition progress
-- `post_workout` — Shows "Legs Complete" + achievement + PR badges (if any) + motivational line
-- `rest_day` — Shows rest day messaging
-
-### Known Issues
-- Superset support not yet implemented (requires linking exercises)
-- Onboarding parsing bugs (see above)
+### What's Broken
+- **Coach onboarding** — RLS issues, question looping, save failures
+- Needs full rebuild (see above)
 
 ### Beta Status
-- Fixing onboarding bugs first
+- Rebuild onboarding first
 - Then testing with dad & uncle
 - Then 3-4 friends test for 3-5 days
-- Collecting feedback to guide Phase 2
 
 ## Phase 2 Roadmap (post-beta)
 
@@ -243,4 +253,5 @@ npm run lint         # Lint check
 
 - `ANTHROPIC_API_KEY` — Claude API key
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (for client-side, subject to RLS)
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key (for server-side, bypasses RLS) — **set in Vercel only, not in .env.local**
