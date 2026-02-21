@@ -41,18 +41,18 @@ export async function POST(request: Request) {
     const finalInjuries = injuries || 'none';
     const finalDaysPerWeek = daysPerWeek || 4;
 
-    // Upsert profile with height, weight, goal, coaching_mode, and mark onboarding complete
-    // Using upsert in case profile doesn't exist yet (though it should from signup trigger)
+    // Update profile with height, weight, goal, coaching_mode, and mark onboarding complete
+    // Profile already exists from signup trigger (or nuclear reset which uses update, not delete)
     const { error: profileError } = await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
+      .update({
         height_inches: finalHeight,
         weight_lbs: finalWeight,
         goal,
         coaching_mode: finalCoachingMode,
         onboarding_complete: true,
-      }, { onConflict: 'id' });
+      })
+      .eq('id', user.id);
 
     if (profileError) {
       console.error('[coach-onboarding] Profile update failed:', {
