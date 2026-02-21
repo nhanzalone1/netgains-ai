@@ -78,6 +78,8 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
   const parseResponse = async (userResponse: string): Promise<Record<string, string | number> | null> => {
     const stepType = STEP_TYPES[currentStep];
 
+    console.log('[onboarding] Parsing step:', stepType, 'response:', userResponse);
+
     try {
       const response = await fetch('/api/onboarding-parse', {
         method: 'POST',
@@ -89,7 +91,15 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         }),
       });
 
+      console.log('[onboarding] API response status:', response.status);
+
+      if (!response.ok) {
+        console.error('[onboarding] API error:', response.status, response.statusText);
+        return null;
+      }
+
       const result = await response.json();
+      console.log('[onboarding] API result:', result);
 
       if (!result.success) {
         console.error('[onboarding] Parse failed:', result.error);

@@ -2,8 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AI_MODELS, AI_TOKEN_LIMITS } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/server';
 
-const anthropic = new Anthropic();
-
 // Define what each step extracts
 type StepType = 'name' | 'stats' | 'goal' | 'coaching_mode' | 'split' | 'days' | 'injuries';
 
@@ -95,6 +93,8 @@ export async function POST(request: Request): Promise<Response> {
     const body: ParseRequest = await request.json();
     const { step, userResponse, context } = body;
 
+    console.log('[onboarding-parse] Step:', step, 'Response:', userResponse);
+
     if (!step || !userResponse) {
       return Response.json({ error: 'Missing step or userResponse' }, { status: 400 });
     }
@@ -115,6 +115,7 @@ Always return valid JSON matching the requested format. Be flexible with user la
 
 ${stepPrompt}`;
 
+    const anthropic = new Anthropic();
     const response = await anthropic.messages.create({
       model: AI_MODELS.ONBOARDING_PARSE,
       max_tokens: AI_TOKEN_LIMITS.ONBOARDING_PARSE,
@@ -124,11 +125,16 @@ ${stepPrompt}`;
       system: systemPrompt,
     });
 
+    console.log('[onboarding-parse] AI response:', JSON.stringify(response.content));
+
     // Extract text from response
     const textBlock = response.content.find(block => block.type === 'text');
     if (!textBlock || textBlock.type !== 'text') {
+      console.error('[onboarding-parse] No text block in response');
       return Response.json({ success: false, error: 'No response from AI' });
     }
+
+    console.log('[onboarding-parse] Raw text:', textBlock.text);
 
     // Parse JSON from response
     let parsed: Record<string, string | number>;
@@ -139,6 +145,7 @@ ${stepPrompt}`;
         throw new Error('No JSON found in response');
       }
       parsed = JSON.parse(jsonMatch[0]);
+      console.log('[onboarding-parse] Parsed data:', parsed);
     } catch (parseError) {
       console.error('[onboarding-parse] JSON parse error:', parseError, 'Raw:', textBlock.text);
       return Response.json({ success: false, error: 'Failed to parse AI response' });
