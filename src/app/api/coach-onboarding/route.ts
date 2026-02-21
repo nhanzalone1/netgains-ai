@@ -23,22 +23,23 @@ export async function POST(request: Request) {
       daysPerWeek,
     } = body;
 
-    console.log('[coach-onboarding] Received:', { name, age, heightInches, weightLbs, goal, coachingMode, trainingSplit, splitRotation, injuries, daysPerWeek });
+    console.log('[coach-onboarding] Received:', JSON.stringify({ name, age, heightInches, weightLbs, goal, coachingMode, trainingSplit, splitRotation, injuries, daysPerWeek }));
 
-    // Validate required fields
-    if (!name || !age || !heightInches || !weightLbs || !goal || !coachingMode || !trainingSplit || !splitRotation) {
-      console.error('[coach-onboarding] Missing fields:', {
-        name: !!name,
-        age: !!age,
-        heightInches: !!heightInches,
-        weightLbs: !!weightLbs,
-        goal: !!goal,
-        coachingMode: !!coachingMode,
-        trainingSplit: !!trainingSplit,
-        splitRotation: !!splitRotation,
-      });
-      return Response.json({ error: 'Missing required fields' }, { status: 400 });
+    // Validate core required fields (be lenient - we can default some values)
+    if (!name || !goal) {
+      console.error('[coach-onboarding] Missing core fields:', { name: !!name, goal: !!goal });
+      return Response.json({ error: 'Missing required fields: name and goal are required' }, { status: 400 });
     }
+
+    // Use defaults for optional/parseable fields
+    const finalAge = age || 25;
+    const finalHeight = heightInches || 70;
+    const finalWeight = weightLbs || 170;
+    const finalCoachingMode = coachingMode || 'assist';
+    const finalTrainingSplit = trainingSplit || 'Custom';
+    const finalSplitRotation = splitRotation || ['Day 1', 'Day 2', 'Rest'];
+    const finalInjuries = injuries || 'none';
+    const finalDaysPerWeek = daysPerWeek || 4;
 
     // Upsert profile with height, weight, goal, coaching_mode, and mark onboarding complete
     // Using upsert in case profile doesn't exist yet (though it should from signup trigger)
@@ -46,10 +47,10 @@ export async function POST(request: Request) {
       .from('profiles')
       .upsert({
         id: user.id,
-        height_inches: heightInches,
-        weight_lbs: weightLbs,
+        height_inches: finalHeight,
+        weight_lbs: finalWeight,
         goal,
-        coaching_mode: coachingMode,
+        coaching_mode: finalCoachingMode,
         onboarding_complete: true,
       }, { onConflict: 'id' });
 
@@ -59,13 +60,23 @@ export async function POST(request: Request) {
     }
 
     // Save memories: name, age, training_split, split_rotation, injuries, days_per_week
+    // Handle split_rotation - could be array or already stringified
+    let splitRotationStr: string;
+    if (Array.isArray(finalSplitRotation)) {
+      splitRotationStr = JSON.stringify(finalSplitRotation);
+    } else if (typeof finalSplitRotation === 'string') {
+      splitRotationStr = finalSplitRotation;
+    } else {
+      splitRotationStr = '[]';
+    }
+
     const memories = [
-      { key: 'name', value: name },
-      { key: 'age', value: String(age) },
-      { key: 'training_split', value: trainingSplit },
-      { key: 'split_rotation', value: JSON.stringify(splitRotation) },
-      { key: 'injuries', value: injuries || 'none' },
-      { key: 'days_per_week', value: String(daysPerWeek || 4) },
+      { key: 'name', value: String(name) },
+      { key: 'age', value: String(finalAge) },
+      { key: 'training_split', value: String(finalTrainingSplit) },
+      { key: 'split_rotation', value: splitRotationStr },
+      { key: 'injuries', value: String(finalInjuries) },
+      { key: 'days_per_week', value: String(finalDaysPerWeek) },
     ];
 
     for (const memory of memories) {
@@ -90,6 +101,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true });
   } catch (error) {
     console.error('[coach-onboarding] Unexpected error:', error);
-    return Response.json({ error: 'Onboarding failed unexpectedly' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return Response.json({ error: 'Onboarding failed unexpectedly', details: errorMessage }, { status: 500 });
   }
 }
