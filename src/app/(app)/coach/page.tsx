@@ -252,6 +252,7 @@ export default function CoachPage() {
   const prevMessageCountRef = useRef(messages.length);
   const hasGeneratedOpeningRef = useRef(false);
   const hasLoadedFromDBRef = useRef(false); // Track if we've loaded from DB this session
+  const isAutoOpeningRef = useRef(false); // Track if auto-opening is in progress (blocks DB reload)
 
   // Timeout refs for cleanup (prevent memory leaks)
   const keyboardScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -477,6 +478,9 @@ export default function CoachPage() {
 
     console.log(">>> generateAutoOpening called <<<");
 
+    // Mark that auto-opening is in progress - blocks DB reload during this time
+    isAutoOpeningRef.current = true;
+
     // Abort any existing request before starting a new one
     if (abortControllerRef.current) {
       console.log(">>> Aborting previous request <<<");
@@ -527,6 +531,7 @@ export default function CoachPage() {
         // Still need to reset loading state
         setIsLoading(false);
         isLoadingRef.current = false;
+        isAutoOpeningRef.current = false;
         return;
       }
       console.error("Auto-open error:", error);
@@ -542,6 +547,13 @@ export default function CoachPage() {
 
     setIsLoading(false);
     isLoadingRef.current = false;
+
+    // Keep auto-opening flag set briefly to let the save effect run before allowing DB reload
+    // This prevents visibility change from overwriting streamed content with empty DB
+    setTimeout(() => {
+      isAutoOpeningRef.current = false;
+      console.log(">>> Auto-opening complete, DB reload unblocked <<<");
+    }, 500);
   }, [user?.id, sendRequest, streamResponse]);
 
   // Track which date we last generated an opening for
@@ -661,6 +673,11 @@ export default function CoachPage() {
       if (!user?.id) return;
       // Don't reload if currently streaming
       if (isLoadingRef.current) return;
+      // Don't reload during auto-opening - let streamed content stay in state
+      if (isAutoOpeningRef.current) {
+        console.log(">>> Skipping DB reload - auto-opening in progress <<<");
+        return;
+      }
 
       console.log(">>> Reloading messages from DB <<<");
       const dbMessages = await loadMessagesFromDB(user.id);
