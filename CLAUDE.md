@@ -30,15 +30,23 @@ src/
 │   │   ├── program/     # Training program
 │   │   └── debug/       # Debug panel (dev only)
 │   ├── api/
-│   │   ├── chat/        # Coach chat API (Sonnet)
-│   │   ├── daily-brief/ # Daily training card (Haiku)
-│   │   ├── coach-reset/ # Reset coach state
+│   │   ├── chat/              # Coach chat API (Sonnet)
+│   │   ├── daily-brief/       # Daily training card (Haiku)
+│   │   ├── coach-onboarding/  # Structured onboarding save
+│   │   ├── coach-reset/       # Reset coach state (supports ?full=true)
+│   │   ├── nutrition-onboarding/ # Macro calculation + save
 │   │   └── ...
 │   ├── login/
 │   └── signup/
-├── components/          # Shared UI components
+├── components/
+│   ├── coach-onboarding.tsx     # Structured 7-step onboarding UI
+│   ├── nutrition-onboarding.tsx # Macro setup flow
+│   ├── daily-brief-card.tsx     # Dynamic pre/post workout card
+│   └── ...                      # Other shared UI components
 ├── lib/
 │   ├── supabase/        # DB client + types
+│   ├── pr-detection.ts  # Shared PR detection utility
+│   ├── daily-brief-cache.ts # Client-side cache for Daily Brief
 │   └── date-utils.ts    # Timezone-aware date helpers
 └── constants.ts         # AI models, limits, defaults
 ```
@@ -81,11 +89,16 @@ src/
 
 ### Coach Memory Keys
 Special keys in `coach_memory` table:
-- `food_staples` — JSON array of foods user always has on hand (e.g., `["whey protein", "eggs", "rice"]`)
+- `name` — User's preferred name
+- `age` — User's age (string)
+- `training_split` — Human-readable split name (e.g., "PPL", "Upper/Lower")
 - `split_rotation` — JSON array of workout days (e.g., `["Push", "Pull", "Legs", "Rest"]`)
+- `injuries` — User's injuries/limitations (or "none")
+- `food_staples` — JSON array of foods user always has on hand (e.g., `["whey protein", "eggs", "rice"]`)
 - `conversation_summary` — Haiku-generated summary of older messages
 - `summary_message_count` — Number of messages included in the summary
-- RLS policies: users can only access their own messages
+
+RLS policies: users can only access their own data
 
 ## Coding Conventions
 
@@ -99,22 +112,41 @@ Special keys in `coach_memory` table:
 ## Current State (February 2026)
 
 ### Working
-- Full onboarding flow (coach interview + split selection)
-- Workout logging with set variants (warmup, drop, failure)
-- Nutrition logging with calorie ring and macro tracking
-- AI coach with persistent memory and cross-device sync
-- Daily Brief with "beat this" targets matching training day
-- Markdown rendering in coach messages
-- 15 message daily limit
-- Beta welcome message after onboarding
+- **Structured onboarding UI** — Deterministic 7-step flow (name, age/height/weight, goal, coaching mode, split, injuries, summary). No LLM involved until after onboarding completes. Saves to profile + coach_memory.
+- **Workout logging** with set variants (warmup, drop, failure)
+- **Nutrition logging** with calorie ring and macro tracking
+- **Nutrition onboarding** — Separate flow in Nutrition tab asks if user knows macros or needs AI to calculate
+- **AI coach** with persistent memory and cross-device sync
+- **Dynamic Daily Brief** — Pre-workout mode shows "Beat: Squat 225x5", post-workout mode shows achievement + PR badges + motivational line + nutrition progress
+- **PR detection** — Shared utility (`src/lib/pr-detection.ts`) compares to historical bests, excludes warmup sets
+- **Food staples memory** — `save_food_staples` tool stores foods user always has on hand
+- **Markdown rendering** in coach messages
+- **15 message daily limit** per user
+- **Nuclear reset** — Debug page has full wipe option (`/api/coach-reset?full=true`) that clears workouts, meals, and all user data
+
+### Recent Fixes (Feb 21, 2026)
+- **Date separator bug** — Validates dates are after year 2020, defaults to "Today" for invalid dates
+- **Auto-opening race condition** — `isAutoOpeningRef` prevents DB reload during streaming
+- **Improved empty states** — Log tab shows "Tap + above to add your first gym and start logging"
+
+### Architecture Notes
+
+**Onboarding flow:**
+1. User opens Coach tab → `CoachOnboarding` component shown (not AI chat)
+2. User completes 7 steps → `/api/coach-onboarding` saves data
+3. `onboarding_complete` set to true → switches to regular chat UI
+4. User taps Nutrition → sees nutrition onboarding (macro setup)
+
+**Daily Brief modes:**
+- `pre_workout` — Shows focus ("Legs") + beat-this target + nutrition progress
+- `post_workout` — Shows "Legs Complete" + achievement + PR badges (if any) + motivational line
+- `rest_day` — Shows rest day messaging
 
 ### Known Issues
-- Date separator occasionally shows "Wednesday, Dec 31" (null timestamp fallback)
 - Superset support not yet implemented (requires linking exercises)
 
 ### Beta Status
-- Testing personally for a few days
-- Then dad & uncle test
+- Testing with dad & uncle
 - Then 3-4 friends test for 3-5 days
 - Collecting feedback to guide Phase 2
 
@@ -169,8 +201,8 @@ Move from PWA to native app for App Store. Unlocks push notifications, HealthKit
 When building new features, create a spec file in `specs/` before writing code:
 ```
 specs/
-├── set-variants.md
-├── nutrition-context.md
+├── food-staples-memory.md  # Food memory feature spec
+├── superset-support.md     # Superset linking (not yet implemented)
 └── ...
 ```
 
