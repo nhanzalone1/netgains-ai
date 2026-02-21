@@ -778,7 +778,7 @@ export default function CoachPage() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessageId
-            ? { ...m, content: "Coach is having a moment. Try sending that again." }
+            ? { ...m, content: "Coach hit an error — try again." }
             : m
         )
       );
