@@ -13,7 +13,7 @@ NetGains AI is a vertical AI fitness coaching app. It provides personalized work
 - **Frontend:** Next.js 14 (App Router), React, TypeScript, Tailwind CSS
 - **Backend:** Next.js API routes (serverless on Vercel)
 - **Database:** Supabase (PostgreSQL + Auth + RLS)
-- **AI:** Anthropic Claude API (Sonnet for coach chat, Haiku for background tasks)
+- **AI:** Anthropic Claude API (Sonnet for everything — coach chat, onboarding parsing, daily brief)
 - **Hosting:** Vercel
 - **PWA:** Progressive Web App (installable on mobile)
 
@@ -63,11 +63,12 @@ src/
 
 ## Architecture Decisions
 
-### AI Cost Optimization (already implemented)
-- **Dynamic system prompt:** ~800 tokens for onboarded users, ~1,500 for new users (down from ~2,500)
+### AI Architecture
+- **All Sonnet, no Haiku** — Simplicity over micro-optimization. Onboarding is 7 messages per user, not worth the complexity of model routing.
+- **tool_use for structured extraction** — Onboarding uses Sonnet with tool_use to extract structured data (name, age, height, weight, goal, etc.) from open-ended user responses. Guarantees correct types.
+- **Dynamic system prompt:** ~800 tokens for onboarded users, ~1,500 for new users
 - **Compact data formats:** Workouts sent as "Bench: 185x5, 185x5[drop]" not full JSON
-- **Conversation memory:** After 10 messages, Haiku summarizes chat into bullet points stored in coach_memory. New messages get summary + last 10 messages, not full history.
-- **Model routing:** Sonnet for coach chat (personality matters), Haiku for Daily Brief, nutrition calculations, memory summarization
+- **Conversation memory:** After 10 messages, summarize chat into bullet points stored in coach_memory. New messages get summary + last 10 messages.
 - **Response length:** Coach defaults to 2-3 sentences. Longer responses only for how/why questions, plans, or meal breakdowns.
 - **15 message daily limit** per user
 
@@ -109,33 +110,45 @@ RLS policies: users can only access their own data
 - Use `formatLocalDate()` from `date-utils.ts` for all date operations
 - Coach system prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`
 
-## Current State (February 2026)
+## Current State (Feb 21, 3AM)
 
-### Working
-- **Structured onboarding UI** — Deterministic 7-step flow (name, age/height/weight, goal, coaching mode, split, injuries, summary). No LLM involved until after onboarding completes. Saves to profile + coach_memory.
+### What's Working
+- **Coach onboarding rebuilt as chat-style flow** with 7 fixed questions
+- **Sonnet tool_use parsing** for extracting structured data from open-ended responses
+- **Chat bubble UI** with input pinned at bottom — feels like a conversation
+- **Nuclear reset SQL** saved in Supabase
+- **Error handling improved** in chat route
+- **Food staples memory** spec in `specs/food-staples-memory.md`
 - **Workout logging** with set variants (warmup, drop, failure)
 - **Nutrition logging** with calorie ring and macro tracking
-- **Nutrition onboarding** — Separate flow in Nutrition tab asks if user knows macros or needs AI to calculate
 - **AI coach** with persistent memory and cross-device sync
-- **Dynamic Daily Brief** — Pre-workout mode shows "Beat: Squat 225x5", post-workout mode shows achievement + PR badges + motivational line + nutrition progress
-- **PR detection** — Shared utility (`src/lib/pr-detection.ts`) compares to historical bests, excludes warmup sets
-- **Food staples memory** — `save_food_staples` tool stores foods user always has on hand
-- **Markdown rendering** in coach messages
+- **Dynamic Daily Brief** — Pre-workout/post-workout/rest day modes
+- **PR detection** — Shared utility, excludes warmup sets
 - **15 message daily limit** per user
-- **Nuclear reset** — Debug page has full wipe option (`/api/coach-reset?full=true`) that clears workouts, meals, and all user data
 
-### Recent Fixes (Feb 21, 2026)
-- **Date separator bug** — Validates dates are after year 2020, defaults to "Today" for invalid dates
-- **Auto-opening race condition** — `isAutoOpeningRef` prevents DB reload during streaming
-- **Improved empty states** — Log tab shows "Tap + above to add your first gym and start logging"
+### Bugs to Fix Tomorrow (Priority Order)
+1. **ALL onboarding steps need max retry of 1** — if parsing fails, accept default and move on. User should NEVER see the same question twice
+2. **coaching_mode step loops infinitely** — most broken step
+3. **Final save fails with 500 "Failed to update profile"** — need to log exact Supabase error
+
+### Tomorrow's Plan
+1. Fix the retry/default logic on all parsing steps
+2. Fix the profile save 500 error
+3. Rewrite all 7 onboarding questions to sound like a real coach talking, not a survey
+4. After the 7 questions + closing message with beta feedback line, Sonnet gets full freedom as an AI fitness/nutrition/health coach
+5. The onboarding is the structured part. After that, the coach is a capable vertical AI that learns about its client over time
+6. **ALL AI uses Sonnet** — no Haiku anywhere
+7. Test full flow, then prep for dad & uncle beta
 
 ### Architecture Notes
 
 **Onboarding flow:**
 1. User opens Coach tab → `CoachOnboarding` component shown (not AI chat)
-2. User completes 7 steps → `/api/coach-onboarding` saves data
-3. `onboarding_complete` set to true → switches to regular chat UI
-4. User taps Nutrition → sees nutrition onboarding (macro setup)
+2. User answers 7 questions via chat-style UI
+3. Sonnet tool_use extracts structured data from open-ended responses
+4. `/api/coach-onboarding` saves to profile + coach_memory
+5. `onboarding_complete` set to true → switches to regular Sonnet chat
+6. User taps Nutrition → sees nutrition onboarding (macro setup)
 
 **Daily Brief modes:**
 - `pre_workout` — Shows focus ("Legs") + beat-this target + nutrition progress
@@ -144,9 +157,11 @@ RLS policies: users can only access their own data
 
 ### Known Issues
 - Superset support not yet implemented (requires linking exercises)
+- Onboarding parsing bugs (see above)
 
 ### Beta Status
-- Testing with dad & uncle
+- Fixing onboarding bugs first
+- Then testing with dad & uncle
 - Then 3-4 friends test for 3-5 days
 - Collecting feedback to guide Phase 2
 
