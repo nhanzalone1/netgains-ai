@@ -637,6 +637,7 @@ export default function CoachPage() {
   // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
+    if (!onboardingComplete) return; // Don't load messages until onboarding is done
 
     const loadMessages = async () => {
       console.log(">>> Loading messages from DB <<<");
@@ -682,7 +683,7 @@ export default function CoachPage() {
     };
 
     loadMessages();
-  }, [user?.id, generateAutoOpening]);
+  }, [user?.id, generateAutoOpening, onboardingComplete]);
 
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
