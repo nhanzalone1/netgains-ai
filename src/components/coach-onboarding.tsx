@@ -187,25 +187,36 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
   };
 
   const saveOnboarding = async (finalData: OnboardingData): Promise<boolean> => {
+    const payload = {
+      name: finalData.name,
+      age: finalData.age,
+      heightInches: finalData.height_inches,
+      weightLbs: finalData.weight_lbs,
+      goal: finalData.goal,
+      coachingMode: finalData.coaching_mode,
+      trainingSplit: finalData.training_split,
+      splitRotation: finalData.split_rotation,
+      injuries: finalData.injuries,
+      daysPerWeek: finalData.days_per_week,
+    };
+
+    console.log('[onboarding] Saving with payload:', payload);
+
     try {
       const response = await fetch('/api/coach-onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: finalData.name,
-          age: finalData.age,
-          heightInches: finalData.height_inches,
-          weightLbs: finalData.weight_lbs,
-          goal: finalData.goal,
-          coachingMode: finalData.coaching_mode,
-          trainingSplit: finalData.training_split,
-          splitRotation: finalData.split_rotation,
-          injuries: finalData.injuries,
-          daysPerWeek: finalData.days_per_week,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      return response.ok;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[onboarding] Save failed:', response.status, errorData);
+        return false;
+      }
+
+      console.log('[onboarding] Save successful');
+      return true;
     } catch (err) {
       console.error('[onboarding] Save error:', err);
       return false;

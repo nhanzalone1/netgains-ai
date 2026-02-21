@@ -23,8 +23,20 @@ export async function POST(request: Request) {
       daysPerWeek,
     } = body;
 
+    console.log('[coach-onboarding] Received:', { name, age, heightInches, weightLbs, goal, coachingMode, trainingSplit, splitRotation, injuries, daysPerWeek });
+
     // Validate required fields
     if (!name || !age || !heightInches || !weightLbs || !goal || !coachingMode || !trainingSplit || !splitRotation) {
+      console.error('[coach-onboarding] Missing fields:', {
+        name: !!name,
+        age: !!age,
+        heightInches: !!heightInches,
+        weightLbs: !!weightLbs,
+        goal: !!goal,
+        coachingMode: !!coachingMode,
+        trainingSplit: !!trainingSplit,
+        splitRotation: !!splitRotation,
+      });
       return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
