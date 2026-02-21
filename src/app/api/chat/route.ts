@@ -42,6 +42,13 @@ TOOL USAGE: Call getUserProfile+getMemories at conversation start. Use getCurren
 
 NUTRITION: Use addMealPlan for meal plans. Parse dates ("tomorrow"→YYYY-MM-DD). Reference user's actual nutrition numbers when relevant.
 
+FOOD MEMORY:
+- SAVE (call save_food_staples action:"add") if user implies persistence: "remember I have...", "I always have...", "I keep ___ stocked", "my staples are...", "my go-to foods are...", "I usually have...", "add ___ to my staples"
+- DON'T SAVE if clearly temporary: "I have ___ today", "I picked up ___", "tonight I have..."
+- REMOVE (action:"remove") if: "forget ___", "remove ___ from staples", "I don't keep ___ anymore"
+- If user lists foods without clear persistence intent, use them for this session and briefly ask once: "want me to remember any of these as staples?" — don't nag, ask once per session max
+- When giving nutrition advice, reference both saved staples AND session foods
+
 MEMORY: Save important info with saveMemory (injuries, preferences, PRs). Check memories before giving advice.`;
 }
 
@@ -224,6 +231,18 @@ const tools: Anthropic.Tool[] = [
         fat: { type: 'number', description: 'Daily fat target in grams' },
       },
       required: [],
+    },
+  },
+  {
+    name: 'save_food_staples',
+    description: 'Add or remove items from the user\'s persistent food staples list. These are foods the user always has available.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['add', 'remove', 'replace'], description: 'add = merge into existing list, remove = remove items, replace = overwrite entire list' },
+        items: { type: 'array', items: { type: 'string' }, description: 'Array of food items to add/remove/replace' },
+      },
+      required: ['action', 'items'],
     },
   },
 ];
@@ -590,6 +609,20 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
 `
       : '';
 
+    // Extract food staples from memories
+    const foodStaplesMemory = memories.find(m => m.key === 'food_staples');
+    let foodStaples: string[] = [];
+    if (foodStaplesMemory?.value) {
+      try {
+        foodStaples = JSON.parse(foodStaplesMemory.value);
+      } catch {
+        foodStaples = [];
+      }
+    }
+    const foodStaplesSection = foodStaples.length > 0
+      ? `\nUSER'S FOOD STAPLES (always available):\n${foodStaples.join(', ')}\n`
+      : '';
+
     // Build context for opening generation - compact format to save tokens
     const profileSummary = profile ? `onboarding:${profile.onboarding_complete ?? false}, goal:${profile.goal || 'unset'}, mode:${profile.coaching_mode || 'unset'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
 
@@ -598,8 +631,8 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
 User: ${profileSummary}
 
 User Memories (things you've learned about them):
-${memories.map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
-${milestoneSection}
+${memories.filter(m => m.key !== 'food_staples').map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
+${foodStaplesSection}${milestoneSection}
 === TODAY'S DATA (${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 Today's Workout:
@@ -1054,6 +1087,58 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
           if (error) return JSON.stringify({ error: error.message });
         }
         return JSON.stringify({ success: true, updated: updates });
+      }
+      case 'save_food_staples': {
+        const action = input.action as 'add' | 'remove' | 'replace';
+        const items = (input.items as string[]) || [];
+
+        // Fetch current food staples
+        const { data: existingRow } = await supabase
+          .from('coach_memory')
+          .select('id, value')
+          .eq('user_id', user.id)
+          .eq('key', 'food_staples')
+          .single();
+
+        let currentStaples: string[] = [];
+        if (existingRow?.value) {
+          try {
+            currentStaples = JSON.parse(existingRow.value);
+          } catch {
+            currentStaples = [];
+          }
+        }
+
+        let newStaples: string[];
+        if (action === 'replace') {
+          newStaples = items;
+        } else if (action === 'remove') {
+          // Case-insensitive removal
+          const lowerItems = items.map(i => i.toLowerCase());
+          newStaples = currentStaples.filter(s => !lowerItems.includes(s.toLowerCase()));
+        } else {
+          // action === 'add' - merge and deduplicate (case-insensitive)
+          const lowerExisting = currentStaples.map(s => s.toLowerCase());
+          const toAdd = items.filter(i => !lowerExisting.includes(i.toLowerCase()));
+          newStaples = [...currentStaples, ...toAdd];
+        }
+
+        // Upsert the food_staples row
+        const newValue = JSON.stringify(newStaples);
+        if (existingRow) {
+          const { error } = await supabase
+            .from('coach_memory')
+            .update({ value: newValue })
+            .eq('id', existingRow.id);
+          if (error) return JSON.stringify({ error: error.message });
+        } else {
+          const { error } = await supabase
+            .from('coach_memory')
+            .insert({ user_id: user.id, key: 'food_staples', value: newValue });
+          if (error) return JSON.stringify({ error: error.message });
+        }
+
+        return JSON.stringify({ success: true, action, items, staples: newStaples });
       }
       default:
         return JSON.stringify({ error: 'Unknown tool' });

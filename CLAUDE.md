@@ -49,7 +49,7 @@ src/
 - **workouts** — workout sessions (date, notes, muscle group)
 - **sets** — individual sets (exercise, weight, reps, variant: normal/warmup/drop/failure)
 - **nutrition_logs** — logged meals (name, calories, protein, carbs, fat, date)
-- **coach_memory** — persistent coach state (split_rotation, conversation_summary, onboarding data)
+- **coach_memory** — persistent coach state (split_rotation, conversation_summary, onboarding data, food_staples)
 - **chat_messages** — persisted chat messages for cross-device sync
 - **exercise_library** — master list of exercises with muscle groups
 
@@ -78,6 +78,13 @@ src/
 - Messages stored in `chat_messages` table (not localStorage)
 - Cross-device sync (Mac ↔ iPhone)
 - Messages load from DB on component mount
+
+### Coach Memory Keys
+Special keys in `coach_memory` table:
+- `food_staples` — JSON array of foods user always has on hand (e.g., `["whey protein", "eggs", "rice"]`)
+- `split_rotation` — JSON array of workout days (e.g., `["Push", "Pull", "Legs", "Rest"]`)
+- `conversation_summary` — Haiku-generated summary of older messages
+- `summary_message_count` — Number of messages included in the summary
 - RLS policies: users can only access their own messages
 
 ## Coding Conventions
