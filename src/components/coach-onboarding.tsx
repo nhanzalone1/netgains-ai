@@ -100,7 +100,8 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       setKeyboardOpen(isOpen);
 
       if (isOpen) {
-        setViewportHeight(currentHeight);
+        // Subtract extra space for iOS keyboard accessory bar (~44px)
+        setViewportHeight(currentHeight - 44);
         if (keyboardScrollTimeoutRef.current) {
           clearTimeout(keyboardScrollTimeoutRef.current);
         }
@@ -407,7 +408,8 @@ you're one of the first people using netgains — if anything's confusing, broke
         className="flex-shrink-0 p-4 border-t border-white/5"
         style={{
           background: "#0f0f13",
-          paddingBottom: keyboardOpen ? 8 : "env(safe-area-inset-bottom, 8px)",
+          // Extra padding when keyboard open to account for iOS keyboard accessory bar (~44px)
+          paddingBottom: keyboardOpen ? 52 : "env(safe-area-inset-bottom, 8px)",
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
