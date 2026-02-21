@@ -301,11 +301,15 @@ export default function CoachPage() {
     if (!user?.id) return;
 
     const checkOnboarding = async () => {
+      console.log('[Coach] Checking onboarding for user:', user.id);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('onboarding_complete')
         .eq('id', user.id)
         .single();
+
+      console.log('[Coach] Onboarding check result:', { data, error: error?.code });
 
       if (error) {
         console.error('[Coach] Error checking onboarding:', error.code, error.message, error.details);

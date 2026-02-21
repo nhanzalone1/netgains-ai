@@ -43,7 +43,9 @@ export async function POST(request: Request) {
 
     // Update profile with height, weight, goal, coaching_mode, and mark onboarding complete
     // Profile already exists from signup trigger (or nuclear reset which uses update, not delete)
-    const { error: profileError } = await supabase
+    console.log('[coach-onboarding] Updating profile for user:', user.id);
+
+    const { data: updateData, error: profileError } = await supabase
       .from('profiles')
       .update({
         height_inches: finalHeight,
@@ -52,7 +54,10 @@ export async function POST(request: Request) {
         coaching_mode: finalCoachingMode,
         onboarding_complete: true,
       })
-      .eq('id', user.id);
+      .eq('id', user.id)
+      .select();
+
+    console.log('[coach-onboarding] Update result:', { updateData, profileError });
 
     if (profileError) {
       console.error('[coach-onboarding] Profile update failed:', {
@@ -70,6 +75,37 @@ export async function POST(request: Request) {
           hint: profileError.hint
         }
       }, { status: 500 });
+    }
+
+    // Check if update actually affected any rows
+    if (!updateData || updateData.length === 0) {
+      console.error('[coach-onboarding] Profile not found for user:', user.id);
+
+      // Profile doesn't exist - create it
+      console.log('[coach-onboarding] Creating profile for user:', user.id);
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          height_inches: finalHeight,
+          weight_lbs: finalWeight,
+          goal,
+          coaching_mode: finalCoachingMode,
+          onboarding_complete: true,
+        });
+
+      if (insertError) {
+        console.error('[coach-onboarding] Profile insert failed:', insertError);
+        return Response.json({
+          error: 'Failed to create profile',
+          details: {
+            message: insertError.message,
+            code: insertError.code,
+            hint: insertError.hint
+          }
+        }, { status: 500 });
+      }
+      console.log('[coach-onboarding] Profile created successfully');
     }
 
     // Save memories: name, age, training_split, split_rotation, injuries, days_per_week
