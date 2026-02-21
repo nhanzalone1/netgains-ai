@@ -313,8 +313,13 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
 
     // Get current question's defaults
     const currentQuestion = ONBOARDING_QUESTIONS[currentQuestionIndex];
+    const nextQuestionIndex = currentQuestionIndex + 1;
+    const isLastQuestion = nextQuestionIndex >= ONBOARDING_QUESTIONS.length;
 
-    if (!parsed) {
+    // Check if parsing failed OR returned empty data (both are failures)
+    const parseFailed = !parsed || Object.keys(parsed).length === 0;
+
+    if (parseFailed) {
       // Parsing failed
       if (retryCount >= 1) {
         // Already retried once - use defaults and move on
@@ -324,25 +329,24 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         setRetryCount(0);
 
         // Move to next question or finish
-        if (hasAllFields(updatedData)) {
-          console.log('[onboarding] All fields collected with defaults, saving...');
+        if (isLastQuestion) {
+          // Fill in any remaining defaults and save
+          const finalData = applyAllDefaults(updatedData);
+          console.log('[onboarding] Last question, saving with defaults:', finalData);
           setIsSaving(true);
-          const saved = await saveOnboarding(updatedData);
+          const saved = await saveOnboarding(finalData);
           if (!saved) {
             setIsSaving(false);
             setError("something went wrong saving your info. tap send to try again.");
             return;
           }
-          const closingMessage = buildClosingMessage(updatedData);
+          const closingMessage = buildClosingMessage(finalData);
           addMessage("coach", closingMessage);
           setIsSaving(false);
           setTimeout(() => onComplete(), 4000);
         } else {
-          const next = getNextQuestion(updatedData);
-          if (next) {
-            setCurrentQuestionIndex(next.index);
-            addMessage("coach", next.question);
-          }
+          setCurrentQuestionIndex(nextQuestionIndex);
+          addMessage("coach", ONBOARDING_QUESTIONS[nextQuestionIndex].question);
         }
         return;
       }
@@ -359,15 +363,16 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
     // Merge parsed data into collected data
     const updatedData = { ...data, ...parsed } as OnboardingData;
     setData(updatedData);
-    console.log('[onboarding] Updated data:', updatedData);
+    console.log('[onboarding] Updated data:', updatedData, 'Question index:', currentQuestionIndex, '→', nextQuestionIndex);
 
-    // Check if we have all required fields
-    if (hasAllFields(updatedData)) {
-      // All data collected - save and show closing message
-      console.log('[onboarding] All fields collected, saving...');
+    // Move to next question or save if done
+    if (isLastQuestion) {
+      // Fill in any remaining defaults and save
+      const finalData = applyAllDefaults(updatedData);
+      console.log('[onboarding] All questions answered, saving:', finalData);
       setIsSaving(true);
 
-      const saved = await saveOnboarding(updatedData);
+      const saved = await saveOnboarding(finalData);
 
       if (!saved) {
         setIsSaving(false);
@@ -377,7 +382,7 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
       }
 
       // Show closing message
-      const closingMessage = buildClosingMessage(updatedData);
+      const closingMessage = buildClosingMessage(finalData);
       addMessage("coach", closingMessage);
       setIsSaving(false);
 
@@ -386,14 +391,23 @@ export function CoachOnboarding({ onComplete }: CoachOnboardingProps) {
         onComplete();
       }, 4000);
     } else {
-      // Find next question for missing fields
-      const next = getNextQuestion(updatedData);
-      if (next) {
-        console.log('[onboarding] Next question:', next.index, next.question);
-        setCurrentQuestionIndex(next.index);
-        addMessage("coach", next.question);
+      // Advance to next question
+      setCurrentQuestionIndex(nextQuestionIndex);
+      addMessage("coach", ONBOARDING_QUESTIONS[nextQuestionIndex].question);
+    }
+  };
+
+  // Apply defaults for any missing fields
+  const applyAllDefaults = (partialData: OnboardingData): OnboardingData => {
+    const result = { ...partialData };
+    for (const q of ONBOARDING_QUESTIONS) {
+      for (const [key, defaultValue] of Object.entries(q.defaults)) {
+        if (result[key as keyof OnboardingData] === undefined) {
+          (result as Record<string, unknown>)[key] = defaultValue;
+        }
       }
     }
+    return result;
   };
 
   const buildClosingMessage = (finalData: OnboardingData): string => {
