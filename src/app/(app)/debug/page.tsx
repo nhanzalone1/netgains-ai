@@ -709,6 +709,25 @@ export default function DebugPage() {
             }} variant="danger">
               <Trash2 className="w-4 h-4" /> Full Coach Reset (onboarding + memories)
             </DebugButton>
+            <DebugButton onClick={async () => {
+              if (!confirm("NUCLEAR RESET: This deletes EVERYTHING - workouts, meals, memories, chat. Are you sure?")) return;
+              clearChatHistory();
+              localStorage.removeItem(`netgains-daily-brief-${user?.id}`);
+              try {
+                const res = await fetch("/api/coach-reset?full=true", { method: "POST" });
+                const data = await res.json();
+                if (data.success) {
+                  showMessage("Nuclear reset complete! Refresh to start fresh.");
+                } else {
+                  showMessage(`Reset error: ${data.error}`);
+                }
+              } catch (e) {
+                showMessage(`Reset error: ${e}`);
+              }
+              loadData();
+            }} variant="danger">
+              <Trash2 className="w-4 h-4" /> NUCLEAR RESET (wipe everything)
+            </DebugButton>
             <DebugButton onClick={triggerAIOpening} variant="default">
               <Play className="w-4 h-4" /> Trigger new opening message
             </DebugButton>
