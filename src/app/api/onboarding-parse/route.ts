@@ -117,7 +117,7 @@ ${stepPrompt}`;
 
     const anthropic = new Anthropic();
     const response = await anthropic.messages.create({
-      model: AI_MODELS.ONBOARDING_PARSE,
+      model: AI_MODELS.COACHING,
       max_tokens: AI_TOKEN_LIMITS.ONBOARDING_PARSE,
       messages: [
         { role: 'user', content: `User response: "${userResponse}"` }
