@@ -27,17 +27,18 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Update profile with height, weight, goal, coaching_mode, and mark onboarding complete
+    // Upsert profile with height, weight, goal, coaching_mode, and mark onboarding complete
+    // Using upsert in case profile doesn't exist yet (though it should from signup trigger)
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: user.id,
         height_inches: heightInches,
         weight_lbs: weightLbs,
         goal,
         coaching_mode: coachingMode,
         onboarding_complete: true,
-      })
-      .eq('id', user.id);
+      }, { onConflict: 'id' });
 
     if (profileError) {
       console.error('[coach-onboarding] Profile update failed:', profileError);

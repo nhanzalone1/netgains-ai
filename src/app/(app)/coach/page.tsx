@@ -308,8 +308,10 @@ export default function CoachPage() {
         .single();
 
       if (error) {
-        console.error('[Coach] Error checking onboarding:', error);
-        setOnboardingComplete(false); // Assume not complete on error
+        console.error('[Coach] Error checking onboarding:', error.code, error.message, error.details);
+        // PGRST116 = no rows returned, which means profile doesn't exist yet
+        // In either case, show onboarding
+        setOnboardingComplete(false);
         return;
       }
 
