@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       trainingSplit,
       splitRotation,
       injuries,
+      daysPerWeek,
     } = body;
 
     // Validate required fields
@@ -45,13 +46,14 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Failed to update profile' }, { status: 500 });
     }
 
-    // Save memories: name, age, training_split, split_rotation, injuries
+    // Save memories: name, age, training_split, split_rotation, injuries, days_per_week
     const memories = [
       { key: 'name', value: name },
       { key: 'age', value: String(age) },
       { key: 'training_split', value: trainingSplit },
       { key: 'split_rotation', value: JSON.stringify(splitRotation) },
       { key: 'injuries', value: injuries || 'none' },
+      { key: 'days_per_week', value: String(daysPerWeek || 4) },
     ];
 
     for (const memory of memories) {

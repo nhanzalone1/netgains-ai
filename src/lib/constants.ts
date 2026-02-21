@@ -7,6 +7,7 @@ export const AI_MODELS = {
   SUMMARIZATION: 'claude-3-haiku-20240307',
   DAILY_BRIEF: 'claude-3-5-haiku-20241022',
   NUTRITION_ESTIMATE: 'claude-3-5-haiku-20241022',
+  ONBOARDING_PARSE: 'claude-3-5-haiku-20241022',
 } as const;
 
 export const AI_TOKEN_LIMITS = {
@@ -14,6 +15,7 @@ export const AI_TOKEN_LIMITS = {
   SUMMARIZATION: 250,
   DAILY_BRIEF: 150,
   NUTRITION_ESTIMATE: 256,
+  ONBOARDING_PARSE: 256,
 } as const;
 
 // === RATE LIMITING ===
