@@ -704,7 +704,7 @@ export default function LogPage() {
             </div>
             <h3 className="font-semibold mb-1">No Gyms Yet</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Add your first gym to start logging workouts
+              Tap + above to add your first gym and start logging
             </p>
           </div>
         )}
