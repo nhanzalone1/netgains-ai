@@ -185,6 +185,11 @@ function formatDateDivider(dateString: string): string {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
+  // Validate date is reasonable (after year 2020) to catch epoch/invalid dates
+  if (isNaN(date.getTime()) || date.getFullYear() < 2020) {
+    return "Today";
+  }
+
   if (date.toDateString() === today.toDateString()) {
     return "Today";
   } else if (date.toDateString() === yesterday.toDateString()) {
