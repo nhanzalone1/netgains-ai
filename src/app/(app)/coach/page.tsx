@@ -303,6 +303,18 @@ export default function CoachPage() {
     const checkOnboarding = async () => {
       console.log('[Coach] Checking onboarding for user:', user.id);
 
+      // Check if supabase has auth session
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('[Coach] Auth session:', sessionData?.session?.user?.id ?? 'NO SESSION');
+
+      // Try without .single() first to see what rows exist
+      const { data: allRows, error: allError } = await supabase
+        .from('profiles')
+        .select('id, onboarding_complete')
+        .eq('id', user.id);
+
+      console.log('[Coach] All matching rows:', allRows, 'Error:', allError?.code);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('onboarding_complete')
