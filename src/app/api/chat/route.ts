@@ -277,6 +277,8 @@ const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
 const { DAILY_MESSAGE_LIMIT, MAX_TOOL_ROUNDS } = RATE_LIMITS;
 
 export async function POST(req: Request) {
+  console.log('[Coach] ========== CHAT API CALLED ==========');
+
   // Parse request body with error handling
   let messages, currentWorkout, localDate;
   try {
@@ -303,8 +305,11 @@ export async function POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (authError || !user) {
+    console.log('[Coach] Auth failed:', authError?.message);
     return new Response('Unauthorized', { status: 401 });
   }
+
+  console.log('[Coach] User authenticated:', user.id);
 
   // Check daily message limit (skip for system triggers)
   const isSystemTriggerCheck = messages.length === 1 &&
@@ -1197,9 +1202,11 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
   }
 
   // Create streaming response
+  console.log('[Coach] Creating streaming response...');
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      console.log('[Coach] Stream started');
       try {
         const currentMessages = [...anthropicMessages];
         let textStreamed = false;
