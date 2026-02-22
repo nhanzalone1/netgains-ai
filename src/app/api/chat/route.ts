@@ -28,35 +28,44 @@ VOICE: "height and weight?" / "185 at 5'10, got it. what's the goal" / "been 4 d
   if (!profileComplete) {
     return basePrompt + `
 
-PROFILE COLLECTION (THIS IS YOUR TOP PRIORITY):
-The user's profile is incomplete. Focus on collecting height, weight, and goal first. Don't suggest meal plans or discuss nutrition targets until you have their basics.
+NEW USER ONBOARDING:
+This user is new. Focus on learning about them first. Don't suggest meal plans or discuss nutrition targets until you know their basics.
 
-CRITICAL — TOOL USAGE REQUIREMENTS:
-When the user tells you ANY of the following, you MUST call the appropriate tool IMMEDIATELY — before responding with text:
+CRITICAL — SAVE USER INFO WITH saveMemory:
+When the user tells you ANY of the following, you MUST call saveMemory IMMEDIATELY to store it:
 
-- Height and/or weight → MUST call updateUserProfile with height_inches (total inches, e.g., 70 for 5'10") and/or weight_lbs
-- Goal (cutting/bulking/maintaining) → MUST call updateUserProfile with goal
-- Age → MUST call saveMemory with key:"age"
-- Name → MUST call saveMemory with key:"name"
-- Training split → MUST call saveMemory with BOTH key:"training_split" AND key:"split_rotation"
-- Injuries → MUST call saveMemory with key:"injuries" (use "none" if no injuries)
+- Name → saveMemory key:"name" value:"[their name]"
+- Age → saveMemory key:"age" value:"[their age]"
+- Height → saveMemory key:"height" value:"[e.g., 5'10 or 70 inches]"
+- Weight → saveMemory key:"weight" value:"[e.g., 185 lbs]"
+- Goal → saveMemory key:"goal" value:"cutting" or "bulking" or "maintaining"
+- Training split → saveMemory key:"training_split" value:"[e.g., PPL, Upper/Lower]"
+- Split rotation → saveMemory key:"split_rotation" value:'["Push","Pull","Legs","Rest"]'
+- Injuries → saveMemory key:"injuries" value:"[description or none]"
 
-DO NOT just acknowledge the info. DO NOT say "got it" without calling the tool first. ALWAYS save, then respond.
+DO NOT just acknowledge the info. Call saveMemory first, then respond.
 
-Example: User says "I'm 5'10, 185 lbs, trying to cut"
-You MUST call: updateUserProfile with {height_inches: 70, weight_lbs: 185, goal: "cutting"}
+Example: User says "I'm Noah, 19, 5'8, 155 lbs, trying to bulk, running PPL"
+You MUST call saveMemory multiple times:
+- saveMemory key:"name" value:"Noah"
+- saveMemory key:"age" value:"19"
+- saveMemory key:"height" value:"5'8"
+- saveMemory key:"weight" value:"155"
+- saveMemory key:"goal" value:"bulking"
+- saveMemory key:"training_split" value:"PPL"
+- saveMemory key:"split_rotation" value:'["Push","Pull","Legs","Rest","Push","Pull","Legs"]'
 THEN respond with confirmation.
 
-SPLIT PRESETS (use these exact JSON arrays for split_rotation):
+SPLIT PRESETS (use these for split_rotation):
 - PPL: '["Push","Pull","Legs","Rest","Push","Pull","Legs"]'
 - Upper/Lower: '["Upper","Lower","Rest","Upper","Lower","Rest"]'
 - Bro: '["Chest","Back","Shoulders","Arms","Legs","Rest","Rest"]'
 - Full Body: '["Full Body","Rest","Full Body","Rest","Full Body","Rest"]'
 
-After saving all their info, respond naturally and point them to the app:
-"got it — [height], [weight], [goal], running [split]. bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs."
+After saving, respond naturally:
+"got it — [summarize their info]. bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs."
 
-If they leave stuff out, ask naturally — one follow-up at a time, not a questionnaire.`;
+If they leave stuff out, ask naturally — one follow-up at a time.`;
   }
 
   return basePrompt + `
@@ -1220,18 +1229,12 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           console.log('[Coach] API call round:', round + 1);
 
-          // Force tool use when profile is incomplete (ensures onboarding data gets saved)
-          // Use 'any' to require a tool call, 'auto' for normal optional tool use
-          const toolChoice = profileComplete ? { type: 'auto' as const } : { type: 'any' as const };
-          console.log('[Coach] Tool choice:', toolChoice.type, '(profileComplete:', profileComplete, ')');
-
           const response = await anthropic.messages.create({
             model: AI_MODELS.COACHING,
             max_tokens: AI_TOKEN_LIMITS.COACHING,
             system: dynamicSystemPrompt,
             messages: currentMessages,
             tools,
-            tool_choice: toolChoice,
           });
 
           console.log('[Coach] Response stop_reason:', response.stop_reason);

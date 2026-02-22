@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
-import { DailyBriefCard } from "@/components/daily-brief-card";
 import { createClient } from "@/lib/supabase/client";
 
 // Hardcoded first message for new users with empty profiles
@@ -248,7 +247,6 @@ export default function CoachPage() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [profileEmpty, setProfileEmpty] = useState<boolean | null>(null); // null = loading, true = needs onboarding via chat
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -297,35 +295,6 @@ export default function CoachPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  // Check if profile is empty (needs onboarding via chat)
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const checkProfile = async () => {
-      console.log('[Coach] Checking profile for user:', user.id);
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('height_inches, weight_lbs, goal')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error('[Coach] Error checking profile:', error.code, error.message);
-        // Profile doesn't exist - treat as empty
-        setProfileEmpty(true);
-        return;
-      }
-
-      // Profile is empty if missing height, weight, or goal
-      const isEmpty = !data?.height_inches || !data?.weight_lbs || !data?.goal;
-      console.log('[Coach] Profile empty:', isEmpty);
-      setProfileEmpty(isEmpty);
-    };
-
-    checkProfile();
-  }, [user?.id]);
 
 
   // iOS keyboard handling using Visual Viewport API
@@ -631,7 +600,6 @@ export default function CoachPage() {
   // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
-    if (profileEmpty === null) return; // Wait for profile check to complete
 
     const loadMessages = async () => {
       console.log(">>> Loading messages from DB <<<");
@@ -644,53 +612,27 @@ export default function CoachPage() {
         lastSavedContentRef.current.set(msg.id, msg.content);
       }
 
-      setMessages(dbMessages);
-      setMessagesLoaded(true);
-
-      // Check if we should generate an opening
-      const today = getTodayString();
-      const lastOpenStr = localStorage.getItem(getLastOpenKey(user.id));
-
-      // If we have ANY messages, just show them - don't generate new opening
-      // This ensures messages persist across tab switches
+      // If we have messages, show them
       if (dbMessages.length > 0) {
         console.log(">>> Messages exist in DB, showing them <<<");
-        // Update localStorage to mark today as opened if we have messages from today
-        const lastMessage = dbMessages[dbMessages.length - 1];
-        const lastMessageDate = getMessageDate(lastMessage);
-        if (lastMessageDate === today) {
-          localStorage.setItem(getLastOpenKey(user.id), today);
-        }
+        setMessages(dbMessages);
+        setMessagesLoaded(true);
         return;
       }
 
-      // No messages - if profile is empty, show hardcoded first message instead of generating
-      if (profileEmpty) {
-        console.log(">>> Empty profile, showing hardcoded first message <<<");
-        const hardcodedMessage: Message = {
-          id: getMessageTimestamp().toString(),
-          role: "assistant",
-          content: HARDCODED_FIRST_MESSAGE,
-        };
-        setMessages([hardcodedMessage]);
-        localStorage.setItem(getLastOpenKey(user.id), today);
-        return;
-      }
-
-      // No messages at all - check if we already generated today via localStorage
-      if (lastOpenStr === today) {
-        console.log(">>> Already opened today per localStorage, skipping <<<");
-        return;
-      }
-
-      // No messages and haven't opened today - generate opening
-      console.log(">>> No messages, generating opening <<<");
-      localStorage.setItem(getLastOpenKey(user.id), today);
-      generateAutoOpening();
+      // No messages - show hardcoded first message
+      console.log(">>> No messages, showing hardcoded first message <<<");
+      const hardcodedMessage: Message = {
+        id: getMessageTimestamp().toString(),
+        role: "assistant",
+        content: HARDCODED_FIRST_MESSAGE,
+      };
+      setMessages([hardcodedMessage]);
+      setMessagesLoaded(true);
     };
 
     loadMessages();
-  }, [user?.id, generateAutoOpening, profileEmpty]);
+  }, [user?.id]);
 
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
@@ -935,8 +877,8 @@ export default function CoachPage() {
     messagesWithDividers.push({ type: 'message', message });
   }
 
-  // Show loading state while checking profile
-  if (profileEmpty === null) {
+  // Show loading state while loading messages
+  if (!messagesLoaded) {
     return (
       <div
         className="flex flex-col fixed left-0 right-0 z-40 items-center justify-center"
@@ -996,13 +938,6 @@ export default function CoachPage() {
             </button>
             <UserMenu />
           </div>
-        </div>
-      )}
-
-      {/* Daily Brief Card - hide when keyboard is open */}
-      {!keyboardOpen && (
-        <div className="flex-shrink-0 pb-2" style={{ background: "#0f0f13" }}>
-          <DailyBriefCard />
         </div>
       )}
 
