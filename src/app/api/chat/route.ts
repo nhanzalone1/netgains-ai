@@ -904,6 +904,9 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         return JSON.stringify(data);
       }
       case 'updateUserProfile': {
+        console.log('[Coach] updateUserProfile called with input:', JSON.stringify(input));
+        console.log('[Coach] User ID:', user.id);
+
         const updateData: Record<string, unknown> = {};
         if (input.height_inches !== undefined) updateData.height_inches = input.height_inches;
         if (input.weight_lbs !== undefined) updateData.weight_lbs = input.weight_lbs;
@@ -913,12 +916,27 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         if (input.app_tour_shown !== undefined) updateData.app_tour_shown = input.app_tour_shown;
         if (input.beta_welcome_shown !== undefined) updateData.beta_welcome_shown = input.beta_welcome_shown;
 
+        console.log('[Coach] updateUserProfile updateData:', JSON.stringify(updateData));
+
+        if (Object.keys(updateData).length === 0) {
+          console.log('[Coach] updateUserProfile: No data to update');
+          return JSON.stringify({ error: 'No data to update' });
+        }
+
         // Use service role client to bypass RLS for profile updates
-        const { error } = await getSupabaseAdmin()
+        // Use upsert to handle case where profile row doesn't exist yet
+        const adminClient = getSupabaseAdmin();
+        const { data, error } = await adminClient
           .from('profiles')
-          .update(updateData)
-          .eq('id', user.id);
-        if (error) return JSON.stringify({ error: error.message });
+          .upsert({ id: user.id, ...updateData }, { onConflict: 'id' })
+          .select();
+
+        console.log('[Coach] updateUserProfile result - data:', JSON.stringify(data), 'error:', error?.message);
+
+        if (error) {
+          console.error('[Coach] updateUserProfile error:', error);
+          return JSON.stringify({ error: error.message });
+        }
         return JSON.stringify({ success: true, updated: updateData });
       }
       case 'getMaxes': {
