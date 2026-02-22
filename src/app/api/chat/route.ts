@@ -1,13 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
 import { formatLocalDate } from '@/lib/date-utils';
 import { AI_MODELS, AI_TOKEN_LIMITS, RATE_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
 
+// Helper to get service role client for bypassing RLS (used for profile updates)
+function getSupabaseAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
 export const maxDuration = 60;
 
-// Dynamic system prompt - shorter for onboarded users
-function getSystemPrompt(isOnboarded: boolean): string {
+// Dynamic system prompt - includes profile collection guidance when profile is incomplete
+function getSystemPrompt(profileComplete: boolean): string {
   const basePrompt = `You are Coach, a no-nonsense fitness coach for NetGains. Talk like you're texting a friend — short sentences, lowercase, no corporate phrases like "Great question!" or "I'd be happy to help."
 
 BOUNDARIES: Fitness/nutrition only. Redirect off-topic: "Can't help with that. What's your next workout?"
@@ -16,27 +25,19 @@ RESPONSE LENGTH: 2-3 sentences default. Longer only for "how/why" questions or m
 
 VOICE: "height and weight?" / "185 at 5'10, got it. what's the goal" / "been 4 days. what's going on" / "nice. 225x5 is solid. push for 6 next week"`;
 
-  if (!isOnboarded) {
+  if (!profileComplete) {
     return basePrompt + `
 
-ONBOARDING (if onboarding_complete is false):
+PROFILE COLLECTION:
+If the user's profile is missing basic info (height, weight, goal, split), focus on collecting that first. Don't suggest meal plans, don't discuss nutrition targets, don't ask about compound maxes. Get their basics, then point them to the app.
 
-FIRST MESSAGE (welcome):
-"i'm your ai coach. i'll track your workouts, nutrition, and help you hit your goals. let's get you set up — what should i call you?"
-
-Then gather info through 6 more questions. Check getMemories first — skip questions you already know.
-
-DO NOT ask about: maxes, 1RMs, PRs, or current lift numbers. We'll learn those as they log workouts.
-
-Questions (ask what's missing):
-1. Name → saveMemory key:"name"
-2. Age/height/weight (ask together) → saveMemory "age", updateUserProfile height_inches/weight_lbs
-3. Goal → updateUserProfile goal:"cutting"|"bulking"|"maintaining"
-4. Coaching mode → "do you have your own program or want me to build one?" → updateUserProfile coaching_mode:"full"|"assist"
-5. Split → "what's your split?" → save BOTH keys:
-   - saveMemory key:"training_split" value:"PPL" (or "Upper/Lower", "Bro Split", etc.)
-   - saveMemory key:"split_rotation" value:'["Push","Pull","Legs","Rest","Push","Pull","Legs"]'
-6. Injuries → saveMemory "injuries" (if none, save "none")
+When they share info, save it immediately:
+- Height/weight → updateUserProfile height_inches/weight_lbs
+- Goal (cutting/bulking/maintaining) → updateUserProfile goal
+- Age → saveMemory key:"age"
+- Name → saveMemory key:"name"
+- Split → saveMemory key:"training_split" AND key:"split_rotation"
+- Injuries → saveMemory key:"injuries" (save "none" if they say no injuries)
 
 SPLIT PRESETS (use these exact JSON arrays for split_rotation):
 - PPL: '["Push","Pull","Legs","Rest","Push","Pull","Legs"]'
@@ -44,14 +45,14 @@ SPLIT PRESETS (use these exact JSON arrays for split_rotation):
 - Bro: '["Chest","Back","Shoulders","Arms","Legs","Rest","Rest"]'
 - Full Body: '["Full Body","Rest","Full Body","Rest","Full Body","Rest"]'
 
-AFTER ALL QUESTIONS — do these tool calls, then give the closing message:
-1. updateUserProfile onboarding_complete:true
-2. Respond with EXACTLY this structure:
-   "you're all set. here's what i've got: [age], [height/weight], [goal], [split]. [mention injuries if not "none"].
+If they give everything at once, save it all and respond naturally:
+"got it — [height], [weight], [goal], running [split]. [mention injuries if any].
 
-   bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs, and Coach is me. tap Log and hit + to start your first workout. tap Nutrition to set up your meal targets.
+bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs. tap Log and hit + to start your first workout."
 
-   you're one of the first people using netgains — if anything's confusing, broken, or you have ideas, tell noah. you're helping build this."`;
+If they leave stuff out, ask naturally — be conversational, not a questionnaire. One follow-up at a time.
+
+TOOL USAGE: Call getUserProfile+getMemories at conversation start to check what's already saved. Use updateUserProfile to save profile data.`;
   }
 
   return basePrompt + `
@@ -411,10 +412,11 @@ export async function POST(req: Request) {
     const yesterdayMeals = yesterdayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
 
-    // Use dynamic system prompt based on onboarding status
-    dynamicSystemPrompt = getSystemPrompt(profile?.onboarding_complete ?? false);
+    // Check if profile is complete (has height, weight, and goal)
+    const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    dynamicSystemPrompt = getSystemPrompt(profileComplete);
 
-    console.log('[Coach] Profile onboarding_complete:', profile?.onboarding_complete);
+    console.log('[Coach] Profile complete:', profileComplete);
     console.log('[Coach] Recent workouts count:', recentWorkouts.length);
     console.log('[Coach] Recent workout dates:', recentWorkouts.map(w => w.date));
     console.log('[Coach] Today meals count:', todayMeals.length);
@@ -736,9 +738,6 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     anthropicMessages = [{ role: 'user', content: contextPrompt }];
   } else {
     // Normal message flow
-    // For ongoing conversations, user is likely onboarded - use shorter prompt
-    dynamicSystemPrompt = getSystemPrompt(true);
-
     // Use client's local date if provided, otherwise fall back to server date
     const todayStr = localDate || formatLocalDate(new Date());
     console.log('[Coach] === NUTRITION CONTEXT DEBUG ===');
@@ -746,13 +745,20 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     console.log('[Coach] Using todayStr:', todayStr);
     console.log('[Coach] Server date:', formatLocalDate(new Date()));
 
-    // Fetch today's nutrition data, conversation summary, and message count
-    const [todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult] = await Promise.all([
+    // Fetch profile, today's nutrition data, conversation summary, and message count
+    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult] = await Promise.all([
+      supabase.from('profiles').select('height_inches, weight_lbs, goal').eq('id', user.id).single(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
     ]);
+
+    // Check if profile is complete
+    const profile = profileResult.data;
+    const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    dynamicSystemPrompt = getSystemPrompt(profileComplete);
+    console.log('[Coach] Profile complete (normal flow):', profileComplete);
 
     // Log query results for debugging
     if (todayMealsResult.error) {
@@ -907,7 +913,8 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         if (input.app_tour_shown !== undefined) updateData.app_tour_shown = input.app_tour_shown;
         if (input.beta_welcome_shown !== undefined) updateData.beta_welcome_shown = input.beta_welcome_shown;
 
-        const { error } = await supabase
+        // Use service role client to bypass RLS for profile updates
+        const { error } = await getSupabaseAdmin()
           .from('profiles')
           .update(updateData)
           .eq('id', user.id);

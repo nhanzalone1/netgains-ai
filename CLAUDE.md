@@ -30,16 +30,14 @@ src/
 │   │   ├── program/     # Training program
 │   │   └── debug/       # Debug panel (dev only)
 │   ├── api/
-│   │   ├── chat/              # Coach chat API (Sonnet)
+│   │   ├── chat/              # Coach chat API (Sonnet) - handles onboarding via tool_use
 │   │   ├── daily-brief/       # Daily training card (Haiku)
-│   │   ├── coach-onboarding/  # Structured onboarding save
 │   │   ├── coach-reset/       # Reset coach state (supports ?full=true)
 │   │   ├── nutrition-onboarding/ # Macro calculation + save
 │   │   └── ...
 │   ├── login/
 │   └── signup/
 ├── components/
-│   ├── coach-onboarding.tsx     # Structured 7-step onboarding UI
 │   ├── nutrition-onboarding.tsx # Macro setup flow
 │   ├── daily-brief-card.tsx     # Dynamic pre/post workout card
 │   └── ...                      # Other shared UI components
@@ -110,50 +108,30 @@ RLS policies: users can only access their own data
 - Use `formatLocalDate()` from `date-utils.ts` for all date operations
 - Coach system prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`
 
-## NEXT SESSION: Rebuild Coach Onboarding
+## Onboarding (Simplified)
 
-### What to DELETE and rebuild from scratch
-- `src/components/coach-onboarding.tsx`
-- `src/app/api/coach-onboarding/route.ts`
-- `src/app/api/onboarding-parse/route.ts`
+There is no separate onboarding flow. New users go directly to the coach chat.
 
-### What to NOT touch (these work)
-- `src/app/api/chat/route.ts` — coach chat engine, working
-- System prompt, tools, memory summarization — working
-- Nutrition, Log, Stats tabs — working
-- Daily Brief — working
+### How it works
+1. When a user has an empty profile (no height, weight, goal), the coach shows a hardcoded first message asking them to introduce themselves
+2. User types whatever they want in the normal chat input
+3. The chat API handles it with tool_use — coach uses `updateUserProfile` and `saveMemory` tools to save info
+4. System prompt includes guidance to focus on collecting basics first before discussing nutrition/workouts
 
-### The save endpoint MUST use
+### Hardcoded first message (shown when profile is empty)
+"hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know."
+
+### Profile completeness check
+Profile is considered "empty" if missing: `height_inches`, `weight_lbs`, or `goal`
+
+### Service role client for profile updates
+The `updateUserProfile` tool uses service role client to bypass RLS:
 ```typescript
-import { createClient } from '@supabase/supabase-js';
-
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 ```
-- **NOT** the `@/lib/supabase/server` client (that uses anon key + RLS)
-- `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel env vars
-
-### Known working pattern for Supabase writes
-- Service role client bypasses RLS
-- `profiles` table primary key is `id` which matches `auth.uid()`
-- `coach_memory` table uses `user_id`
-
-### Onboarding requirements
-1. 7 fixed questions, chat-style UI
-2. Sonnet tool_use for parsing open-ended responses
-3. Max retry of 1 per question — if parsing fails twice, use default and move on
-4. User should NEVER see the same question twice
-5. Closing message saved to `chat_messages` table before transition
-6. Questions should sound like a real coach, not a survey
-
-### Defaults if parsing fails
-- `coaching_mode` → `"assist"`
-- `training_split` → `"PPL"`
-- `goal` → `"cutting"`
-- `name` → `"there"`
-- `injuries` → `"none"`
 
 ## Current State (Feb 21)
 
@@ -166,13 +144,8 @@ const supabaseAdmin = createClient(
 - **15 message daily limit** per user
 - **Nuclear reset** via `/debug` page
 
-### What's Broken
-- **Coach onboarding** — RLS issues, question looping, save failures
-- Needs full rebuild (see above)
-
 ### Beta Status
-- Rebuild onboarding first
-- Then testing with dad & uncle
+- Testing with dad & uncle
 - Then 3-4 friends test for 3-5 days
 
 ## Phase 2 Roadmap (post-beta)

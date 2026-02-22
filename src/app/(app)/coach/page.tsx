@@ -7,8 +7,10 @@ import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { DailyBriefCard } from "@/components/daily-brief-card";
-import { CoachOnboarding } from "@/components/coach-onboarding";
 import { createClient } from "@/lib/supabase/client";
+
+// Hardcoded first message for new users with empty profiles
+const HARDCODED_FIRST_MESSAGE = "hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know.";
 
 interface Message {
   id: string;
@@ -246,7 +248,7 @@ export default function CoachPage() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null); // null = loading
+  const [profileEmpty, setProfileEmpty] = useState<boolean | null>(null); // null = loading, true = needs onboarding via chat
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -296,59 +298,35 @@ export default function CoachPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Check onboarding status on mount
+  // Check if profile is empty (needs onboarding via chat)
   useEffect(() => {
     if (!user?.id) return;
 
-    const checkOnboarding = async () => {
-      console.log('[Coach] Checking onboarding for user:', user.id);
-
-      // Check if supabase has auth session
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log('[Coach] Auth session:', sessionData?.session?.user?.id ?? 'NO SESSION');
-
-      // Try without .single() first to see what rows exist
-      const { data: allRows, error: allError } = await supabase
-        .from('profiles')
-        .select('id, onboarding_complete')
-        .eq('id', user.id);
-
-      console.log('[Coach] All matching rows:', allRows, 'Error:', allError?.code);
+    const checkProfile = async () => {
+      console.log('[Coach] Checking profile for user:', user.id);
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('onboarding_complete')
+        .select('height_inches, weight_lbs, goal')
         .eq('id', user.id)
         .single();
 
-      console.log('[Coach] Onboarding check result:', { data, error: error?.code });
-
       if (error) {
-        console.error('[Coach] Error checking onboarding:', error.code, error.message, error.details);
-        // PGRST116 = no rows returned, which means profile doesn't exist yet
-        // In either case, show onboarding
-        setOnboardingComplete(false);
+        console.error('[Coach] Error checking profile:', error.code, error.message);
+        // Profile doesn't exist - treat as empty
+        setProfileEmpty(true);
         return;
       }
 
-      setOnboardingComplete(data?.onboarding_complete ?? false);
+      // Profile is empty if missing height, weight, or goal
+      const isEmpty = !data?.height_inches || !data?.weight_lbs || !data?.goal;
+      console.log('[Coach] Profile empty:', isEmpty);
+      setProfileEmpty(isEmpty);
     };
 
-    checkOnboarding();
+    checkProfile();
   }, [user?.id]);
 
-  // Handle onboarding completion
-  const handleOnboardingComplete = () => {
-    setOnboardingComplete(true);
-    // Clear any existing messages - user just saw closing message in onboarding UI
-    setMessages([]);
-    lastSavedContentRef.current.clear();
-    // Mark today as opened so we don't generate another greeting
-    // The onboarding closing message already told them what to do
-    hasGeneratedOpeningRef.current = true;
-    const today = new Date().toDateString();
-    localStorage.setItem(getLastOpenKey(user?.id), today);
-  };
 
   // iOS keyboard handling using Visual Viewport API
   // When keyboard opens, we set container height to viewport height so input sits above keyboard
@@ -653,7 +631,7 @@ export default function CoachPage() {
   // Load messages from database on mount
   useEffect(() => {
     if (!user?.id) return;
-    if (!onboardingComplete) return; // Don't load messages until onboarding is done
+    if (profileEmpty === null) return; // Wait for profile check to complete
 
     const loadMessages = async () => {
       console.log(">>> Loading messages from DB <<<");
@@ -686,6 +664,19 @@ export default function CoachPage() {
         return;
       }
 
+      // No messages - if profile is empty, show hardcoded first message instead of generating
+      if (profileEmpty) {
+        console.log(">>> Empty profile, showing hardcoded first message <<<");
+        const hardcodedMessage: Message = {
+          id: getMessageTimestamp().toString(),
+          role: "assistant",
+          content: HARDCODED_FIRST_MESSAGE,
+        };
+        setMessages([hardcodedMessage]);
+        localStorage.setItem(getLastOpenKey(user.id), today);
+        return;
+      }
+
       // No messages at all - check if we already generated today via localStorage
       if (lastOpenStr === today) {
         console.log(">>> Already opened today per localStorage, skipping <<<");
@@ -699,7 +690,7 @@ export default function CoachPage() {
     };
 
     loadMessages();
-  }, [user?.id, generateAutoOpening, onboardingComplete]);
+  }, [user?.id, generateAutoOpening, profileEmpty]);
 
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
@@ -944,8 +935,8 @@ export default function CoachPage() {
     messagesWithDividers.push({ type: 'message', message });
   }
 
-  // Show loading state while checking onboarding
-  if (onboardingComplete === null) {
+  // Show loading state while checking profile
+  if (profileEmpty === null) {
     return (
       <div
         className="flex flex-col fixed left-0 right-0 z-40 items-center justify-center"
@@ -956,47 +947,6 @@ export default function CoachPage() {
         }}
       >
         <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  // Show structured onboarding if not complete
-  if (!onboardingComplete) {
-    return (
-      <div
-        ref={pageRef}
-        className="flex flex-col fixed left-0 right-0 z-40"
-        style={{
-          background: "#0f0f13",
-          top: 0,
-          bottom: isMobile ? 120 : 150,
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
-          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(255, 71, 87, 0.15)" }}
-            >
-              <Sparkles className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold">Coach</h1>
-              <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
-            </div>
-          </div>
-          <UserMenu />
-        </div>
-
-        {/* Onboarding Flow - component manages its own layout */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <CoachOnboarding onComplete={handleOnboardingComplete} />
-        </div>
       </div>
     );
   }
