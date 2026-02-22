@@ -372,6 +372,7 @@ export async function POST(req: Request) {
   let anthropicMessages: Anthropic.MessageParam[];
   let milestoneContext: MilestoneContext | null = null;
   let dynamicSystemPrompt: string;
+  let profileComplete: boolean = true; // Default to true, will be set in each branch
 
   if (isSystemTrigger) {
     console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
@@ -422,7 +423,7 @@ export async function POST(req: Request) {
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
 
     // Check if profile is complete (has height, weight, and goal)
-    const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
     dynamicSystemPrompt = getSystemPrompt(profileComplete);
 
     console.log('[Coach] Profile complete:', profileComplete);
@@ -765,7 +766,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
 
     // Check if profile is complete
     const profile = profileResult.data;
-    const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
     dynamicSystemPrompt = getSystemPrompt(profileComplete);
     console.log('[Coach] Profile complete (normal flow):', profileComplete);
 
@@ -1219,12 +1220,18 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           console.log('[Coach] API call round:', round + 1);
 
+          // Force tool use when profile is incomplete (ensures onboarding data gets saved)
+          // Use 'any' to require a tool call, 'auto' for normal optional tool use
+          const toolChoice = profileComplete ? { type: 'auto' as const } : { type: 'any' as const };
+          console.log('[Coach] Tool choice:', toolChoice.type, '(profileComplete:', profileComplete, ')');
+
           const response = await anthropic.messages.create({
             model: AI_MODELS.COACHING,
             max_tokens: AI_TOKEN_LIMITS.COACHING,
             system: dynamicSystemPrompt,
             messages: currentMessages,
             tools,
+            tool_choice: toolChoice,
           });
 
           console.log('[Coach] Response stop_reason:', response.stop_reason);
