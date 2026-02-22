@@ -1204,8 +1204,14 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         const currentMessages = [...anthropicMessages];
         let textStreamed = false;
 
+        // Log tools being sent to API
+        console.log('[Coach] Tools passed to API:', tools.map(t => t.name).join(', '));
+        console.log('[Coach] System prompt length:', dynamicSystemPrompt.length, 'chars');
+
         // Loop to handle tool calls (max iterations to prevent infinite loops)
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          console.log('[Coach] API call round:', round + 1);
+
           const response = await anthropic.messages.create({
             model: AI_MODELS.COACHING,
             max_tokens: AI_TOKEN_LIMITS.COACHING,
@@ -1214,8 +1220,12 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
             tools,
           });
 
+          console.log('[Coach] Response stop_reason:', response.stop_reason);
+          console.log('[Coach] Response content types:', response.content.map(b => b.type).join(', '));
+
           // Check if we need to handle tool use
           if (response.stop_reason === 'tool_use') {
+            console.log('[Coach] Tool use detected!');
             const assistantContent = response.content;
 
             // Add assistant message with tool use
@@ -1229,7 +1239,9 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
             const toolErrors: string[] = [];
             for (const block of assistantContent) {
               if (block.type === 'tool_use') {
+                console.log('[Coach] Executing tool:', block.name, 'with input:', JSON.stringify(block.input));
                 const result = await executeTool(block.name, block.input as Record<string, unknown>);
+                console.log('[Coach] Tool result:', result.substring(0, 200));
                 // Track errors for debugging
                 if (result.includes('"error"')) {
                   toolErrors.push(`${block.name}: ${result}`);
