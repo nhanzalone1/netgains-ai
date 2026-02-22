@@ -129,8 +129,9 @@ export async function POST(request: Request) {
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
 
-  // Check if onboarding is complete
-  if (!profile?.onboarding_complete) {
+  // Check if profile is complete (has basic info)
+  const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+  if (!profileComplete) {
     return Response.json({
       status: 'not_onboarded',
       generatedAt: new Date().toISOString(),
