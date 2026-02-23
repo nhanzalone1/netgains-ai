@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const pathname = request.nextUrl.pathname;
 
   // Skip Supabase during build if env vars missing
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -33,26 +34,65 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  // Skip middleware for API routes
+  if (pathname.startsWith("/api")) {
+    return supabaseResponse;
+  }
+
+  const isAuthPage = pathname.startsWith("/auth");
+  const isWaitlistPage = pathname === "/waitlist";
+  const isWaitlistPendingPage = pathname === "/waitlist-pending";
+
+  // Allow waitlist page without any auth check
+  if (isWaitlistPage) {
+    return supabaseResponse;
+  }
+
   // Refresh session if expired
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users to login (except for auth pages)
-  const isAuthPage = request.nextUrl.pathname.startsWith("/auth");
-
-  if (!user && !isAuthPage) {
+  // Unauthenticated users: allow auth pages, redirect others to waitlist
+  if (!user) {
+    if (isAuthPage) {
+      return supabaseResponse;
+    }
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    url.pathname = "/waitlist";
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isAuthPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/coach";
-    return NextResponse.redirect(url);
+  // Authenticated users: check if they're an allowed tester
+  let isAllowedTester = false;
+  try {
+    const { data: allowedTester, error } = await supabase
+      .from("allowed_testers")
+      .select("id")
+      .eq("email", user.email?.toLowerCase() || "")
+      .single();
+
+    isAllowedTester = !error && !!allowedTester;
+  } catch {
+    isAllowedTester = false;
   }
 
-  return supabaseResponse;
+  // Allowed testers: redirect away from waitlist/auth pages to app
+  if (isAllowedTester) {
+    if (isAuthPage || isWaitlistPage || isWaitlistPendingPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/coach";
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
+  // Not allowed: let them stay on waitlist-pending, redirect others there
+  if (isWaitlistPendingPage) {
+    return supabaseResponse;
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = "/waitlist-pending";
+  return NextResponse.redirect(url);
 }
