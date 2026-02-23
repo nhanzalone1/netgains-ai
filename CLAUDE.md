@@ -133,7 +133,35 @@ const supabaseAdmin = createClient(
 );
 ```
 
-## Current State (Feb 21)
+## Waitlist / Beta Access System
+
+Built waitlist/allowlist system for controlled beta access.
+
+### How it works
+1. Non-logged-in users see `/waitlist` page with email signup
+2. Logged-in users are checked against `allowed_testers` table in Supabase
+3. If email is in `allowed_testers` → full app access
+4. If email is NOT in `allowed_testers` → redirect to "You're on the waitlist" page
+
+### Database tables
+- `waitlist_emails` — collected emails from waitlist signups (email, created_at)
+- `allowed_testers` — approved tester emails (email, created_at, added_by)
+
+### Flow
+```
+User visits site
+  → Not logged in? Show /waitlist page (email collection)
+  → Logged in + email in allowed_testers? Full app access
+  → Logged in + email NOT in allowed_testers? Show "You're on the list" page
+```
+
+### Adding testers
+Add approved emails directly to `allowed_testers` table in Supabase dashboard.
+
+### Middleware
+`middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
+
+## Current State (Feb 22)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
