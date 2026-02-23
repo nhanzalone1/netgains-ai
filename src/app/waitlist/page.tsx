@@ -124,12 +124,20 @@ export default function WaitlistPage() {
           )}
         </GlassCard>
 
-        <p className="text-center text-muted-foreground mt-6">
-          Already have access?{" "}
-          <Link href="/auth/login" className="text-primary font-semibold">
-            Sign in
-          </Link>
-        </p>
+        <div className="text-center mt-6 space-y-2">
+          <p className="text-muted-foreground">
+            Already have access?{" "}
+            <Link href="/auth/signup" className="text-primary font-semibold">
+              Sign up
+            </Link>
+          </p>
+          <p className="text-muted-foreground/70 text-sm">
+            Already have an account?{" "}
+            <Link href="/auth/login" className="text-primary/80 hover:text-primary">
+              Log in
+            </Link>
+          </p>
+        </div>
       </motion.div>
     </div>
   );
