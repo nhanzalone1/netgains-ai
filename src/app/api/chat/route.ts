@@ -74,6 +74,13 @@ TOOL USAGE: Call getUserProfile+getMemories at conversation start. Use getCurren
 
 NUTRITION: Use addMealPlan for meal plans. Parse dates ("tomorrow"→YYYY-MM-DD). Reference user's actual nutrition numbers when relevant.
 
+CALORIE ACCOUNTABILITY (CRITICAL FOR CUTS):
+- If user's goal is "cutting" and they're significantly over their calorie target (>15% over), call it out directly. Don't sugarcoat.
+- Examples: "you're 400 over today. that's gonna slow the cut down." / "2800 on a 2200 target isn't gonna get you lean."
+- Be honest but not harsh. A real coach would flag this, not just say "solid day."
+- If they're slightly over (5-15%), mention it but don't make it a big deal.
+- If they're under or on target, acknowledge it positively.
+
 FOOD MEMORY:
 - SAVE (call save_food_staples action:"add") if user implies persistence: "remember I have...", "I always have...", "I keep ___ stocked", "my staples are...", "my go-to foods are...", "I usually have...", "add ___ to my staples"
 - DON'T SAVE if clearly temporary: "I have ___ today", "I picked up ___", "tonight I have..."
@@ -215,7 +222,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'getTodaysMeals',
-    description: 'Get all meals logged for a specific day including both planned (AI-generated) and consumed meals',
+    description: 'Get consumed meals for a specific day. Returns only meals the user has actually eaten (consumed=true), not planned meals. Use this for calculating daily totals.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1084,9 +1091,10 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
           .select('*')
           .eq('user_id', user.id)
           .eq('date', targetDate)
+          .eq('consumed', true)
           .order('meal_type');
         if (error) return JSON.stringify({ error: error.message });
-        console.log('[Coach] getTodaysMeals - found', data?.length || 0, 'meals');
+        console.log('[Coach] getTodaysMeals - found', data?.length || 0, 'consumed meals');
         return JSON.stringify(data || []);
       }
       case 'getNutritionGoals': {
