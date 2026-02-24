@@ -10,9 +10,9 @@ import { useTheme, themes } from "./theme-provider";
 import { IconButton } from "./ui/icon-button";
 
 const intensityOptions = [
-  { id: "light", name: "Light", description: "Patient & encouraging" },
-  { id: "moderate", name: "Moderate", description: "Direct & steady" },
-  { id: "aggressive", name: "Aggressive", description: "Blunt & no excuses" },
+  { id: "light", name: "Light", description: "~300 cal deficit/surplus" },
+  { id: "moderate", name: "Moderate", description: "~500 cal deficit/surplus" },
+  { id: "aggressive", name: "Aggressive", description: "~750+ cal deficit/surplus" },
 ] as const;
 
 type IntensityId = typeof intensityOptions[number]["id"];
@@ -165,7 +165,7 @@ export function UserMenu() {
                   className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
                 >
                   <Flame className="w-4 h-4 text-primary" />
-                  <span className="font-medium flex-1">Coach Intensity</span>
+                  <span className="font-medium flex-1">Goal Intensity</span>
                   <span className="text-xs text-muted-foreground capitalize">{intensity}</span>
                 </motion.button>
 
