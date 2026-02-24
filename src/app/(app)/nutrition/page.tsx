@@ -763,72 +763,76 @@ export default function NutritionPage() {
               No meals logged yet today
             </div>
           ) : (
-            meals.map((meal, index) => (
-              <motion.div
-                key={meal.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`rounded-xl p-3 flex items-center gap-3 ${
-                  meal.ai_generated && !meal.consumed
-                    ? "border border-dashed border-purple-500/30 bg-purple-500/5"
-                    : ""
-                }`}
-                style={{ background: meal.ai_generated && !meal.consumed ? undefined : "rgba(26, 26, 36, 0.6)" }}
-              >
-                {/* Time */}
-                <div className="flex flex-col items-center text-muted-foreground w-12 shrink-0">
-                  <Clock className="w-3 h-3 mb-0.5" />
-                  <span className="text-[10px]">{formatTime(meal.created_at)}</span>
-                </div>
-
-                {/* Info - Tappable to edit */}
-                <button
-                  onClick={() => openEditMeal(meal)}
-                  className="flex-1 min-w-0 text-left"
+            meals.map((meal, index) => {
+              const isPending = !meal.consumed;
+              return (
+                <motion.div
+                  key={meal.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={`rounded-xl p-3 flex items-center gap-3 ${
+                    isPending
+                      ? "border-2 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                      : ""
+                  }`}
+                  style={{ background: isPending ? "rgba(245, 158, 11, 0.08)" : "rgba(26, 26, 36, 0.6)" }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{getMealLabel(meal, index)}</span>
-                    {meal.ai_generated && !meal.consumed && (
-                      <span className="text-[9px] uppercase font-bold text-purple-400 bg-purple-500/20 px-1 py-0.5 rounded">
-                        Planned
-                      </span>
-                    )}
+                  {/* Time */}
+                  <div className="flex flex-col items-center text-muted-foreground w-12 shrink-0">
+                    <Clock className="w-3 h-3 mb-0.5" />
+                    <span className="text-[10px]">{formatTime(meal.created_at)}</span>
                   </div>
-                  <p className="font-medium text-sm truncate">{meal.food_name}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {meal.calories} cal • {meal.protein}g P • {meal.carbs}g C • {meal.fat}g F
-                  </p>
-                </button>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1">
-                  {meal.ai_generated && !meal.consumed && (
+                  {/* Info - Tappable to edit */}
+                  <button
+                    onClick={() => openEditMeal(meal)}
+                    className="flex-1 min-w-0 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{getMealLabel(meal, index)}</span>
+                      {isPending && (
+                        <span className="text-[9px] uppercase font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-medium text-sm truncate">{meal.food_name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {meal.calories} cal • {meal.protein}g P • {meal.carbs}g C • {meal.fat}g F
+                    </p>
+                  </button>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1">
+                    {isPending && (
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => markAsConsumed(meal.id)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500/20 text-green-400 border border-green-500/30"
+                        title="Confirm & log"
+                      >
+                        <Check className="w-4 h-4" />
+                      </motion.button>
+                    )}
                     <motion.button
                       whileTap={{ scale: 0.9 }}
-                      onClick={() => markAsConsumed(meal.id)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500/20 text-green-400"
+                      onClick={() => copyMeal(meal)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary"
                     >
-                      <Check className="w-4 h-4" />
+                      <Copy className="w-3.5 h-3.5" />
                     </motion.button>
-                  )}
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => copyMeal(meal)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </motion.button>
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => deleteMeal(meal.id)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </motion.button>
-                </div>
-              </motion.div>
-            ))
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => deleteMeal(meal.id)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </motion.button>
+                  </div>
+                </motion.div>
+              );
+            })
           )}
 
           {/* Add Food Button - Below Meals */}
