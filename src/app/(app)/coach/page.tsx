@@ -634,6 +634,14 @@ export default function CoachPage() {
     loadMessages();
   }, [user?.id]);
 
+  // Auto-scroll to bottom when messages finish loading
+  useEffect(() => {
+    if (messagesLoaded && messages.length > 0) {
+      // Small delay to ensure DOM has rendered
+      setTimeout(() => scrollToBottom(true), 100);
+    }
+  }, [messagesLoaded, scrollToBottom]);
+
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
     return () => {
