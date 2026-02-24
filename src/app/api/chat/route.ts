@@ -101,7 +101,11 @@ If they leave stuff out, ask naturally — one follow-up at a time.`;
 
 TOOL USAGE: Call getUserProfile+getMemories at conversation start. Use getCurrentWorkout for live sessions, getRecentLifts for history.
 
-NUTRITION: Use addMealPlan for meal plans. Parse dates ("tomorrow"→YYYY-MM-DD). Reference user's actual nutrition numbers when relevant.
+NUTRITION:
+- Use logMeal when the user tells you what they ATE and wants it logged (consumed=true, counts toward daily totals)
+- Use addMealPlan for future meal suggestions/plans (consumed=false, doesn't count until they eat it)
+- Parse dates ("tomorrow"→YYYY-MM-DD). Reference user's actual nutrition numbers when relevant.
+- When user says "log it" or "add that" after discussing food, use logMeal to record it.
 
 DAILY NUTRITION RESET (CRITICAL):
 When the user asks about their daily calories, macros, or what they've eaten today, you MUST call getTodaysMeals FIRST before responding. Do not estimate or guess from conversation history. Check the actual data.
@@ -295,8 +299,26 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'logMeal',
+    description: 'Log a consumed meal for the user. Use this when the user tells you what they ate and wants it logged. This marks the meal as consumed=true so it counts toward daily totals.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'], description: 'Type of meal' },
+        food_name: { type: 'string', description: 'Name of the food/meal' },
+        calories: { type: 'number', description: 'Calories in the meal' },
+        protein: { type: 'number', description: 'Protein in grams' },
+        carbs: { type: 'number', description: 'Carbs in grams' },
+        fat: { type: 'number', description: 'Fat in grams' },
+        serving_size: { type: 'string', description: 'Serving size description (e.g., "6oz", "1 cup")' },
+        date: { type: 'string', description: 'Date in YYYY-MM-DD format, defaults to today' },
+      },
+      required: ['meal_type', 'food_name', 'calories', 'protein', 'carbs', 'fat'],
+    },
+  },
+  {
     name: 'addMealPlan',
-    description: 'Add a planned meal for the user (AI-generated meal plan). Use this when creating meal plans for the user.',
+    description: 'Add a planned meal for the user (AI-generated meal plan). Use this when creating meal plans for the user. These are NOT consumed yet.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1166,6 +1188,27 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
         }
         return JSON.stringify(data);
       }
+      case 'logMeal': {
+        // Use explicit date param, then client's localDate, then server fallback
+        const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        const { error } = await supabase
+          .from('meals')
+          .insert({
+            user_id: user.id,
+            date: targetDate,
+            meal_type: input.meal_type as string,
+            food_name: input.food_name as string,
+            calories: input.calories as number,
+            protein: input.protein as number,
+            carbs: input.carbs as number,
+            fat: input.fat as number,
+            serving_size: input.serving_size as string | null,
+            ai_generated: false,
+            consumed: true,
+          });
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ success: true, message: `Logged ${input.food_name} (${input.calories} cal, ${input.protein}g protein)` });
+      }
       case 'addMealPlan': {
         // Use explicit date param, then client's localDate, then server fallback
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
@@ -1185,7 +1228,7 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
             consumed: false,
           });
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify({ success: true, message: `Added ${input.food_name} to ${input.meal_type}` });
+        return JSON.stringify({ success: true, message: `Added ${input.food_name} to meal plan` });
       }
       case 'updateNutritionGoals': {
         const updates: Record<string, unknown> = {};
