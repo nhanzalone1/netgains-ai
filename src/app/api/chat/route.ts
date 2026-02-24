@@ -867,15 +867,17 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     );
 
     // Build nutrition context string
-    const nutritionContext = todayMeals.length > 0
-      ? `[TODAY'S NUTRITION - ${todayStr}]
-Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
+    const nutritionContext = `[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
+This data is pulled from the database right now. ALWAYS use these numbers, NEVER use calorie totals from earlier messages in the conversation.
+${todayMeals.length > 0
+  ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
 Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat
-Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein
+Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein`
+  : `No meals logged today. User is at 0 calories regardless of what was discussed earlier.
+Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat`}
 [END NUTRITION CONTEXT]
 
-`
-      : '';
+`;
 
     console.log('[Coach] Nutrition context length:', nutritionContext.length);
     if (nutritionContext) {
