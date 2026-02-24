@@ -1,21 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
 import { useTheme, themes } from "./theme-provider";
 import { IconButton } from "./ui/icon-button";
 
+const intensityOptions = [
+  { id: "light", name: "Light", description: "Patient & encouraging" },
+  { id: "moderate", name: "Moderate", description: "Direct & steady" },
+  { id: "aggressive", name: "Aggressive", description: "Blunt & no excuses" },
+] as const;
+
+type IntensityId = typeof intensityOptions[number]["id"];
+
 export function UserMenu() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showIntensity, setShowIntensity] = useState(false);
+  const [intensity, setIntensityState] = useState<IntensityId>("moderate");
   const router = useRouter();
   const supabase = createClient();
+
+  // Load intensity from profile on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadIntensity = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("coaching_intensity")
+        .eq("id", user.id)
+        .single();
+      if (data?.coaching_intensity) {
+        setIntensityState(data.coaching_intensity as IntensityId);
+      }
+    };
+    loadIntensity();
+  }, [user?.id, supabase]);
+
+  const setIntensity = async (newIntensity: IntensityId) => {
+    setIntensityState(newIntensity);
+    if (user?.id) {
+      await supabase
+        .from("profiles")
+        .update({ coaching_intensity: newIntensity })
+        .eq("id", user.id);
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -113,6 +149,63 @@ export function UserMenu() {
                             <span className="text-[10px] text-muted-foreground font-medium">
                               {t.name.split(" ")[0]}
                             </span>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Coaching Intensity Picker */}
+              <div className="border-b border-white/5">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowIntensity(!showIntensity)}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                >
+                  <Flame className="w-4 h-4 text-primary" />
+                  <span className="font-medium flex-1">Coach Intensity</span>
+                  <span className="text-xs text-muted-foreground capitalize">{intensity}</span>
+                </motion.button>
+
+                <AnimatePresence>
+                  {showIntensity && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-2 pb-2 space-y-1">
+                        {intensityOptions.map((opt) => (
+                          <motion.button
+                            key={opt.id}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setIntensity(opt.id)}
+                            className="w-full flex items-center gap-3 p-2 rounded-xl transition-colors"
+                            style={{
+                              background:
+                                intensity === opt.id
+                                  ? "rgba(255, 255, 255, 0.1)"
+                                  : "transparent",
+                            }}
+                          >
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center border border-white/20"
+                              style={{
+                                background: intensity === opt.id ? "var(--primary)" : "transparent",
+                              }}
+                            >
+                              {intensity === opt.id && (
+                                <Check className="w-3 h-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1 text-left">
+                              <p className="text-sm font-medium">{opt.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{opt.description}</p>
+                            </div>
                           </motion.button>
                         ))}
                       </div>

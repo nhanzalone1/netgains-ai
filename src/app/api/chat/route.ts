@@ -165,7 +165,7 @@ Output bullet points only:`;
 const tools: Anthropic.Tool[] = [
   {
     name: 'getUserProfile',
-    description: 'Get the current user profile including height, weight, goal, onboarding status, app_tour_shown, and beta_welcome_shown',
+    description: 'Get the current user profile including height, weight, goal, coaching_intensity, onboarding status, app_tour_shown, and beta_welcome_shown',
     input_schema: {
       type: 'object',
       properties: {},
@@ -174,7 +174,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'updateUserProfile',
-    description: 'Update user profile with height, weight, goal, coaching_mode, onboarding status, app_tour_shown, and/or beta_welcome_shown',
+    description: 'Update user profile with height, weight, goal, coaching_mode, coaching_intensity, onboarding status, app_tour_shown, and/or beta_welcome_shown',
     input_schema: {
       type: 'object',
       properties: {
@@ -182,6 +182,7 @@ const tools: Anthropic.Tool[] = [
         weight_lbs: { type: 'number', description: 'Weight in pounds' },
         goal: { type: 'string', enum: ['cutting', 'bulking', 'maintaining'], description: 'User fitness goal - used for nutrition calculations' },
         coaching_mode: { type: 'string', enum: ['full', 'assist'], description: 'Coaching mode: full = coach builds program, assist = user has own program' },
+        coaching_intensity: { type: 'string', enum: ['light', 'moderate', 'aggressive'], description: 'Coach tone: light = encouraging, moderate = direct, aggressive = blunt accountability' },
         onboarding_complete: { type: 'boolean', description: 'Whether onboarding is finished' },
         app_tour_shown: { type: 'boolean', description: 'Whether the one-time app tour message has been shown' },
         beta_welcome_shown: { type: 'boolean', description: 'Whether the one-time beta welcome message has been shown' },
@@ -942,7 +943,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
       case 'getUserProfile': {
         const { data, error } = await supabase
           .from('profiles')
-          .select('height_inches, weight_lbs, goal, coaching_mode, onboarding_complete, app_tour_shown, beta_welcome_shown, created_at')
+          .select('height_inches, weight_lbs, goal, coaching_mode, coaching_intensity, onboarding_complete, app_tour_shown, beta_welcome_shown, created_at')
           .eq('id', user.id)
           .single();
         if (error) return JSON.stringify({ error: error.message });
@@ -957,6 +958,7 @@ Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100
         if (input.weight_lbs !== undefined) updateData.weight_lbs = input.weight_lbs;
         if (input.goal !== undefined) updateData.goal = input.goal;
         if (input.coaching_mode !== undefined) updateData.coaching_mode = input.coaching_mode;
+        if (input.coaching_intensity !== undefined) updateData.coaching_intensity = input.coaching_intensity;
         if (input.onboarding_complete !== undefined) updateData.onboarding_complete = input.onboarding_complete;
         if (input.app_tour_shown !== undefined) updateData.app_tour_shown = input.app_tour_shown;
         if (input.beta_welcome_shown !== undefined) updateData.beta_welcome_shown = input.beta_welcome_shown;
