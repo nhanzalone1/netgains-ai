@@ -101,13 +101,15 @@ If they leave stuff out, ask naturally — one follow-up at a time.`;
 
 TOOL USAGE: Call getUserProfile+getMemories at conversation start. Use getCurrentWorkout for live sessions, getRecentLifts for history.
 
-NUTRITION:
-- When user mentions food they ate, show them the breakdown FIRST before logging:
-  "chicken breast and rice — 450 cal, 45g protein, 40g carbs, 8g fat. log it?"
-- Only call logMeal AFTER user confirms ("yes", "log it", "good", etc.)
-- This lets them correct the name or macros before it's saved
-- Use addMealPlan for future meal suggestions/plans (consumed=false)
-- Parse dates ("tomorrow"→YYYY-MM-DD)
+NUTRITION LOGGING FLOW:
+1. When user mentions food they ate, show the breakdown and add it as PENDING:
+   "chicken breast and rice — 450 cal, 45g protein, 40g carbs, 8g fat. added to nutrition tab — check it off there or tell me to log it."
+2. Call addMealPlan to add it (consumed=false, appears in Nutrition tab as pending)
+3. User can then:
+   - Go to Nutrition tab, edit if needed, and mark it consumed there
+   - OR tell you to edit it ("make it 50g protein") then confirm ("log it")
+4. When user confirms via chat, call confirmMeal to mark it consumed
+5. Use logMeal only for quick logs where user doesn't need to review first
 
 DAILY NUTRITION RESET (CRITICAL):
 When the user asks about their daily calories, macros, or what they've eaten today, you MUST call getTodaysMeals FIRST before responding. Do not estimate or guess from conversation history. Check the actual data.
@@ -320,7 +322,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'addMealPlan',
-    description: 'Add a planned meal for the user (AI-generated meal plan). Use this when creating meal plans for the user. These are NOT consumed yet.',
+    description: 'Add a pending meal for the user. Use this when user mentions food they ate — it shows up in Nutrition tab as pending (consumed=false) so they can review/edit before confirming.',
     input_schema: {
       type: 'object',
       properties: {
@@ -334,6 +336,35 @@ const tools: Anthropic.Tool[] = [
         date: { type: 'string', description: 'Date in YYYY-MM-DD format, defaults to today' },
       },
       required: ['meal_type', 'food_name', 'calories', 'protein', 'carbs', 'fat'],
+    },
+  },
+  {
+    name: 'updateMeal',
+    description: 'Update a pending meal. Use this when user wants to change macros or name before confirming. Find the meal by food_name and date.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        food_name: { type: 'string', description: 'Current name of the food to find' },
+        date: { type: 'string', description: 'Date of the meal (YYYY-MM-DD), defaults to today' },
+        new_food_name: { type: 'string', description: 'New name for the food (optional)' },
+        calories: { type: 'number', description: 'New calories (optional)' },
+        protein: { type: 'number', description: 'New protein in grams (optional)' },
+        carbs: { type: 'number', description: 'New carbs in grams (optional)' },
+        fat: { type: 'number', description: 'New fat in grams (optional)' },
+      },
+      required: ['food_name'],
+    },
+  },
+  {
+    name: 'confirmMeal',
+    description: 'Mark a pending meal as consumed. Use this when user confirms they want to log a pending meal ("log it", "yes", "confirm").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        food_name: { type: 'string', description: 'Name of the food to confirm' },
+        date: { type: 'string', description: 'Date of the meal (YYYY-MM-DD), defaults to today' },
+      },
+      required: ['food_name'],
     },
   },
   {
@@ -1230,7 +1261,47 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
             consumed: false,
           });
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify({ success: true, message: `Added ${input.food_name} to meal plan` });
+        return JSON.stringify({ success: true, message: `Added ${input.food_name} as pending — user can review in Nutrition tab or confirm via chat` });
+      }
+      case 'updateMeal': {
+        const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        const updates: Record<string, unknown> = {};
+        if (input.new_food_name) updates.food_name = input.new_food_name;
+        if (input.calories !== undefined) updates.calories = input.calories;
+        if (input.protein !== undefined) updates.protein = input.protein;
+        if (input.carbs !== undefined) updates.carbs = input.carbs;
+        if (input.fat !== undefined) updates.fat = input.fat;
+
+        if (Object.keys(updates).length === 0) {
+          return JSON.stringify({ error: 'No updates provided' });
+        }
+
+        const { error } = await supabase
+          .from('meals')
+          .update(updates)
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .eq('food_name', input.food_name as string)
+          .eq('consumed', false);
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ success: true, message: `Updated ${input.food_name}` });
+      }
+      case 'confirmMeal': {
+        const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        const { data, error } = await supabase
+          .from('meals')
+          .update({ consumed: true })
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .eq('food_name', input.food_name as string)
+          .eq('consumed', false)
+          .select();
+        if (error) return JSON.stringify({ error: error.message });
+        if (!data || data.length === 0) {
+          return JSON.stringify({ error: `Could not find pending meal "${input.food_name}" for ${targetDate}` });
+        }
+        const meal = data[0];
+        return JSON.stringify({ success: true, message: `Logged ${meal.food_name} (${meal.calories} cal, ${meal.protein}g protein)` });
       }
       case 'updateNutritionGoals': {
         const updates: Record<string, unknown> = {};
