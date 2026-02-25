@@ -568,38 +568,24 @@ export default function LogPage() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => openWorkoutSession(folder)}
-                  className="aspect-square rounded-2xl p-4 flex flex-col justify-between cursor-pointer relative group"
+                  className="aspect-square rounded-2xl p-4 flex flex-col justify-between cursor-pointer relative"
                   style={{
                     background: "rgba(26, 26, 36, 0.6)",
                     backdropFilter: "blur(16px)",
                     border: "1px solid rgba(255, 255, 255, 0.05)",
                   }}
                 >
-                  {/* Action buttons */}
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      whileHover={{ scale: 1.1 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditFolder(folder);
-                      }}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary/20 text-primary"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </motion.button>
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      whileHover={{ scale: 1.1 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteFolder(folder.id);
-                      }}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-destructive/20 text-destructive"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </motion.button>
-                  </div>
+                  {/* Edit button - always visible */}
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditFolder(folder);
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-lg flex items-center justify-center bg-white/10 text-muted-foreground"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </motion.button>
 
                   {/* Folder Icon */}
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -669,7 +655,7 @@ export default function LogPage() {
         <Modal
           open={!!editingFolder}
           onClose={() => setEditingFolder(null)}
-          title="Rename Split"
+          title="Edit Split"
         >
           <div className="space-y-4">
             <input
@@ -690,6 +676,17 @@ export default function LogPage() {
             >
               Save
             </Button>
+            <button
+              onClick={() => {
+                if (editingFolder) {
+                  handleDeleteFolder(editingFolder.id);
+                  setEditingFolder(null);
+                }
+              }}
+              className="w-full py-3 rounded-xl text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors font-medium"
+            >
+              Delete Split
+            </button>
           </div>
         </Modal>
       </div>
