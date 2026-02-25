@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   ChevronLeft,
@@ -71,6 +71,14 @@ export default function LogPage() {
   const [editingFolder, setEditingFolder] = useState<FolderWithCount | null>(null);
   const [editFolderName, setEditFolderName] = useState("");
   const [savingFolderEdit, setSavingFolderEdit] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Blur the edit input on mount to prevent mobile keyboard from popping up
+  useEffect(() => {
+    if (editingFolder && editInputRef.current) {
+      editInputRef.current.blur();
+    }
+  }, [editingFolder]);
 
   // Context menu for location
   const [locationMenuId, setLocationMenuId] = useState<string | null>(null);
@@ -644,6 +652,7 @@ export default function LogPage() {
         >
           <div className="space-y-4">
             <input
+              ref={editInputRef}
               type="text"
               value={editFolderName}
               onChange={(e) => setEditFolderName(e.target.value)}
