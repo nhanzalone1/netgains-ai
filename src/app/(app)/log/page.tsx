@@ -649,7 +649,6 @@ export default function LogPage() {
               onChange={(e) => setEditFolderName(e.target.value)}
               placeholder="e.g., Chest/Front Delt"
               className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSaveFolderEdit();
               }}
