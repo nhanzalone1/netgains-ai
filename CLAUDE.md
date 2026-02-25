@@ -40,6 +40,7 @@ src/
 ├── components/
 │   ├── nutrition-onboarding.tsx # Macro setup flow
 │   ├── daily-brief-card.tsx     # Dynamic pre/post workout card
+│   ├── splash-screen.tsx        # Animated splash on app load
 │   └── ...                      # Other shared UI components
 ├── lib/
 │   ├── supabase/        # DB client + types
@@ -161,7 +162,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Feb 22)
+## Current State (Feb 24)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -171,6 +172,14 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **PR detection** — Shared utility, excludes warmup sets
 - **15 message daily limit** per user
 - **Nuclear reset** via `/debug` page
+- **Splash screen** — Animated line chart + "NetGainsAI" on app load
+- **Split folder reordering** — Move Up/Down buttons in edit modal
+- **Default to Coach tab** — App always opens to /coach after login
+
+### Recent Updates (Feb 24)
+- **Splash screen** (`src/components/splash-screen.tsx`) — Shows animated upward-trending line chart (like a stock chart) in cyan, then fades in "NetGainsAI" text. Displays for ~1.8 seconds on every fresh page load. Wrapped in `(app)/layout.tsx`.
+- **Split folder reordering** — Users can reorder their workout split tiles using Move Up/Move Down buttons in the edit modal. Uses `order_index` field in `folders` table.
+- **Edit Split modal UX** — Keyboard doesn't auto-open when tapping pencil icon, making Move Up/Down buttons easier to access on mobile.
 
 ### Beta Status
 - Testing with dad & uncle
