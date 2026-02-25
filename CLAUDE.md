@@ -71,6 +71,59 @@ src/
 - **Response length:** Coach defaults to 2-3 sentences. Longer responses only for how/why questions, plans, or meal breakdowns.
 - **15 message daily limit** per user
 
+### Science-Based Coaching System
+The coach uses evidence-based exercise science and sports nutrition principles. No broscience. System prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`.
+
+**Phase Awareness** — Tracks how long user has been on current goal:
+- Cutting: Week 1-2 water weight expectations, week 3-4 stall warnings, diet break recommendations at week 6-8+
+- Bulking: Week 1-2 glycogen/water gain expectations, flags if weight climbing too fast or lifts not progressing
+- Maintaining: Tracks 2-3 lb stability range, flags consistent drift
+
+**Pattern Recognition** — Analyzes 5-7 day trends, not single days:
+- Catches weekend overeating patterns
+- Acknowledges consistency streaks
+- Single-day data is noise, trends are signal
+
+**Goal-Aware Calorie Accountability:**
+- Cutting: Calories are a CEILING. Never suggest eating more to "close the gap." Only flag if over calories or under protein.
+- Bulking: Calories are a FLOOR. Flag if consistently under.
+- Maintaining: Target is target, flag drift in either direction.
+
+**Training-Nutrition Integration:**
+- Uses `split_rotation` to know what today's training is
+- Adjusts carb guidance for heavy compound days vs rest days
+- Cutting: prioritize protein + adequate carbs around training
+- Bulking: push carbs on training days for glycogen
+
+**Progressive Overload Tracking:**
+- Compares logged workouts to previous sessions
+- Cutting: strength maintenance is the goal — flags 2-3 week drops
+- Bulking: strength should increase — flags stalls after 3-4 weeks
+- Suggests deload weeks every 4-6 weeks (40-50% volume reduction)
+
+**Recovery Signals** — Checks before blaming diet:
+- Sleep quality and duration
+- Life stress levels
+- Training volume / accumulated fatigue
+
+**Protein Distribution:**
+- 30-50g per meal across 3-5 meals for optimal MPS
+- Flags if all protein concentrated in one meal
+
+**Weekly Check-ins:**
+- Prompts weigh-ins after 7+ days
+- Tracks weekly averages, not daily fluctuations
+- Recognizes recomposition (lifts up + leaner but weight stable)
+
+**Context-Aware Responses:**
+- Morning: focus on daily plan
+- Post-workout: recovery nutrition + session review
+- Evening: accountability check + prep for tomorrow
+
+**Honesty Rule:**
+- If evidence is mixed, say so: "research suggests X but it's not definitive"
+- Don't present preferences as facts
+
 ### Timezone Handling
 - Client sends `localDate` with every message
 - Server uses client date for all meal/workout queries
@@ -95,6 +148,7 @@ Special keys in `coach_memory` table:
 - `split_rotation` — JSON array of workout days (e.g., `["Push", "Pull", "Legs", "Rest"]`)
 - `injuries` — User's injuries/limitations (or "none")
 - `food_staples` — JSON array of foods user always has on hand (e.g., `["whey protein", "eggs", "rice"]`)
+- `goal_start_date` — When user started current goal (for phase awareness)
 - `conversation_summary` — Haiku-generated summary of older messages
 - `summary_message_count` — Number of messages included in the summary
 
@@ -162,7 +216,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Feb 24)
+## Current State (Feb 25)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -176,7 +230,11 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Feb 24)
+### Recent Updates (Feb 25)
+- **Science-based coaching system** — Comprehensive upgrade to coach intelligence. Phase awareness (water weight, stalls, diet breaks), pattern recognition (5-7 day trends), progressive overload tracking, recovery signals, weekly check-ins. See "Science-Based Coaching System" section above.
+- **Cutting calorie fix** — Coach no longer suggests eating more to "close the gap" during a cut. Calories are a ceiling, not a floor. Only flags if over calories or under protein.
+
+### Previous Updates (Feb 24)
 - **Splash screen** (`src/components/splash-screen.tsx`) — Shows animated upward-trending line chart (like a stock chart) in cyan, then fades in "NetGainsAI" text. Displays for ~1.8 seconds on every fresh page load. Wrapped in `(app)/layout.tsx`.
 - **Split folder reordering** — Users can reorder their workout split tiles using Move Up/Move Down buttons in the edit modal. Uses `order_index` field in `folders` table.
 - **Edit Split modal UX** — Keyboard doesn't auto-open when tapping pencil icon, making Move Up/Down buttons easier to access on mobile.
