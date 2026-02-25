@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   ChevronLeft,
@@ -70,17 +70,64 @@ export default function LogPage() {
   const [editFolderName, setEditFolderName] = useState("");
   const [savingFolderEdit, setSavingFolderEdit] = useState(false);
 
+  // Split rotation for ordering folders
+  const [splitRotation, setSplitRotation] = useState<string[]>([]);
+
   // Context menu for location
   const [locationMenuId, setLocationMenuId] = useState<string | null>(null);
 
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Load locations on mount
+  // Load locations and split rotation on mount
   useEffect(() => {
     if (!user) return;
     loadLocations();
+    loadSplitRotation();
   }, [user]);
+
+  const loadSplitRotation = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("coach_memory")
+      .select("value")
+      .eq("user_id", user.id)
+      .eq("key", "split_rotation")
+      .single();
+
+    if (data?.value) {
+      try {
+        const parsed = JSON.parse(data.value);
+        if (Array.isArray(parsed)) {
+          // Filter out "Rest" days and get unique days only
+          const uniqueDays = [...new Set(parsed.filter((day: string) =>
+            day.toLowerCase() !== "rest"
+          ))] as string[];
+          setSplitRotation(uniqueDays);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  };
+
+  // Sort folders based on split rotation order
+  const sortedFolders = useMemo(() => {
+    if (splitRotation.length === 0) return folders;
+
+    return [...folders].sort((a, b) => {
+      // Find index in split rotation (case-insensitive partial match)
+      const findIndex = (name: string) => {
+        const lowerName = name.toLowerCase();
+        const idx = splitRotation.findIndex((day) =>
+          lowerName.includes(day.toLowerCase()) || day.toLowerCase().includes(lowerName)
+        );
+        return idx === -1 ? 999 : idx; // Put unmatched folders at the end
+      };
+
+      return findIndex(a.name) - findIndex(b.name);
+    });
+  }, [folders, splitRotation]);
 
   // Persist selectedLocation to sessionStorage
   useEffect(() => {
@@ -513,7 +560,7 @@ export default function LogPage() {
           {/* 2-Column Grid of Split Boxes */}
           <div className="grid grid-cols-2 gap-3">
             <AnimatePresence>
-              {folders.map((folder) => (
+              {sortedFolders.map((folder) => (
                 <motion.div
                   key={folder.id}
                   initial={{ opacity: 0, scale: 0.9 }}
