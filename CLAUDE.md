@@ -71,6 +71,11 @@ src/
 - **Response length:** Coach defaults to 2-3 sentences. Longer responses only for how/why questions, plans, or meal breakdowns.
 - **15 message daily limit** per user
 
+### API Error Handling
+- **529 Overloaded** — Anthropic's API occasionally returns 529 when under heavy load. This is temporary (usually resolves in minutes to an hour). The chat route retries twice with exponential backoff, then shows a friendly message: "coach is busy right now — try again in a minute."
+- **No fallback to weaker models** — We don't fall back to Haiku when Sonnet is overloaded. Better to wait than give degraded responses.
+- **Error logging** — All API errors are logged with stack traces for debugging. Check Vercel logs if issues persist.
+
 ### Science-Based Coaching System
 The coach uses evidence-based exercise science and sports nutrition principles. No broscience. System prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`.
 
