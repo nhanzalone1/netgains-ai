@@ -10,6 +10,7 @@ import {
   Trash2,
   CheckCircle,
   Info,
+  Pencil,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -63,6 +64,11 @@ export default function LogPage() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [savingFolder, setSavingFolder] = useState(false);
+
+  // Edit folder state
+  const [editingFolder, setEditingFolder] = useState<FolderWithCount | null>(null);
+  const [editFolderName, setEditFolderName] = useState("");
+  const [savingFolderEdit, setSavingFolderEdit] = useState(false);
 
   // Context menu for location
   const [locationMenuId, setLocationMenuId] = useState<string | null>(null);
@@ -238,6 +244,35 @@ export default function LogPage() {
 
     await supabase.from("folders").delete().eq("id", folderId);
     setFolders((prev) => prev.filter((f) => f.id !== folderId));
+  };
+
+  const handleEditFolder = (folder: FolderWithCount) => {
+    setEditingFolder(folder);
+    setEditFolderName(folder.name);
+  };
+
+  const handleSaveFolderEdit = async () => {
+    if (!editingFolder || !editFolderName.trim()) return;
+
+    setSavingFolderEdit(true);
+    try {
+      const { error } = await supabase
+        .from("folders")
+        .update({ name: editFolderName.trim() })
+        .eq("id", editingFolder.id);
+
+      if (!error) {
+        setFolders((prev) =>
+          prev.map((f) =>
+            f.id === editingFolder.id ? { ...f, name: editFolderName.trim() } : f
+          )
+        );
+        setEditingFolder(null);
+      }
+    } catch (err) {
+      console.error("Failed to update folder:", err);
+    }
+    setSavingFolderEdit(false);
   };
 
   // Open workout session for a folder
@@ -493,18 +528,31 @@ export default function LogPage() {
                     border: "1px solid rgba(255, 255, 255, 0.05)",
                   }}
                 >
-                  {/* Delete button */}
-                  <motion.button
-                    initial={{ opacity: 0 }}
-                    whileHover={{ scale: 1.1 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteFolder(folder.id);
-                    }}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-destructive/20 text-destructive"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </motion.button>
+                  {/* Action buttons */}
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      whileHover={{ scale: 1.1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditFolder(folder);
+                      }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary/20 text-primary"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </motion.button>
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      whileHover={{ scale: 1.1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFolder(folder.id);
+                      }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-destructive/20 text-destructive"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </motion.button>
+                  </div>
 
                   {/* Folder Icon */}
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -566,6 +614,34 @@ export default function LogPage() {
               disabled={!newFolderName.trim()}
             >
               Create Split
+            </Button>
+          </div>
+        </Modal>
+
+        {/* Edit Split Modal */}
+        <Modal
+          open={!!editingFolder}
+          onClose={() => setEditingFolder(null)}
+          title="Rename Split"
+        >
+          <div className="space-y-4">
+            <input
+              type="text"
+              value={editFolderName}
+              onChange={(e) => setEditFolderName(e.target.value)}
+              placeholder="e.g., Chest/Front Delt"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveFolderEdit();
+              }}
+            />
+            <Button
+              onClick={handleSaveFolderEdit}
+              loading={savingFolderEdit}
+              disabled={!editFolderName.trim()}
+            >
+              Save
             </Button>
           </div>
         </Modal>
