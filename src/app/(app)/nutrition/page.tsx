@@ -467,10 +467,10 @@ export default function NutritionPage() {
       date: formatDate(selectedDate),
       meal_type: addFoodType,
       food_name: foodName.trim(),
-      calories: parseInt(foodCalories) || 0,
-      protein: parseInt(foodProtein) || 0,
-      carbs: parseInt(foodCarbs) || 0,
-      fat: parseInt(foodFat) || 0,
+      calories: parseFloat(foodCalories) || 0,
+      protein: parseFloat(foodProtein) || 0,
+      carbs: parseFloat(foodCarbs) || 0,
+      fat: parseFloat(foodFat) || 0,
       serving_size: foodServing.trim() || null,
       ai_generated: false,
       consumed: true,
@@ -568,10 +568,10 @@ export default function NutritionPage() {
 
     const updatedMeal = {
       food_name: editMealName.trim(),
-      calories: parseInt(editMealCalories) || 0,
-      protein: parseInt(editMealProtein) || 0,
-      carbs: parseInt(editMealCarbs) || 0,
-      fat: parseInt(editMealFat) || 0,
+      calories: parseFloat(editMealCalories) || 0,
+      protein: parseFloat(editMealProtein) || 0,
+      carbs: parseFloat(editMealCarbs) || 0,
+      fat: parseFloat(editMealFat) || 0,
       serving_size: editMealServing.trim() || null,
     };
 
@@ -605,10 +605,10 @@ export default function NutritionPage() {
     setSavingGoals(true);
 
     const newGoals = {
-      calories: parseInt(editCalories) || goals.calories,
-      protein: parseInt(editProtein) || goals.protein,
-      carbs: parseInt(editCarbs) || goals.carbs,
-      fat: parseInt(editFat) || goals.fat,
+      calories: parseFloat(editCalories) || goals.calories,
+      protein: parseFloat(editProtein) || goals.protein,
+      carbs: parseFloat(editCarbs) || goals.carbs,
+      fat: parseFloat(editFat) || goals.fat,
     };
 
     // Upsert goals (insert or update)
@@ -915,7 +915,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Calories</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={foodCalories}
                 onChange={(e) => setFoodCalories(e.target.value)}
                 placeholder="0"
@@ -926,7 +927,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Protein (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={foodProtein}
                 onChange={(e) => setFoodProtein(e.target.value)}
                 placeholder="0"
@@ -937,7 +939,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Carbs (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={foodCarbs}
                 onChange={(e) => setFoodCarbs(e.target.value)}
                 placeholder="0"
@@ -948,7 +951,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Fat (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={foodFat}
                 onChange={(e) => setFoodFat(e.target.value)}
                 placeholder="0"
@@ -978,7 +982,8 @@ export default function NutritionPage() {
             <label className="block text-[10px] text-muted-foreground uppercase mb-1">Calories</label>
             <input
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
+              step="any"
               value={editCalories}
               onChange={(e) => setEditCalories(e.target.value)}
               placeholder="2000"
@@ -992,7 +997,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Protein (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editProtein}
                 onChange={(e) => setEditProtein(e.target.value)}
                 placeholder="150"
@@ -1003,7 +1009,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Carbs (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editCarbs}
                 onChange={(e) => setEditCarbs(e.target.value)}
                 placeholder="200"
@@ -1014,7 +1021,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Fat (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editFat}
                 onChange={(e) => setEditFat(e.target.value)}
                 placeholder="65"
@@ -1051,7 +1059,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Calories</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editMealCalories}
                 onChange={(e) => setEditMealCalories(e.target.value)}
                 placeholder="0"
@@ -1062,7 +1071,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Protein (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editMealProtein}
                 onChange={(e) => setEditMealProtein(e.target.value)}
                 placeholder="0"
@@ -1073,7 +1083,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Carbs (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editMealCarbs}
                 onChange={(e) => setEditMealCarbs(e.target.value)}
                 placeholder="0"
@@ -1084,7 +1095,8 @@ export default function NutritionPage() {
               <label className="block text-[10px] text-muted-foreground uppercase mb-1">Fat (g)</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step="any"
                 value={editMealFat}
                 onChange={(e) => setEditMealFat(e.target.value)}
                 placeholder="0"

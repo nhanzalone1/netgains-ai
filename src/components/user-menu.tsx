@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -23,24 +23,48 @@ export function UserMenu() {
   const [open, setOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showIntensity, setShowIntensity] = useState(false);
+  const [showSplit, setShowSplit] = useState(false);
   const [intensity, setIntensityState] = useState<IntensityId>("moderate");
+  const [splitRotation, setSplitRotation] = useState<string[]>([]);
+  const [editingSplitIndex, setEditingSplitIndex] = useState<number | null>(null);
+  const [editingSplitValue, setEditingSplitValue] = useState("");
+  const [savingSplit, setSavingSplit] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
-  // Load intensity from profile on mount
+  // Load intensity and split rotation from profile on mount
   useEffect(() => {
     if (!user?.id) return;
-    const loadIntensity = async () => {
-      const { data } = await supabase
+    const loadUserData = async () => {
+      // Load intensity
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("coaching_intensity")
         .eq("id", user.id)
         .single();
-      if (data?.coaching_intensity) {
-        setIntensityState(data.coaching_intensity as IntensityId);
+      if (profileData?.coaching_intensity) {
+        setIntensityState(profileData.coaching_intensity as IntensityId);
+      }
+
+      // Load split rotation
+      const { data: splitData } = await supabase
+        .from("coach_memory")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "split_rotation")
+        .single();
+      if (splitData?.value) {
+        try {
+          const parsed = JSON.parse(splitData.value);
+          if (Array.isArray(parsed)) {
+            setSplitRotation(parsed);
+          }
+        } catch {
+          // ignore parse errors
+        }
       }
     };
-    loadIntensity();
+    loadUserData();
   }, [user?.id, supabase]);
 
   const setIntensity = async (newIntensity: IntensityId) => {
@@ -51,6 +75,51 @@ export function UserMenu() {
         .update({ coaching_intensity: newIntensity })
         .eq("id", user.id);
     }
+  };
+
+  const startEditingSplit = (index: number) => {
+    setEditingSplitIndex(index);
+    setEditingSplitValue(splitRotation[index]);
+  };
+
+  const saveSplitEdit = async () => {
+    if (editingSplitIndex === null || !user?.id) return;
+
+    const newRotation = [...splitRotation];
+    newRotation[editingSplitIndex] = editingSplitValue.trim() || splitRotation[editingSplitIndex];
+
+    setSavingSplit(true);
+    try {
+      // Check if split_rotation exists
+      const { data: existing } = await supabase
+        .from("coach_memory")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("key", "split_rotation")
+        .single();
+
+      if (existing) {
+        await supabase
+          .from("coach_memory")
+          .update({ value: JSON.stringify(newRotation) })
+          .eq("id", existing.id);
+      } else {
+        await supabase
+          .from("coach_memory")
+          .insert({ user_id: user.id, key: "split_rotation", value: JSON.stringify(newRotation) });
+      }
+
+      setSplitRotation(newRotation);
+    } catch (error) {
+      console.error("Failed to save split:", error);
+    }
+    setSavingSplit(false);
+    setEditingSplitIndex(null);
+  };
+
+  const cancelSplitEdit = () => {
+    setEditingSplitIndex(null);
+    setEditingSplitValue("");
   };
 
   const handleSignOut = async () => {
@@ -213,6 +282,81 @@ export function UserMenu() {
                   )}
                 </AnimatePresence>
               </div>
+
+              {/* Split Rotation Editor */}
+              {splitRotation.length > 0 && (
+                <div className="border-b border-white/5">
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowSplit(!showSplit)}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                  >
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span className="font-medium flex-1">Training Split</span>
+                    <span className="text-xs text-muted-foreground">{splitRotation.filter(d => d !== "Rest").length} days</span>
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {showSplit && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-2 pb-2 space-y-1">
+                          <p className="text-[10px] text-muted-foreground px-2 mb-2">Tap to rename a day</p>
+                          {splitRotation.map((day, index) => (
+                            <div key={index}>
+                              {editingSplitIndex === index ? (
+                                <div className="flex items-center gap-2 p-2 rounded-xl bg-white/5">
+                                  <input
+                                    type="text"
+                                    value={editingSplitValue}
+                                    onChange={(e) => setEditingSplitValue(e.target.value)}
+                                    className="flex-1 bg-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") saveSplitEdit();
+                                      if (e.key === "Escape") cancelSplitEdit();
+                                    }}
+                                  />
+                                  <button
+                                    onClick={saveSplitEdit}
+                                    disabled={savingSplit}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50"
+                                  >
+                                    <Save className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={cancelSplitEdit}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/10 text-muted-foreground hover:bg-white/20"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <motion.button
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => startEditingSplit(index)}
+                                  className="w-full flex items-center gap-3 p-2 rounded-xl transition-colors hover:bg-white/5"
+                                >
+                                  <span className="w-6 h-6 rounded-full flex items-center justify-center bg-white/10 text-xs font-semibold text-muted-foreground">
+                                    {index + 1}
+                                  </span>
+                                  <span className="flex-1 text-left text-sm">{day}</span>
+                                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                                </motion.button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               <motion.button
                 whileTap={{ scale: 0.98 }}

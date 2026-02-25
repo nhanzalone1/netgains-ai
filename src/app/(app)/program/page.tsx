@@ -231,7 +231,7 @@ export default function ProgramPage() {
   );
 
   const handleInputChange = (lift: keyof LiftMaxes, value: string) => {
-    const numValue = parseInt(value) || 0;
+    const numValue = parseFloat(value) || 0;
     const newMaxes = { ...maxes, [lift]: numValue };
     setMaxes(newMaxes);
     autoSaveMaxes(newMaxes, currentWeek);
@@ -414,7 +414,8 @@ export default function ProgramPage() {
                     </label>
                     <input
                       type="number"
-                      inputMode="numeric"
+                      inputMode="decimal"
+                      step="any"
                       value={maxes[lift] || ""}
                       onChange={(e) => handleInputChange(lift, e.target.value)}
                       placeholder="0"

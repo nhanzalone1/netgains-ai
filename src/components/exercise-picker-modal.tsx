@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Search, Plus, X, Dumbbell, ChevronRight, ChevronDown } from "lucide-react";
+import { Search, Plus, X, Dumbbell, ChevronRight, ChevronDown, Trash2, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
@@ -21,16 +21,37 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
 // All muscle groups
-const ALL_MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Core"];
+const ALL_MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Abs"];
+
+// Predefined ab exercises that should always be categorized as Abs (not Legs or other)
+const ABS_EXERCISES = [
+  "hanging leg raise", "hanging leg raises",
+  "cable crunch", "cable crunches",
+  "ab rollout", "ab rollouts", "ab wheel",
+  "plank", "planks", "side plank",
+  "leg raise", "leg raises", "lying leg raise",
+  "sit-up", "sit-ups", "situp", "situps",
+  "crunch", "crunches", "reverse crunch",
+  "dead bug", "dead bugs",
+  "hollow hold", "hollow body",
+  "ab", "abs", "core",
+  "v-up", "v-ups",
+  "toe touch", "toe touches",
+  "woodchop", "wood chop",
+  "pallof press",
+  "decline crunch", "decline sit-up",
+  "captain's chair", "captains chair",
+  "dragon flag",
+];
 
 // Keywords for muscle group categorization
 const MUSCLE_KEYWORDS: Record<string, string[]> = {
   Chest: ["bench", "fly", "chest", "pec", "pushup", "push-up", "incline press", "decline press"],
   Back: ["row", "pull", "lat", "pulldown", "pullup", "pull-up", "deadlift", "back", "shrug"],
   Shoulders: ["shoulder", "ohp", "overhead press", "lateral raise", "front raise", "rear delt", "delt", "military"],
-  Legs: ["squat", "leg", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl"],
+  Legs: ["squat", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl", "leg press", "leg extension", "leg curl"],
   Arms: ["curl", "tricep", "bicep", "arm", "pushdown", "hammer", "preacher", "skull", "dip", "extension"],
-  Core: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch"],
+  Abs: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch", "rollout", "hollow", "v-up", "dead bug"],
 };
 
 // Parse workout name to determine relevant muscle groups
@@ -46,7 +67,7 @@ const getContextualTabs = (workoutName: string): string[] => {
   } else if (name.includes("upper")) {
     relevantGroups.push("Chest", "Back", "Shoulders", "Arms");
   } else if (name.includes("lower")) {
-    relevantGroups.push("Legs", "Core");
+    relevantGroups.push("Legs", "Abs");
   } else {
     // Check for individual muscle group keywords
     if (name.includes("chest") || name.includes("pec")) {
@@ -65,12 +86,17 @@ const getContextualTabs = (workoutName: string): string[] => {
       relevantGroups.push("Legs");
     }
     if (name.includes("core") || name.includes("ab")) {
-      relevantGroups.push("Core");
+      relevantGroups.push("Abs");
     }
-    // Add Legs -> Core association (common pairing)
-    if (relevantGroups.includes("Legs") && !relevantGroups.includes("Core")) {
-      relevantGroups.push("Core");
+    // Add Legs -> Abs association (common pairing)
+    if (relevantGroups.includes("Legs") && !relevantGroups.includes("Abs")) {
+      relevantGroups.push("Abs");
     }
+  }
+
+  // Always include Abs in the tabs since abs can be trained any day
+  if (!relevantGroups.includes("Abs") && relevantGroups.length > 0) {
+    relevantGroups.push("Abs");
   }
 
   // If no specific groups found, show all
@@ -84,11 +110,27 @@ const getContextualTabs = (workoutName: string): string[] => {
 
 const categorizeExercise = (name: string): string => {
   const lowerName = name.toLowerCase();
+
+  // Check predefined ab exercises FIRST to avoid mis-categorization
+  // (e.g., "hanging leg raises" should be Abs, not Legs)
+  if (ABS_EXERCISES.some(abEx => lowerName.includes(abEx))) {
+    return "Abs";
+  }
+
+  // Then check other muscle groups by keyword
   for (const [group, keywords] of Object.entries(MUSCLE_KEYWORDS)) {
+    // Skip Abs since we already checked predefined list
+    if (group === "Abs") continue;
     if (keywords.some(kw => lowerName.includes(kw))) {
       return group;
     }
   }
+
+  // Finally check Abs keywords for any remaining matches
+  if (MUSCLE_KEYWORDS.Abs.some(kw => lowerName.includes(kw))) {
+    return "Abs";
+  }
+
   return "Other";
 };
 
@@ -134,6 +176,14 @@ export function ExercisePickerModal({
   const [newEquipment, setNewEquipment] = useState("barbell");
   const [creating, setCreating] = useState(false);
 
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<ExerciseTemplate | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEquipment, setEditEquipment] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   // Track mount state for async operations
   useEffect(() => {
     isMountedRef.current = true;
@@ -152,6 +202,8 @@ export function ExercisePickerModal({
       setShowCreateForm(false);
       setNewName("");
       setNewEquipment("barbell");
+      setEditMode(false);
+      setEditingExercise(null);
     }
   }, [open, folderId]);
 
@@ -323,6 +375,69 @@ export function ExercisePickerModal({
     }
   };
 
+  // Handle deleting an exercise
+  const handleDelete = async (exerciseId: string) => {
+    setDeletingId(exerciseId);
+    try {
+      const { error } = await supabase
+        .from("exercise_templates")
+        .delete()
+        .eq("id", exerciseId);
+
+      if (!error) {
+        setExercises((prev) => prev.filter((e) => e.id !== exerciseId));
+        setRecentExercises((prev) => prev.filter((e) => e.id !== exerciseId));
+      }
+    } catch (error) {
+      console.error("Failed to delete exercise:", error);
+    }
+    setDeletingId(null);
+  };
+
+  // Handle opening edit modal for an exercise
+  const handleEditExercise = (exercise: ExerciseTemplate) => {
+    setEditingExercise(exercise);
+    setEditName(exercise.name);
+    setEditEquipment(exercise.equipment);
+  };
+
+  // Handle saving edited exercise
+  const handleSaveEdit = async () => {
+    if (!editingExercise || !editName.trim()) return;
+
+    setSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from("exercise_templates")
+        .update({
+          name: editName.trim(),
+          equipment: editEquipment,
+        })
+        .eq("id", editingExercise.id);
+
+      if (!error) {
+        setExercises((prev) =>
+          prev.map((e) =>
+            e.id === editingExercise.id
+              ? { ...e, name: editName.trim(), equipment: editEquipment }
+              : e
+          )
+        );
+        setRecentExercises((prev) =>
+          prev.map((e) =>
+            e.id === editingExercise.id
+              ? { ...e, name: editName.trim(), equipment: editEquipment }
+              : e
+          )
+        );
+        setEditingExercise(null);
+      }
+    } catch (error) {
+      console.error("Failed to update exercise:", error);
+    }
+    setSavingEdit(false);
+  };
+
   const getEquipmentStyle = (equipment: string) => {
     return EQUIPMENT_COLORS[equipment.toLowerCase()] || EQUIPMENT_COLORS.barbell;
   };
@@ -352,14 +467,23 @@ export function ExercisePickerModal({
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
               <button
-                onClick={onClose}
+                onClick={() => {
+                  if (editMode) {
+                    setEditMode(false);
+                  } else {
+                    onClose();
+                  }
+                }}
                 className="text-[#22d3ee] font-medium min-w-[60px]"
               >
-                Cancel
+                {editMode ? "Done" : "Cancel"}
               </button>
               <h1 className="text-lg font-bold text-white">Exercise Library</h1>
-              <button className="text-[#22d3ee] font-medium min-w-[60px] text-right">
-                Edit
+              <button
+                onClick={() => setEditMode(!editMode)}
+                className="text-[#22d3ee] font-medium min-w-[60px] text-right"
+              >
+                {editMode ? "Cancel" : "Edit"}
               </button>
             </div>
 
@@ -497,26 +621,43 @@ export function ExercisePickerModal({
                   {filteredExercises.map((exercise) => {
                     const equipStyle = getEquipmentStyle(exercise.equipment);
                     return (
-                      <button
+                      <div
                         key={exercise.id}
-                        onClick={() => handleSelect(exercise)}
                         className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
                         style={{ background: "rgba(255, 255, 255, 0.03)" }}
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-white truncate">{exercise.name}</p>
-                          <p className="text-xs text-gray-500 capitalize">{exercise.equipment}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="px-2.5 py-1 rounded-full text-xs font-semibold"
-                            style={{ background: equipStyle.bg, color: equipStyle.text }}
+                        {editMode && (
+                          <button
+                            onClick={() => handleDelete(exercise.id)}
+                            disabled={deletingId === exercise.id}
+                            className="mr-3 w-8 h-8 rounded-full flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
                           >
-                            {formatEquipment(exercise.equipment)}
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-gray-600" />
-                        </div>
-                      </button>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => editMode ? handleEditExercise(exercise) : handleSelect(exercise)}
+                          className="flex-1 min-w-0 text-left flex items-center justify-between"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white truncate">{exercise.name}</p>
+                            <p className="text-xs text-gray-500 capitalize">{exercise.equipment}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                              style={{ background: equipStyle.bg, color: equipStyle.text }}
+                            >
+                              {formatEquipment(exercise.equipment)}
+                            </span>
+                            {editMode ? (
+                              <Pencil className="w-4 h-4 text-gray-500" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-gray-600" />
+                            )}
+                          </div>
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -548,25 +689,42 @@ export function ExercisePickerModal({
                             {muscleExercises.map(exercise => {
                               const equipStyle = getEquipmentStyle(exercise.equipment);
                               return (
-                                <button
+                                <div
                                   key={exercise.id}
-                                  onClick={() => handleSelect(exercise)}
                                   className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
                                   style={{ background: "rgba(255, 255, 255, 0.03)" }}
                                 >
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-white truncate">{exercise.name}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="px-2.5 py-1 rounded-full text-xs font-semibold"
-                                      style={{ background: equipStyle.bg, color: equipStyle.text }}
+                                  {editMode && (
+                                    <button
+                                      onClick={() => handleDelete(exercise.id)}
+                                      disabled={deletingId === exercise.id}
+                                      className="mr-3 w-8 h-8 rounded-full flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
                                     >
-                                      {formatEquipment(exercise.equipment)}
-                                    </span>
-                                    <ChevronRight className="w-4 h-4 text-gray-600" />
-                                  </div>
-                                </button>
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => editMode ? handleEditExercise(exercise) : handleSelect(exercise)}
+                                    className="flex-1 min-w-0 text-left flex items-center justify-between"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold text-white truncate">{exercise.name}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                        style={{ background: equipStyle.bg, color: equipStyle.text }}
+                                      >
+                                        {formatEquipment(exercise.equipment)}
+                                      </span>
+                                      {editMode ? (
+                                        <Pencil className="w-4 h-4 text-gray-500" />
+                                      ) : (
+                                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                                      )}
+                                    </div>
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
@@ -590,25 +748,42 @@ export function ExercisePickerModal({
                         </h3>
                         <div className="space-y-2">
                           {group.exercises.map(exercise => (
-                            <button
+                            <div
                               key={exercise.id}
-                              onClick={() => handleSelect(exercise)}
                               className="w-full p-4 rounded-xl flex items-center justify-between text-left transition-colors hover:bg-white/5"
                               style={{ background: "rgba(255, 255, 255, 0.03)" }}
                             >
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-white truncate">{exercise.name}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
-                                  style={{ background: equipStyle.bg, color: equipStyle.text }}
+                              {editMode && (
+                                <button
+                                  onClick={() => handleDelete(exercise.id)}
+                                  disabled={deletingId === exercise.id}
+                                  className="mr-3 w-8 h-8 rounded-full flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
                                 >
-                                  {formatEquipment(exercise.equipment)}
-                                </span>
-                                <ChevronRight className="w-4 h-4 text-gray-600" />
-                              </div>
-                            </button>
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => editMode ? handleEditExercise(exercise) : handleSelect(exercise)}
+                                className="flex-1 min-w-0 text-left flex items-center justify-between"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-white truncate">{exercise.name}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                    style={{ background: equipStyle.bg, color: equipStyle.text }}
+                                  >
+                                    {formatEquipment(exercise.equipment)}
+                                  </span>
+                                  {editMode ? (
+                                    <Pencil className="w-4 h-4 text-gray-500" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                                  )}
+                                </div>
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -619,7 +794,7 @@ export function ExercisePickerModal({
             </div>
 
             {/* Create New Exercise Button */}
-            {!showCreateForm && (
+            {!showCreateForm && !editMode && (
               <div className="px-4 py-4 border-t border-white/10">
                 <button
                   onClick={() => setShowCreateForm(true)}
@@ -634,6 +809,90 @@ export function ExercisePickerModal({
                 </button>
               </div>
             )}
+
+            {/* Edit Exercise Modal */}
+            <AnimatePresence>
+              {editingExercise && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                  onClick={() => setEditingExercise(null)}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full max-w-sm rounded-2xl p-6 border border-gray-800"
+                    style={{ background: "#1a1a24" }}
+                  >
+                    <h2 className="text-lg font-bold text-white mb-4">Edit Exercise</h2>
+
+                    {/* Exercise Name */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#22d3ee] min-h-[44px]"
+                        style={{ background: "rgba(255, 255, 255, 0.08)" }}
+                      />
+                    </div>
+
+                    {/* Equipment Selection */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                        Equipment
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {EQUIPMENT_ORDER.map((equip) => {
+                          const style = getEquipmentStyle(equip);
+                          const isActive = editEquipment === equip;
+                          return (
+                            <button
+                              key={equip}
+                              onClick={() => setEditEquipment(equip)}
+                              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                                isActive ? "ring-2 ring-offset-2 ring-offset-[#1a1a24]" : ""
+                              }`}
+                              style={{
+                                background: style.bg,
+                                color: style.text,
+                                ringColor: isActive ? style.text : undefined,
+                              }}
+                            >
+                              {formatEquipment(equip)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setEditingExercise(null)}
+                        className="flex-1 py-3 rounded-xl font-semibold text-gray-400 bg-white/10"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={!editName.trim() || savingEdit}
+                        className="flex-1 py-3 rounded-xl font-semibold text-black bg-[#22d3ee] disabled:opacity-50"
+                      >
+                        {savingEdit ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}

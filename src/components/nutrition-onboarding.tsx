@@ -121,10 +121,10 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
   };
 
   const handleMacrosSubmit = () => {
-    const calories = parseInt(calorieInput);
-    const protein = parseInt(proteinInput);
-    const carbs = parseInt(carbsInput);
-    const fat = parseInt(fatInput);
+    const calories = parseFloat(calorieInput);
+    const protein = parseFloat(proteinInput);
+    const carbs = parseFloat(carbsInput);
+    const fat = parseFloat(fatInput);
 
     if (calories > 0 && protein >= 0 && carbs >= 0 && fat >= 0) {
       setAnswers((prev) => ({
@@ -340,6 +340,8 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
                   <label className="text-xs text-muted-foreground">Calories</label>
                   <input
                     type="number"
+                    inputMode="decimal"
+                    step="any"
                     value={calorieInput}
                     onChange={(e) => setCalorieInput(e.target.value)}
                     placeholder="2000"
@@ -350,6 +352,8 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
                   <label className="text-xs text-muted-foreground">Protein (g)</label>
                   <input
                     type="number"
+                    inputMode="decimal"
+                    step="any"
                     value={proteinInput}
                     onChange={(e) => setProteinInput(e.target.value)}
                     placeholder="150"
@@ -360,6 +364,8 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
                   <label className="text-xs text-muted-foreground">Carbs (g)</label>
                   <input
                     type="number"
+                    inputMode="decimal"
+                    step="any"
                     value={carbsInput}
                     onChange={(e) => setCarbsInput(e.target.value)}
                     placeholder="200"
@@ -370,6 +376,8 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
                   <label className="text-xs text-muted-foreground">Fat (g)</label>
                   <input
                     type="number"
+                    inputMode="decimal"
+                    step="any"
                     value={fatInput}
                     onChange={(e) => setFatInput(e.target.value)}
                     placeholder="65"
