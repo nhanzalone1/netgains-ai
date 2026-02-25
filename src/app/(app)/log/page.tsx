@@ -13,7 +13,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder, useDragControls } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
@@ -73,6 +73,9 @@ export default function LogPage() {
   // Split rotation for ordering folders
   const [splitRotation, setSplitRotation] = useState<string[]>([]);
 
+  // Reorder state
+  const [reorderableFolders, setReorderableFolders] = useState<FolderWithCount[]>([]);
+
   // Context menu for location
   const [locationMenuId, setLocationMenuId] = useState<string | null>(null);
 
@@ -111,7 +114,7 @@ export default function LogPage() {
     }
   };
 
-  // Sort folders based on split rotation order
+  // Sort folders based on split rotation order (only used for initial sort)
   const sortedFolders = useMemo(() => {
     if (splitRotation.length === 0) return folders;
 
@@ -128,6 +131,30 @@ export default function LogPage() {
       return findIndex(a.name) - findIndex(b.name);
     });
   }, [folders, splitRotation]);
+
+  // Sync reorderableFolders when sortedFolders changes
+  useEffect(() => {
+    setReorderableFolders(sortedFolders);
+  }, [sortedFolders]);
+
+  // Save new folder order to database
+  const handleReorder = async (newOrder: FolderWithCount[]) => {
+    setReorderableFolders(newOrder);
+
+    // Update order_index in database for each folder
+    const updates = newOrder.map((folder, index) => ({
+      id: folder.id,
+      order_index: index,
+    }));
+
+    // Batch update - update each folder's order_index
+    for (const update of updates) {
+      await supabase
+        .from("folders")
+        .update({ order_index: update.order_index })
+        .eq("id", update.id);
+    }
+  };
 
   // Persist selectedLocation to sessionStorage
   useEffect(() => {
@@ -553,58 +580,26 @@ export default function LogPage() {
 
         {/* Current Split Section */}
         <div className="mb-4">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Current Split
           </h2>
+          <p className="text-[10px] text-muted-foreground mb-4">Hold dumbbell icon to reorder</p>
 
           {/* 2-Column Grid of Split Boxes */}
-          <div className="grid grid-cols-2 gap-3">
-            <AnimatePresence>
-              {sortedFolders.map((folder) => (
-                <motion.div
-                  key={folder.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => openWorkoutSession(folder)}
-                  className="aspect-square rounded-2xl p-4 flex flex-col justify-between cursor-pointer relative"
-                  style={{
-                    background: "rgba(26, 26, 36, 0.6)",
-                    backdropFilter: "blur(16px)",
-                    border: "1px solid rgba(255, 255, 255, 0.05)",
-                  }}
-                >
-                  {/* Edit button - always visible */}
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditFolder(folder);
-                    }}
-                    className="absolute top-2 right-2 w-8 h-8 rounded-lg flex items-center justify-center bg-white/10 text-muted-foreground"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </motion.button>
-
-                  {/* Folder Icon */}
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Dumbbell className="w-5 h-5 text-primary" />
-                  </div>
-
-                  {/* Folder Info */}
-                  <div>
-                    <h3 className="font-semibold text-sm leading-tight mb-1 line-clamp-2">
-                      {folder.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {folder.exercise_count} exercise
-                      {folder.exercise_count !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+          <Reorder.Group
+            axis="y"
+            values={reorderableFolders}
+            onReorder={handleReorder}
+            className="grid grid-cols-2 gap-3"
+          >
+            {reorderableFolders.map((folder) => (
+              <FolderTile
+                key={folder.id}
+                folder={folder}
+                onOpen={() => openWorkoutSession(folder)}
+                onEdit={() => handleEditFolder(folder)}
+              />
+            ))}
 
             {/* Add Split Day Button */}
             <motion.button
@@ -623,7 +618,7 @@ export default function LogPage() {
                 Add Split
               </span>
             </motion.button>
-          </div>
+          </Reorder.Group>
         </div>
 
         {/* New Split Modal */}
@@ -875,5 +870,68 @@ export default function LogPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+// Separate component for folder tile with drag controls
+function FolderTile({
+  folder,
+  onOpen,
+  onEdit,
+}: {
+  folder: FolderWithCount;
+  onOpen: () => void;
+  onEdit: () => void;
+}) {
+  const dragControls = useDragControls();
+
+  return (
+    <Reorder.Item
+      value={folder}
+      dragListener={false}
+      dragControls={dragControls}
+      className="aspect-square rounded-2xl p-4 flex flex-col justify-between cursor-pointer relative"
+      style={{
+        background: "rgba(26, 26, 36, 0.6)",
+        backdropFilter: "blur(16px)",
+        border: "1px solid rgba(255, 255, 255, 0.05)",
+      }}
+      onClick={onOpen}
+      whileTap={{ scale: 0.97 }}
+    >
+      {/* Edit button - always visible */}
+      <motion.button
+        whileTap={{ scale: 0.9 }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+        className="absolute top-2 right-2 w-8 h-8 rounded-lg flex items-center justify-center bg-white/10 text-muted-foreground"
+      >
+        <Pencil className="w-4 h-4" />
+      </motion.button>
+
+      {/* Folder Icon - Drag Handle */}
+      <div
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          dragControls.start(e);
+        }}
+        className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none"
+      >
+        <Dumbbell className="w-5 h-5 text-primary" />
+      </div>
+
+      {/* Folder Info */}
+      <div>
+        <h3 className="font-semibold text-sm leading-tight mb-1 line-clamp-2">
+          {folder.name}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {folder.exercise_count} exercise
+          {folder.exercise_count !== 1 ? "s" : ""}
+        </p>
+      </div>
+    </Reorder.Item>
   );
 }
