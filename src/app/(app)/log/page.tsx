@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   ChevronLeft,
@@ -72,76 +72,29 @@ export default function LogPage() {
   const [editFolderName, setEditFolderName] = useState("");
   const [savingFolderEdit, setSavingFolderEdit] = useState(false);
 
-  // Split rotation for ordering folders
-  const [splitRotation, setSplitRotation] = useState<string[]>([]);
-
   // Context menu for location
   const [locationMenuId, setLocationMenuId] = useState<string | null>(null);
 
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Load locations and split rotation on mount
+  // Load locations on mount
   useEffect(() => {
     if (!user) return;
     loadLocations();
-    loadSplitRotation();
   }, [user]);
-
-  const loadSplitRotation = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("coach_memory")
-      .select("value")
-      .eq("user_id", user.id)
-      .eq("key", "split_rotation")
-      .single();
-
-    if (data?.value) {
-      try {
-        const parsed = JSON.parse(data.value);
-        if (Array.isArray(parsed)) {
-          // Filter out "Rest" days and get unique days only
-          const uniqueDays = [...new Set(parsed.filter((day: string) =>
-            day.toLowerCase() !== "rest"
-          ))] as string[];
-          setSplitRotation(uniqueDays);
-        }
-      } catch {
-        // ignore parse errors
-      }
-    }
-  };
-
-  // Sort folders based on split rotation order (only used for initial sort)
-  const sortedFolders = useMemo(() => {
-    if (splitRotation.length === 0) return folders;
-
-    return [...folders].sort((a, b) => {
-      // Find index in split rotation (case-insensitive partial match)
-      const findIndex = (name: string) => {
-        const lowerName = name.toLowerCase();
-        const idx = splitRotation.findIndex((day) =>
-          lowerName.includes(day.toLowerCase()) || day.toLowerCase().includes(lowerName)
-        );
-        return idx === -1 ? 999 : idx; // Put unmatched folders at the end
-      };
-
-      return findIndex(a.name) - findIndex(b.name);
-    });
-  }, [folders, splitRotation]);
 
   // Move folder up or down in order
   const handleMoveFolder = async (folderId: string, direction: "up" | "down") => {
-    const currentIndex = sortedFolders.findIndex((f) => f.id === folderId);
+    const currentIndex = folders.findIndex((f) => f.id === folderId);
     if (currentIndex === -1) return;
 
     const newIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= sortedFolders.length) return;
+    if (newIndex < 0 || newIndex >= folders.length) return;
 
     // Swap order_index values
-    const currentFolder = sortedFolders[currentIndex];
-    const swapFolder = sortedFolders[newIndex];
+    const currentFolder = folders[currentIndex];
+    const swapFolder = folders[newIndex];
 
     // Update both folders in database
     await Promise.all([
@@ -592,7 +545,7 @@ export default function LogPage() {
           {/* 2-Column Grid of Split Boxes */}
           <div className="grid grid-cols-2 gap-3">
             <AnimatePresence>
-              {sortedFolders.map((folder) => (
+              {folders.map((folder) => (
                 <motion.div
                   key={folder.id}
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -718,7 +671,7 @@ export default function LogPage() {
                     setEditingFolder(null);
                   }
                 }}
-                disabled={editingFolder ? sortedFolders.findIndex(f => f.id === editingFolder.id) === 0 : true}
+                disabled={editingFolder ? folders.findIndex(f => f.id === editingFolder.id) === 0 : true}
                 className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-30 disabled:hover:bg-white/10"
               >
                 <ChevronUp className="w-5 h-5" />
@@ -731,7 +684,7 @@ export default function LogPage() {
                     setEditingFolder(null);
                   }
                 }}
-                disabled={editingFolder ? sortedFolders.findIndex(f => f.id === editingFolder.id) === sortedFolders.length - 1 : true}
+                disabled={editingFolder ? folders.findIndex(f => f.id === editingFolder.id) === folders.length - 1 : true}
                 className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-30 disabled:hover:bg-white/10"
               >
                 <ChevronDown className="w-5 h-5" />
