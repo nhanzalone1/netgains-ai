@@ -10,17 +10,6 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMounted(true);
 
-    // Check if we've already shown splash this session
-    const hasShownSplash = sessionStorage.getItem("netgains-splash-shown");
-
-    if (hasShownSplash) {
-      setShowSplash(false);
-      return;
-    }
-
-    // Mark splash as shown for this session
-    sessionStorage.setItem("netgains-splash-shown", "true");
-
     // Hide splash after 1.5 seconds
     const timer = setTimeout(() => {
       setShowSplash(false);
