@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -120,6 +120,62 @@ export function UserMenu() {
   const cancelSplitEdit = () => {
     setEditingSplitIndex(null);
     setEditingSplitValue("");
+  };
+
+  const repeatSplitRotation = async () => {
+    if (!user?.id || splitRotation.length === 0) return;
+
+    const doubled = [...splitRotation, ...splitRotation];
+
+    setSavingSplit(true);
+    try {
+      const { data: existing } = await supabase
+        .from("coach_memory")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("key", "split_rotation")
+        .single();
+
+      if (existing) {
+        await supabase
+          .from("coach_memory")
+          .update({ value: JSON.stringify(doubled) })
+          .eq("id", existing.id);
+      }
+
+      setSplitRotation(doubled);
+    } catch (error) {
+      console.error("Failed to repeat split:", error);
+    }
+    setSavingSplit(false);
+  };
+
+  const removeSplitDay = async (index: number) => {
+    if (!user?.id || splitRotation.length <= 1) return;
+
+    const newRotation = splitRotation.filter((_, i) => i !== index);
+
+    setSavingSplit(true);
+    try {
+      const { data: existing } = await supabase
+        .from("coach_memory")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("key", "split_rotation")
+        .single();
+
+      if (existing) {
+        await supabase
+          .from("coach_memory")
+          .update({ value: JSON.stringify(newRotation) })
+          .eq("id", existing.id);
+      }
+
+      setSplitRotation(newRotation);
+    } catch (error) {
+      console.error("Failed to remove split day:", error);
+    }
+    setSavingSplit(false);
   };
 
   const handleSignOut = async () => {
@@ -306,7 +362,7 @@ export function UserMenu() {
                         className="overflow-hidden"
                       >
                         <div className="px-2 pb-2 space-y-1">
-                          <p className="text-[10px] text-muted-foreground px-2 mb-2">Tap to rename a day</p>
+                          <p className="text-[10px] text-muted-foreground px-2 mb-2">Tap to rename, swipe to delete</p>
                           {splitRotation.map((day, index) => (
                             <div key={index}>
                               {editingSplitIndex === index ? (
@@ -337,20 +393,42 @@ export function UserMenu() {
                                   </button>
                                 </div>
                               ) : (
-                                <motion.button
-                                  whileTap={{ scale: 0.98 }}
-                                  onClick={() => startEditingSplit(index)}
-                                  className="w-full flex items-center gap-3 p-2 rounded-xl transition-colors hover:bg-white/5"
-                                >
-                                  <span className="w-6 h-6 rounded-full flex items-center justify-center bg-white/10 text-xs font-semibold text-muted-foreground">
-                                    {index + 1}
-                                  </span>
-                                  <span className="flex-1 text-left text-sm">{day}</span>
-                                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                                </motion.button>
+                                <div className="flex items-center gap-1">
+                                  <motion.button
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => startEditingSplit(index)}
+                                    className="flex-1 flex items-center gap-3 p-2 rounded-xl transition-colors hover:bg-white/5"
+                                  >
+                                    <span className="w-6 h-6 rounded-full flex items-center justify-center bg-white/10 text-xs font-semibold text-muted-foreground">
+                                      {index + 1}
+                                    </span>
+                                    <span className="flex-1 text-left text-sm">{day}</span>
+                                    <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                                  </motion.button>
+                                  {splitRotation.length > 1 && (
+                                    <button
+                                      onClick={() => removeSplitDay(index)}
+                                      disabled={savingSplit}
+                                      className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           ))}
+
+                          {/* Repeat button */}
+                          <motion.button
+                            whileTap={{ scale: 0.98 }}
+                            onClick={repeatSplitRotation}
+                            disabled={savingSplit}
+                            className="w-full flex items-center justify-center gap-2 p-2 mt-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                          >
+                            <Repeat className="w-4 h-4" />
+                            <span className="text-sm font-medium">Repeat Cycle</span>
+                          </motion.button>
                         </div>
                       </motion.div>
                     )}
