@@ -5,11 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export function SplashScreen({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-
     // Hide splash after 1.8 seconds (line: 0.8s + text: 0.4s + pause: 0.6s)
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -17,11 +14,6 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
 
     return () => clearTimeout(timer);
   }, []);
-
-  // Prevent hydration mismatch - render children immediately on server
-  if (!mounted) {
-    return <>{children}</>;
-  }
 
   // Upward trending line chart path (like a stock chart going up)
   const chartPath = "M 0 70 L 20 65 L 40 55 L 60 60 L 80 45 L 100 50 L 120 35 L 140 25 L 160 30 L 180 15 L 200 5";
