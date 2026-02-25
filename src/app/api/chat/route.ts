@@ -1524,29 +1524,39 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
         console.log('[Coach] Tools passed to API:', tools.map(t => t.name).join(', '));
         console.log('[Coach] System prompt length:', dynamicSystemPrompt.length, 'chars');
 
-        // Helper to call Anthropic with retry for transient errors
-        async function callAnthropicWithRetry(retries = 3): Promise<Anthropic.Message> {
-          for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-              return await anthropic.messages.create({
-                model: AI_MODELS.COACHING,
-                max_tokens: AI_TOKEN_LIMITS.COACHING,
-                system: dynamicSystemPrompt,
-                messages: currentMessages,
-                tools,
-              });
-            } catch (err) {
-              const isRetryable = err instanceof Error &&
-                ('status' in err && (err as { status: number }).status === 529);
-              if (isRetryable && attempt < retries) {
-                console.log(`[Coach] API overloaded, retrying (${attempt}/${retries})...`);
-                await new Promise(r => setTimeout(r, 1000 * attempt)); // Exponential backoff
-                continue;
+        // Helper to call Anthropic with retry and fallback for overload errors
+        async function callAnthropicWithRetry(retries = 2): Promise<Anthropic.Message> {
+          const models = [AI_MODELS.COACHING, 'claude-3-haiku-20240307']; // Fallback to Haiku if Sonnet overloaded
+
+          for (const model of models) {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+              try {
+                console.log(`[Coach] Trying ${model} (attempt ${attempt}/${retries})`);
+                return await anthropic.messages.create({
+                  model,
+                  max_tokens: AI_TOKEN_LIMITS.COACHING,
+                  system: dynamicSystemPrompt,
+                  messages: currentMessages,
+                  tools,
+                });
+              } catch (err) {
+                const status = err instanceof Error && 'status' in err
+                  ? (err as { status: number }).status
+                  : 0;
+
+                if (status === 529) {
+                  console.log(`[Coach] ${model} overloaded`);
+                  if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 500 * attempt));
+                    continue;
+                  }
+                  break; // Try next model
+                }
+                throw err; // Non-529 error, don't retry
               }
-              throw err;
             }
           }
-          throw new Error('Max retries exceeded');
+          throw new Error('All models unavailable');
         }
 
         // Loop to handle tool calls (max iterations to prevent infinite loops)
