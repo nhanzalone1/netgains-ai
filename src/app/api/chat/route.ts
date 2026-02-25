@@ -1524,39 +1524,43 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
         console.log('[Coach] Tools passed to API:', tools.map(t => t.name).join(', '));
         console.log('[Coach] System prompt length:', dynamicSystemPrompt.length, 'chars');
 
-        // Helper to call Anthropic with retry and fallback for overload errors
+        // Custom error for overloaded API
+        class APIOverloadedError extends Error {
+          constructor() {
+            super('API overloaded');
+            this.name = 'APIOverloadedError';
+          }
+        }
+
+        // Helper to call Anthropic with retry for transient errors
         async function callAnthropicWithRetry(retries = 2): Promise<Anthropic.Message> {
-          const models = [AI_MODELS.COACHING, 'claude-3-haiku-20240307']; // Fallback to Haiku if Sonnet overloaded
+          for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+              console.log(`[Coach] API call attempt ${attempt}/${retries}`);
+              return await anthropic.messages.create({
+                model: AI_MODELS.COACHING,
+                max_tokens: AI_TOKEN_LIMITS.COACHING,
+                system: dynamicSystemPrompt,
+                messages: currentMessages,
+                tools,
+              });
+            } catch (err) {
+              const status = err instanceof Error && 'status' in err
+                ? (err as { status: number }).status
+                : 0;
 
-          for (const model of models) {
-            for (let attempt = 1; attempt <= retries; attempt++) {
-              try {
-                console.log(`[Coach] Trying ${model} (attempt ${attempt}/${retries})`);
-                return await anthropic.messages.create({
-                  model,
-                  max_tokens: AI_TOKEN_LIMITS.COACHING,
-                  system: dynamicSystemPrompt,
-                  messages: currentMessages,
-                  tools,
-                });
-              } catch (err) {
-                const status = err instanceof Error && 'status' in err
-                  ? (err as { status: number }).status
-                  : 0;
-
-                if (status === 529) {
-                  console.log(`[Coach] ${model} overloaded`);
-                  if (attempt < retries) {
-                    await new Promise(r => setTimeout(r, 500 * attempt));
-                    continue;
-                  }
-                  break; // Try next model
+              if (status === 529) {
+                console.log(`[Coach] API overloaded (attempt ${attempt}/${retries})`);
+                if (attempt < retries) {
+                  await new Promise(r => setTimeout(r, 1000 * attempt));
+                  continue;
                 }
-                throw err; // Non-529 error, don't retry
+                throw new APIOverloadedError();
               }
+              throw err;
             }
           }
-          throw new Error('All models unavailable');
+          throw new Error('Max retries exceeded');
         }
 
         // Loop to handle tool calls (max iterations to prevent infinite loops)
@@ -1646,8 +1650,13 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
           : { raw: String(error) };
         console.error('Chat API error:', JSON.stringify(errorDetails));
 
-        // Send error as text instead of crashing the stream
-        const errorMsg = `0:${JSON.stringify("Coach hit an error — try again.")}\n`;
+        // Friendly message for overloaded API
+        const isOverloaded = error instanceof Error && error.name === 'APIOverloadedError';
+        const userMessage = isOverloaded
+          ? "coach is busy right now — try again in a minute."
+          : "coach hit an error — try again.";
+
+        const errorMsg = `0:${JSON.stringify(userMessage)}\n`;
         controller.enqueue(encoder.encode(errorMsg));
         controller.close();
       }
