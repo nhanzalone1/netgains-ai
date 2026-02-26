@@ -76,6 +76,12 @@ src/
 - **No fallback to weaker models** — We don't fall back to Haiku when Sonnet is overloaded. Better to wait than give degraded responses.
 - **Error logging** — All API errors are logged with stack traces for debugging. Check Vercel logs if issues persist.
 
+### Model Deprecation (Feb 25, 2026)
+- **claude-3-5-haiku-20241022** — Deprecated, returns 404. Was used for Daily Brief, Nutrition Estimate, and Onboarding Parse.
+- **claude-3-haiku-20240307** — Still works. Now used for all Haiku tasks (summarization, daily brief, nutrition estimate, onboarding).
+- **claude-sonnet-4-20250514** — Current model for coaching. May get 529 overloaded during high demand.
+- **Check model status** — If features break with 404 errors, check https://docs.anthropic.com/en/docs/resources/model-deprecations for deprecated models and update `src/lib/constants.ts`.
+
 ### Science-Based Coaching System
 The coach uses evidence-based exercise science and sports nutrition principles. No broscience. System prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`.
 
