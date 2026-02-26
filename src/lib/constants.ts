@@ -5,9 +5,9 @@
 export const AI_MODELS = {
   COACHING: 'claude-sonnet-4-20250514',
   SUMMARIZATION: 'claude-3-haiku-20240307',
-  DAILY_BRIEF: 'claude-3-5-haiku-20241022',
-  NUTRITION_ESTIMATE: 'claude-3-5-haiku-20241022',
-  ONBOARDING_PARSE: 'claude-3-5-haiku-20241022',
+  DAILY_BRIEF: 'claude-3-haiku-20240307',
+  NUTRITION_ESTIMATE: 'claude-3-haiku-20240307',
+  ONBOARDING_PARSE: 'claude-3-haiku-20240307',
 } as const;
 
 export const AI_TOKEN_LIMITS = {
