@@ -11,7 +11,7 @@ export const AI_MODELS = {
 } as const;
 
 export const AI_TOKEN_LIMITS = {
-  COACHING: 1024,
+  COACHING: 2048,
   SUMMARIZATION: 250,
   DAILY_BRIEF: 150,
   NUTRITION_ESTIMATE: 256,
