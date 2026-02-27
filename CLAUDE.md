@@ -68,7 +68,7 @@ src/
 - **Dynamic system prompt:** ~800 tokens for onboarded users, ~1,500 for new users
 - **Compact data formats:** Workouts sent as "Bench: 185x5, 185x5[drop]" not full JSON
 - **Conversation memory:** After 10 messages, summarize chat into bullet points stored in coach_memory. New messages get summary + last 10 messages.
-- **Response length:** Coach defaults to 2-3 sentences. Longer responses only for how/why questions, plans, or meal breakdowns.
+- **Response length:** Coach matches the depth of the moment — weight check-ins get full narrative debriefs, meal logs get biology + optimization, quick questions get sharp answers. Token limit: 2048.
 - **15 message daily limit** per user
 
 ### API Error Handling
@@ -84,6 +84,19 @@ src/
 
 ### Science-Based Coaching System
 The coach uses evidence-based exercise science and sports nutrition principles. No broscience. System prompt lives in `getSystemPrompt()` in `src/app/api/chat/route.ts`.
+
+**Elite Trainer Voice (Feb 27):**
+- Coach is an elite personal trainer, not a chatbot — locked in with the user every day
+- Every response opens with a punchy headline that makes the user feel something: "The biological math never lies." / "You just robbed your fat stores in your sleep."
+- Explains the WHY behind every observation with specific biology, not labels
+- Uses exact numbers and body stats to make it personal: "you're running a 400-calorie deficit on a 174 lb frame"
+- Names strategic moves like missions: "The Pump Primer", "The Fasted Strike"
+- Ends with direct action command + follow-up question
+
+**Labeling vs Mechanism (CRITICAL):**
+- NEVER label food good/bad: "skip the casserole, it's a calorie bomb"
+- ALWAYS explain mechanism: "the casserole is loaded with heavy cream — that fat payload will slow gastric emptying and trap protein in your gut for 3+ hours instead of delivering it to muscles while they're repairing. you just trained — you need fast absorption, not a fat-delayed protein trickle."
+- The difference: labeling tells them what. Mechanism tells them what happens inside their body.
 
 **Phase Awareness** — Tracks how long user has been on current goal:
 - Cutting: Week 1-2 water weight expectations, week 3-4 stall warnings, diet break recommendations at week 6-8+
@@ -227,7 +240,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Feb 25)
+## Current State (Feb 27)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -241,11 +254,16 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Feb 25)
+### Recent Updates (Feb 27)
+- **Elite trainer voice upgrade** — Coach persona shifted from casual "texting a friend" to elite personal trainer. Opens with punchy headlines, explains biological mechanisms instead of labeling foods, uses exact numbers, treats each interaction like a mission briefing.
+- **Labeling vs mechanism examples** — Added explicit examples in system prompt showing bad (labeling) vs good (mechanism) food explanations.
+- **Token limit increased** — Coaching responses now allow up to 2048 tokens (was 1024) to support the new narrative style.
+
+### Previous Updates (Feb 25)
 - **Science-based coaching system** — Comprehensive upgrade to coach intelligence. Phase awareness (water weight, stalls, diet breaks), pattern recognition (5-7 day trends), progressive overload tracking, recovery signals, weekly check-ins. See "Science-Based Coaching System" section above.
 - **Cutting calorie fix** — Coach no longer suggests eating more to "close the gap" during a cut. Calories are a ceiling, not a floor. Only flags if over calories or under protein.
 
-### Previous Updates (Feb 24)
+### Earlier Updates (Feb 24)
 - **Splash screen** (`src/components/splash-screen.tsx`) — Shows animated upward-trending line chart (like a stock chart) in cyan, then fades in "NetGainsAI" text. Displays for ~1.8 seconds on every fresh page load. Wrapped in `(app)/layout.tsx`.
 - **Split folder reordering** — Users can reorder their workout split tiles using Move Up/Move Down buttons in the edit modal. Uses `order_index` field in `folders` table.
 - **Edit Split modal UX** — Keyboard doesn't auto-open when tapping pencil icon, making Move Up/Down buttons easier to access on mobile.
