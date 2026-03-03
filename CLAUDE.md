@@ -158,6 +158,23 @@ Coach is always one step ahead. Every interaction ends with a clear directive fo
 
 General rule: Every response ends with what's next. Never leave the user at a dead end.
 
+**Auto-Trigger System (Mar 2):**
+When users log meals or complete workouts, the system automatically generates a coach "next up" directive without requiring them to open the coach tab.
+
+How it works:
+1. User confirms a meal or saves a workout
+2. `/api/coach-trigger` endpoint is called (uses Haiku for speed/cost)
+3. Haiku generates a short directive based on user context (goals, today's nutrition, food staples)
+4. Message is saved to `chat_messages` table
+5. Badge appears on Coach tab in bottom nav
+6. When user opens coach tab, message is already there
+
+Technical details:
+- `src/app/api/coach-trigger/route.ts` — Haiku-powered endpoint (300 token limit)
+- `src/lib/coach-notification.ts` — Database-backed notification state
+- Badge state uses `coach_last_viewed_at` in `coach_memory` table (persists across sessions/devices)
+- Triggers from: `handleSaveFood`, `markAsConsumed`, `copyMeal` (nutrition), `handleSaveWorkout` (log)
+
 ### Timezone Handling
 - Client sends `localDate` with every message
 - Server uses client date for all meal/workout queries
@@ -185,6 +202,7 @@ Special keys in `coach_memory` table:
 - `goal_start_date` — When user started current goal (for phase awareness)
 - `conversation_summary` — Haiku-generated summary of older messages
 - `summary_message_count` — Number of messages included in the summary
+- `coach_last_viewed_at` — ISO timestamp of when user last opened coach tab (for unread badge)
 
 RLS policies: users can only access their own data
 
@@ -265,6 +283,8 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 2)
+- **Auto-trigger system** — When users log meals or complete workouts, Haiku automatically generates a "next up" directive and saves it to chat. Badge appears on Coach tab until viewed. Uses database for persistence across sessions/devices.
+- **Daily message counter** — Shows count of user messages sent today in coach header, resets at midnight.
 - **Proactive momentum system** — Coach now automatically provides next-step directives after every interaction. Weight check-ins get full day plans, meal logs get "next up" instructions, workouts trigger recovery nutrition guidance. User never has to ask "what's next."
 
 ### Previous Updates (Feb 27)
