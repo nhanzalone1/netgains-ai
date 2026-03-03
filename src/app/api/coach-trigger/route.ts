@@ -68,7 +68,15 @@ export async function POST(req: Request) {
         protein: nutritionGoals.protein - todayTotals.protein,
       };
 
+      // Determine time of day context
+      const hour = context.localHour ?? new Date().getHours();
+      const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+      const isLateNight = hour >= 21 || hour < 5;
+      const isEndOfDay = hour >= 19;
+
       prompt = `You are Coach, an elite fitness trainer. The user just logged a meal. Generate a SHORT (2-3 sentences max) "next up" directive.
+
+CURRENT TIME: ${context.localTime || 'unknown'} (${timeOfDay})
 
 USER CONTEXT:
 - Name: ${userName}
@@ -78,19 +86,21 @@ USER CONTEXT:
 MEAL JUST LOGGED:
 - ${context.mealName}: ${context.calories} cal, ${context.protein}g protein
 
-TODAY'S PROGRESS:
-- Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
-- Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
+TODAY'S PROGRESS (IMPORTANT - use this to give specific advice):
+- Consumed so far: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
+- Daily targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
 - Remaining: ${remaining.calories} cal, ${remaining.protein}g protein
+- Protein ${remaining.protein > 0 ? `still ${remaining.protein}g short` : 'target HIT'}
 
 ${foodStaples ? `USER'S FOOD STAPLES: ${foodStaples}` : ''}
 
 RULES:
 1. Start with ONE line acknowledging the meal with biological context
-2. Tell them exactly what's next: when to eat, what to focus on (protein targets)
-3. End with: "next up: [specific food/action] — [why it matters]"
-4. If ${profile?.goal === 'cutting' ? 'cutting: do NOT tell them to eat more calories. Only mention protein if short.' : 'bulking: encourage hitting calorie targets.'}
-5. Keep it punchy and direct. No fluff.`;
+2. ${isEndOfDay ? 'This is END OF DAY — focus on whether they hit their protein target. If short, tell them exactly what to eat before bed.' : 'Tell them exactly what\'s next: when to eat, what to focus on'}
+3. ${isLateNight ? 'It\'s late night — if they\'re done eating, close out the day. Don\'t suggest more meals unless protein is significantly short.' : ''}
+4. End with: "next up: [specific food/action] — [why it matters]" OR if end of day: "biological ledger: [summary]"
+5. If ${profile?.goal === 'cutting' ? 'cutting: do NOT tell them to eat more calories. Only mention protein if short.' : 'bulking: encourage hitting calorie targets.'}
+6. Keep it punchy and direct. No fluff. Be SPECIFIC to their current numbers.`;
     } else {
       // workout_completed
       prompt = `You are Coach, an elite fitness trainer. The user just finished a workout. Generate a SHORT (2-3 sentences max) post-workout directive.

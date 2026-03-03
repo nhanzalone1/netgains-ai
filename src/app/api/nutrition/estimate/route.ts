@@ -3,11 +3,17 @@ import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS, AI_TOKEN_LIMITS } from '@/lib/constants';
 
 export async function POST(req: Request) {
-  const { foodDescription } = await req.json();
+  const { foodDescription, servingSize } = await req.json();
 
   if (!foodDescription || typeof foodDescription !== 'string') {
     return Response.json({ error: 'Food description required' }, { status: 400 });
   }
+
+  // If user provided a serving size, include it in the description
+  const hasUserServing = servingSize && typeof servingSize === 'string' && servingSize.trim();
+  const fullDescription = hasUserServing
+    ? `${foodDescription} (serving size: ${servingSize.trim()})`
+    : foodDescription;
 
   // Verify user is authenticated
   const supabase = await createClient();
@@ -20,13 +26,22 @@ export async function POST(req: Request) {
   try {
     const anthropic = new Anthropic();
 
-    const response = await anthropic.messages.create({
-      model: AI_MODELS.NUTRITION_ESTIMATE,
-      max_tokens: AI_TOKEN_LIMITS.NUTRITION_ESTIMATE,
-      messages: [
-        {
-          role: 'user',
-          content: `Estimate the nutritional information for: "${foodDescription}"
+    const prompt = hasUserServing
+      ? `Estimate the nutritional information for: "${fullDescription}"
+
+The user has specified a serving size of "${servingSize.trim()}". Calculate macros for EXACTLY that amount.
+
+Return ONLY a JSON object with these exact fields (numbers only, no units):
+{
+  "food_name": "cleaned up food name",
+  "calories": number,
+  "protein": number (grams),
+  "carbs": number (grams),
+  "fat": number (grams)
+}
+
+Return ONLY the JSON, no explanation.`
+      : `Estimate the nutritional information for: "${foodDescription}"
 
 Return ONLY a JSON object with these exact fields (numbers only, no units):
 {
@@ -39,9 +54,12 @@ Return ONLY a JSON object with these exact fields (numbers only, no units):
 }
 
 Be realistic with portions. If no quantity specified, assume a typical single serving.
-Return ONLY the JSON, no explanation.`
-        }
-      ]
+Return ONLY the JSON, no explanation.`;
+
+    const response = await anthropic.messages.create({
+      model: AI_MODELS.NUTRITION_ESTIMATE,
+      max_tokens: AI_TOKEN_LIMITS.NUTRITION_ESTIMATE,
+      messages: [{ role: 'user', content: prompt }]
     });
 
     // Extract the text response

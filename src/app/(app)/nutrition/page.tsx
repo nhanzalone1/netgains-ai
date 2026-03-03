@@ -436,10 +436,15 @@ export default function NutritionPage() {
 
     setEstimating(true);
     try {
+      // If user provided a serving size, include it so AI calculates for that amount
+      const userServingSize = foodServing.trim();
       const response = await fetch("/api/nutrition/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ foodDescription: foodName }),
+        body: JSON.stringify({
+          foodDescription: foodName,
+          servingSize: userServingSize || undefined,
+        }),
       });
 
       if (response.ok) {
@@ -449,7 +454,10 @@ export default function NutritionPage() {
         setFoodProtein(data.protein?.toString() || "");
         setFoodCarbs(data.carbs?.toString() || "");
         setFoodFat(data.fat?.toString() || "");
-        setFoodServing(data.serving_size || "");
+        // Only set serving size if user didn't already provide one
+        if (!userServingSize) {
+          setFoodServing(data.serving_size || "");
+        }
         setIsAiEstimate(true);
       }
     } catch (error) {
@@ -491,13 +499,15 @@ export default function NutritionPage() {
     loadRecentFoods();
     // Invalidate daily brief cache so nutrition updates appear
     invalidateDailyBriefCache(user.id);
-    // Trigger coach "next up" directive
+    // Trigger coach "next up" directive with time context
     triggerCoachResponse(user.id, 'meal_logged', {
       mealName: foodName.trim(),
       calories: parseFloat(foodCalories) || 0,
       protein: parseFloat(foodProtein) || 0,
       carbs: parseFloat(foodCarbs) || 0,
       fat: parseFloat(foodFat) || 0,
+      localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      localHour: new Date().getHours(),
     });
   };
 
@@ -509,7 +519,7 @@ export default function NutritionPage() {
     setMeals((prev) => prev.map((m) => (m.id === mealId ? { ...m, consumed: true } : m)));
     loadWeekData();
     invalidateDailyBriefCache(user.id);
-    // Trigger coach "next up" directive
+    // Trigger coach "next up" directive with time context
     if (meal) {
       triggerCoachResponse(user.id, 'meal_logged', {
         mealName: meal.food_name,
@@ -517,6 +527,8 @@ export default function NutritionPage() {
         protein: meal.protein,
         carbs: meal.carbs,
         fat: meal.fat,
+        localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        localHour: new Date().getHours(),
       });
     }
   };
@@ -561,13 +573,15 @@ export default function NutritionPage() {
       }
       loadWeekData();
       invalidateDailyBriefCache(user.id);
-      // Trigger coach "next up" directive
+      // Trigger coach "next up" directive with time context
       triggerCoachResponse(user.id, 'meal_logged', {
         mealName: meal.food_name,
         calories: meal.calories,
         protein: meal.protein,
         carbs: meal.carbs,
         fat: meal.fat,
+        localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        localHour: new Date().getHours(),
       });
     }
   };

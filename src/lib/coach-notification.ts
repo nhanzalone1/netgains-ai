@@ -87,6 +87,9 @@ export async function triggerCoachResponse(
     // For workouts
     workoutName?: string;
     exerciseCount?: number;
+    // Time context
+    localTime?: string;  // e.g., "9:30 PM"
+    localHour?: number;  // 0-23
   }
 ): Promise<{ success: boolean; error?: string }> {
   console.log('[CoachTrigger] Starting trigger:', { userId, triggerType, context });
