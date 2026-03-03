@@ -148,6 +148,16 @@ The coach uses evidence-based exercise science and sports nutrition principles. 
 - If evidence is mixed, say so: "research suggests X but it's not definitive"
 - Don't present preferences as facts
 
+**Proactive Momentum System (Mar 2):**
+Coach is always one step ahead. Every interaction ends with a clear directive for what's next. The user should never have to ask "what do I eat now" or "what do I do next."
+
+- **Morning weight check-in:** Automatically deliver the full day plan — headline reaction, first meal with exact gram targets, training window, post-workout meal, closing mandate
+- **After logging a meal:** Acknowledge with biological context, tell them exactly when the next meal is and what to focus on, end with "next up: [X] at [time] — [why it matters]"
+- **After logging a workout:** React to the session, tell them the post-workout window is open with exact protein/carb targets, explain why this meal matters biologically, preview the next meal
+- **End of day:** Tell them if they're on track, if protein is short give exact instructions, close with "biological ledger for today: [summary]. sleep is the next phase."
+
+General rule: Every response ends with what's next. Never leave the user at a dead end.
+
 ### Timezone Handling
 - Client sends `localDate` with every message
 - Server uses client date for all meal/workout queries
@@ -240,7 +250,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Feb 27)
+## Current State (Mar 2)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -254,16 +264,19 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Feb 27)
+### Recent Updates (Mar 2)
+- **Proactive momentum system** — Coach now automatically provides next-step directives after every interaction. Weight check-ins get full day plans, meal logs get "next up" instructions, workouts trigger recovery nutrition guidance. User never has to ask "what's next."
+
+### Previous Updates (Feb 27)
 - **Elite trainer voice upgrade** — Coach persona shifted from casual "texting a friend" to elite personal trainer. Opens with punchy headlines, explains biological mechanisms instead of labeling foods, uses exact numbers, treats each interaction like a mission briefing.
 - **Labeling vs mechanism examples** — Added explicit examples in system prompt showing bad (labeling) vs good (mechanism) food explanations.
 - **Token limit increased** — Coaching responses now allow up to 2048 tokens (was 1024) to support the new narrative style.
 
-### Previous Updates (Feb 25)
+### Updates (Feb 25)
 - **Science-based coaching system** — Comprehensive upgrade to coach intelligence. Phase awareness (water weight, stalls, diet breaks), pattern recognition (5-7 day trends), progressive overload tracking, recovery signals, weekly check-ins. See "Science-Based Coaching System" section above.
 - **Cutting calorie fix** — Coach no longer suggests eating more to "close the gap" during a cut. Calories are a ceiling, not a floor. Only flags if over calories or under protein.
 
-### Earlier Updates (Feb 24)
+### Updates (Feb 24)
 - **Splash screen** (`src/components/splash-screen.tsx`) — Shows animated upward-trending line chart (like a stock chart) in cyan, then fades in "NetGainsAI" text. Displays for ~1.8 seconds on every fresh page load. Wrapped in `(app)/layout.tsx`.
 - **Split folder reordering** — Users can reorder their workout split tiles using Move Up/Move Down buttons in the edit modal. Uses `order_index` field in `folders` table.
 - **Edit Split modal UX** — Keyboard doesn't auto-open when tapping pencil icon, making Move Up/Down buttons easier to access on mobile.
