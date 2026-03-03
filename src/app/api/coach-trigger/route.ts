@@ -32,18 +32,25 @@ export async function POST(req: Request) {
     const today = context.localDate || formatLocalDate(new Date());
     console.log('[CoachTrigger API] Using date:', today, 'from client:', !!context.localDate);
 
-    // Fetch user context in parallel
-    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult] = await Promise.all([
+    // Fetch user context in parallel (including recent conversation)
+    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult] = await Promise.all([
       supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('meals').select('food_name, calories, protein, carbs, fat').eq('user_id', user.id).eq('date', today).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+      // Fetch last 3 assistant messages for conversation context
+      supabase.from('chat_messages').select('content, role').eq('user_id', user.id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(3),
     ]);
 
     const profile = profileResult.data;
     const memories = memoriesResult.data || [];
     const todayMeals = todayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
+    const recentMessages = recentMessagesResult.data || [];
+
+    // Build recent conversation context (reversed to chronological order)
+    const recentConversation = recentMessages.reverse().map(m => m.content).join('\n---\n');
+    console.log('[CoachTrigger API] Recent messages:', recentMessages.length);
 
     // Calculate today's totals
     const todayTotals = todayMeals.reduce(
@@ -82,6 +89,19 @@ export async function POST(req: Request) {
       const proteinHit = remaining.protein <= 0;
       const proteinShort = remaining.protein > 0;
 
+      // Handle batched meals (array) or single meal (legacy)
+      interface MealItem { mealName: string; calories: number; protein: number; carbs?: number; fat?: number }
+      const meals: MealItem[] = context.meals || (context.mealName ? [{
+        mealName: context.mealName,
+        calories: context.calories || 0,
+        protein: context.protein || 0,
+      }] : []);
+
+      const mealNames = meals.map(m => m.mealName).join(', ');
+      const mealsSummary = meals.map(m => `${m.mealName}: ${m.calories} cal, ${m.protein}g protein`).join('\n');
+      const totalLoggedProtein = meals.reduce((sum, m) => sum + (m.protein || 0), 0);
+      const totalLoggedCalories = meals.reduce((sum, m) => sum + (m.calories || 0), 0);
+
       // Build response instruction based on state
       let responseInstruction: string;
 
@@ -115,15 +135,22 @@ Tell them what's next: when to eat, what to focus on for the next meal to close 
 End with: "next up: [specific food] — [why it matters]"`;
       }
 
-      prompt = `You are Coach, an elite fitness trainer. The user just logged a meal. Generate a SHORT (2-3 sentences max) directive.
+      prompt = `You are Coach, an elite fitness trainer. The user just logged ${meals.length > 1 ? 'their meal' : 'a meal'}. Generate a SHORT (2-3 sentences max) directive.
 
 CURRENT TIME: ${context.localTime || 'unknown'} (${timeOfDay})
 
 USER: ${userName} | Goal: ${profile?.goal || 'not set'} | Weight: ${profile?.weight_lbs || '?'} lbs
 
-MEAL LOGGED: ${context.mealName}: ${context.calories} cal, ${context.protein}g protein
+${recentConversation ? `RECENT CONVERSATION (what you said recently — stay consistent):
+---
+${recentConversation.substring(0, 800)}
+---
+` : ''}
+MEALS JUST LOGGED (${meals.length} item${meals.length > 1 ? 's' : ''}):
+${mealsSummary}
+Total just logged: ${totalLoggedCalories} cal, ${totalLoggedProtein}g protein
 
-TODAY'S STATUS:
+TODAY'S RUNNING STATUS (after this meal):
 - Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
 - Targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
 - Protein: ${proteinHit ? 'TARGET HIT ✓' : `${remaining.protein}g SHORT`}
@@ -134,8 +161,11 @@ YOUR RESPONSE:
 ${responseInstruction}
 
 RULES:
-- Start with ONE line acknowledging the meal with biological context
+- Acknowledge ALL the meals logged together (e.g., "breakfast locked in: ${mealNames}")
+- If you recently suggested these exact foods, acknowledge they followed through: "you executed the plan"
 - ${profile?.goal === 'cutting' ? 'Cutting: NEVER suggest eating more calories.' : ''}
+- Do NOT repeat the same information from your recent messages
+- Tie the response to what's NEXT — training timing, carb absorption, next meal
 - Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed

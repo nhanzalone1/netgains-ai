@@ -5,6 +5,22 @@ import { createClient } from '@/lib/supabase/client';
 
 const supabase = createClient();
 
+// Debounce state for batching meal triggers
+interface PendingMeal {
+  mealName: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+let pendingMeals: PendingMeal[] = [];
+let pendingTriggerTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingUserId: string | null = null;
+let pendingTimeContext: { localTime: string; localHour: number; localDate: string } | null = null;
+
+const MEAL_BATCH_DELAY_MS = 3000; // Wait 3 seconds to batch multiple meals
+
 // Check if there are unread coach messages (assistant messages newer than last viewed)
 export async function hasUnreadCoachMessages(userId: string): Promise<boolean> {
   try {
@@ -95,6 +111,84 @@ export async function triggerCoachResponse(
 ): Promise<{ success: boolean; error?: string }> {
   console.log('[CoachTrigger] Starting trigger:', { userId, triggerType, context });
 
+  // For meal triggers, batch multiple meals logged within a short window
+  if (triggerType === 'meal_logged' && context.mealName) {
+    // Add to pending meals
+    pendingMeals.push({
+      mealName: context.mealName,
+      calories: context.calories || 0,
+      protein: context.protein || 0,
+      carbs: context.carbs || 0,
+      fat: context.fat || 0,
+    });
+    pendingUserId = userId;
+    pendingTimeContext = {
+      localTime: context.localTime || new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      localHour: context.localHour ?? new Date().getHours(),
+      localDate: context.localDate || new Date().toISOString().split('T')[0],
+    };
+
+    console.log('[CoachTrigger] Meal added to batch, total pending:', pendingMeals.length);
+
+    // Clear existing timeout and set a new one
+    if (pendingTriggerTimeout) {
+      clearTimeout(pendingTriggerTimeout);
+    }
+
+    // Wait for more meals, then send batched trigger
+    return new Promise((resolve) => {
+      pendingTriggerTimeout = setTimeout(async () => {
+        const mealsToSend = [...pendingMeals];
+        const userIdToSend = pendingUserId;
+        const timeContextToSend = pendingTimeContext;
+
+        // Reset pending state
+        pendingMeals = [];
+        pendingUserId = null;
+        pendingTimeContext = null;
+        pendingTriggerTimeout = null;
+
+        if (!userIdToSend || !timeContextToSend) {
+          resolve({ success: false, error: 'Missing context' });
+          return;
+        }
+
+        console.log('[CoachTrigger] Sending batched trigger with', mealsToSend.length, 'meals');
+
+        try {
+          const response = await fetch('/api/coach-trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              triggerType: 'meal_logged',
+              context: {
+                meals: mealsToSend,
+                ...timeContextToSend,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            console.error('[CoachTrigger] API error:', response.status, data);
+            resolve({ success: false, error: data.error || 'Failed to trigger coach' });
+            return;
+          }
+
+          const result = await response.json();
+          console.log('[CoachTrigger] Batched success:', result);
+
+          notifyNewCoachMessage();
+          resolve({ success: true });
+        } catch (error) {
+          console.error('[CoachTrigger] Network error:', error);
+          resolve({ success: false, error: 'Network error' });
+        }
+      }, MEAL_BATCH_DELAY_MS);
+    });
+  }
+
+  // For workout triggers, send immediately (no batching)
   try {
     const response = await fetch('/api/coach-trigger', {
       method: 'POST',
