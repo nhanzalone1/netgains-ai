@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Sparkles, RotateCcw } from "lucide-react";
+import { Send, Sparkles, RotateCcw, MessageCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
@@ -872,6 +872,12 @@ export default function CoachPage() {
     (m) => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX) && (m.role !== "assistant" || m.content.trim() !== "")
   );
 
+  // Count user messages sent today for the daily counter
+  const todayString = getTodayString();
+  const todayMessageCount = visibleMessages.filter(
+    (m) => m.role === "user" && getMessageDate(m) === todayString
+  ).length;
+
   // Group messages by date for rendering with dividers
   const messagesWithDividers: Array<{ type: 'divider'; date: string } | { type: 'message'; message: Message }> = [];
   let lastDate: string | null = null;
@@ -933,7 +939,13 @@ export default function CoachPage() {
             </div>
             <div>
               <h1 className="text-lg font-bold">Coach</h1>
-              <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-xs text-muted-foreground">
+                  <MessageCircle className="w-3 h-3" />
+                  <span>{todayMessageCount}</span>
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
