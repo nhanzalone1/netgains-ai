@@ -174,6 +174,7 @@ Technical details:
 - `src/lib/coach-notification.ts` — Database-backed notification state
 - Badge state uses `coach_last_viewed_at` in `coach_memory` table (persists across sessions/devices)
 - Triggers from: `handleSaveFood`, `markAsConsumed`, `copyMeal` (nutrition), `handleSaveWorkout` (log)
+- Context includes: `localTime`, `localHour`, `localDate` for timezone-aware responses
 
 ### Timezone Handling
 - Client sends `localDate` with every message
@@ -283,6 +284,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 2)
+- **Coach-trigger timezone fix** — API was using server date (UTC) instead of client's local date, causing it to query meals from wrong day and report full protein goal as "remaining." Now passes `localDate` from client to API for correct meal lookup.
 - **Auto-trigger time awareness** — Coach-trigger now passes `localTime` and `localHour` so Haiku knows time of day. End-of-day meals (7pm+) get "did you hit protein?" guidance instead of "what's next meal." Late night (9pm+) closes out the day instead of suggesting more food.
 - **Macro estimation respects serving size** — If user enters a serving size before clicking "Estimate Macros", the API calculates macros for that exact amount instead of overwriting it with a default serving.
 - **Auto-trigger system** — When users log meals or complete workouts, Haiku automatically generates a "next up" directive and saves it to chat. Badge appears on Coach tab until viewed. Uses database for persistence across sessions/devices.
