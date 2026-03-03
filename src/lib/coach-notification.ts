@@ -1,24 +1,76 @@
 // Coach notification system for auto-triggered messages
-// When meals/workouts are logged, we trigger a coach response
-// and show a badge on the Coach tab until they view it
+// Uses database to track last viewed time and check for new messages
 
-const PENDING_KEY_PREFIX = 'netgains-pending-coach-message-';
+import { createClient } from '@/lib/supabase/client';
 
-export function setPendingCoachMessage(userId: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(`${PENDING_KEY_PREFIX}${userId}`, Date.now().toString());
-  // Dispatch event so other tabs/components can react
-  window.dispatchEvent(new CustomEvent('coach-message-pending', { detail: { userId } }));
+const supabase = createClient();
+
+// Check if there are unread coach messages (assistant messages newer than last viewed)
+export async function hasUnreadCoachMessages(userId: string): Promise<boolean> {
+  try {
+    // Get last viewed timestamp from coach_memory
+    const { data: lastViewedData } = await supabase
+      .from('coach_memory')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'coach_last_viewed_at')
+      .single();
+
+    const lastViewedAt = lastViewedData?.value || '1970-01-01T00:00:00Z';
+
+    // Check for assistant messages created after last viewed
+    const { count, error } = await supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('role', 'assistant')
+      .eq('hidden', false)
+      .gt('created_at', lastViewedAt);
+
+    if (error) {
+      console.error('Error checking unread messages:', error);
+      return false;
+    }
+
+    return (count || 0) > 0;
+  } catch (error) {
+    console.error('Error in hasUnreadCoachMessages:', error);
+    return false;
+  }
 }
 
-export function hasPendingCoachMessage(userId: string): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(`${PENDING_KEY_PREFIX}${userId}`) !== null;
+// Mark coach messages as read by updating last viewed timestamp
+export async function markCoachAsViewed(userId: string): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+
+    // Upsert the last viewed timestamp
+    const { data: existing } = await supabase
+      .from('coach_memory')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('key', 'coach_last_viewed_at')
+      .single();
+
+    if (existing) {
+      await supabase
+        .from('coach_memory')
+        .update({ value: now })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('coach_memory')
+        .insert({ user_id: userId, key: 'coach_last_viewed_at', value: now });
+    }
+  } catch (error) {
+    console.error('Error marking coach as viewed:', error);
+  }
 }
 
-export function clearPendingCoachMessage(userId: string): void {
+// Dispatch event to notify components to recheck for new messages
+export function notifyNewCoachMessage(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(`${PENDING_KEY_PREFIX}${userId}`);
+  window.dispatchEvent(new CustomEvent('coach-message-added'));
 }
 
 // Trigger the coach to generate a "next up" directive
@@ -52,8 +104,8 @@ export async function triggerCoachResponse(
       return { success: false, error: data.error || 'Failed to trigger coach' };
     }
 
-    // Set pending flag so badge shows
-    setPendingCoachMessage(userId);
+    // Notify components to recheck for new messages
+    notifyNewCoachMessage();
     return { success: true };
   } catch (error) {
     console.error('Coach trigger error:', error);

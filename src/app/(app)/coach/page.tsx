@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { createClient } from "@/lib/supabase/client";
+import { markCoachAsViewed } from "@/lib/coach-notification";
 
 // Hardcoded first message for new users with empty profiles
 const HARDCODED_FIRST_MESSAGE = "hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know.";
@@ -641,6 +642,13 @@ export default function CoachPage() {
       setTimeout(() => scrollToBottom(true), 100);
     }
   }, [messagesLoaded, scrollToBottom]);
+
+  // Mark coach messages as viewed when page loads
+  useEffect(() => {
+    if (user?.id && messagesLoaded) {
+      markCoachAsViewed(user.id);
+    }
+  }, [user?.id, messagesLoaded]);
 
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {

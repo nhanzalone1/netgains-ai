@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ClipboardList, Utensils, Sparkles, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/auth-provider";
-import { hasPendingCoachMessage, clearPendingCoachMessage } from "@/lib/coach-notification";
+import { hasUnreadCoachMessages, markCoachAsViewed } from "@/lib/coach-notification";
 
 const navItems = [
   { href: "/log", label: "Log", icon: ClipboardList },
@@ -18,44 +18,47 @@ const navItems = [
 export function BottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [hasPending, setHasPending] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
 
-  // Check for pending coach messages
+  // Check for unread messages
+  const checkUnread = useCallback(async () => {
+    if (!user?.id) return;
+    const unread = await hasUnreadCoachMessages(user.id);
+    setHasUnread(unread);
+  }, [user?.id]);
+
+  // Check on mount and when events fire
   useEffect(() => {
     if (!user?.id) return;
 
-    const checkPending = () => {
-      setHasPending(hasPendingCoachMessage(user.id));
-    };
-
     // Initial check
-    checkPending();
+    checkUnread();
 
-    // Listen for new pending messages
-    const handlePending = () => checkPending();
-    window.addEventListener('coach-message-pending', handlePending);
+    // Listen for new coach messages
+    const handleNewMessage = () => checkUnread();
+    window.addEventListener('coach-message-added', handleNewMessage);
 
-    // Also check on storage changes (for cross-tab sync)
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key?.startsWith('netgains-pending-coach-message-')) {
-        checkPending();
+    // Check when page becomes visible (returning from background)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkUnread();
       }
     };
-    window.addEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      window.removeEventListener('coach-message-pending', handlePending);
-      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('coach-message-added', handleNewMessage);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [user?.id]);
+  }, [user?.id, checkUnread]);
 
-  // Clear badge when navigating to coach page
+  // Mark as viewed when navigating to coach page
   useEffect(() => {
-    if (pathname === '/coach' && user?.id && hasPending) {
-      clearPendingCoachMessage(user.id);
-      setHasPending(false);
+    if (pathname === '/coach' && user?.id && hasUnread) {
+      markCoachAsViewed(user.id);
+      setHasUnread(false);
     }
-  }, [pathname, user?.id, hasPending]);
+  }, [pathname, user?.id, hasUnread]);
 
   return (
     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
@@ -71,7 +74,7 @@ export function BottomNav() {
       >
         {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || (href === "/log" && pathname === "/");
-          const showBadge = href === "/coach" && hasPending && !isActive;
+          const showBadge = href === "/coach" && hasUnread && !isActive;
 
           return (
             <Link key={href} href={href}>
