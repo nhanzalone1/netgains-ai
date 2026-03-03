@@ -283,6 +283,8 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 2)
+- **Auto-trigger time awareness** — Coach-trigger now passes `localTime` and `localHour` so Haiku knows time of day. End-of-day meals (7pm+) get "did you hit protein?" guidance instead of "what's next meal." Late night (9pm+) closes out the day instead of suggesting more food.
+- **Macro estimation respects serving size** — If user enters a serving size before clicking "Estimate Macros", the API calculates macros for that exact amount instead of overwriting it with a default serving.
 - **Auto-trigger system** — When users log meals or complete workouts, Haiku automatically generates a "next up" directive and saves it to chat. Badge appears on Coach tab until viewed. Uses database for persistence across sessions/devices.
 - **Daily message counter** — Shows count of user messages sent today in coach header, resets at midnight.
 - **Proactive momentum system** — Coach now automatically provides next-step directives after every interaction. Weight check-ins get full day plans, meal logs get "next up" instructions, workouts trigger recovery nutrition guidance. User never has to ask "what's next."
