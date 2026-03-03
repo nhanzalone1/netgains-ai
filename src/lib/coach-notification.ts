@@ -90,6 +90,7 @@ export async function triggerCoachResponse(
     // Time context
     localTime?: string;  // e.g., "9:30 PM"
     localHour?: number;  // 0-23
+    localDate?: string;  // YYYY-MM-DD for correct timezone handling
   }
 ): Promise<{ success: boolean; error?: string }> {
   console.log('[CoachTrigger] Starting trigger:', { userId, triggerType, context });

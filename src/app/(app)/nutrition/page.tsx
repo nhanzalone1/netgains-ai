@@ -508,6 +508,7 @@ export default function NutritionPage() {
       fat: parseFloat(foodFat) || 0,
       localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
       localHour: new Date().getHours(),
+      localDate: formatDate(new Date()), // Pass client's local date for correct meal lookup
     });
   };
 
@@ -529,6 +530,7 @@ export default function NutritionPage() {
         fat: meal.fat,
         localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
         localHour: new Date().getHours(),
+        localDate: formatDate(new Date()),
       });
     }
   };
@@ -582,6 +584,7 @@ export default function NutritionPage() {
         fat: meal.fat,
         localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
         localHour: new Date().getHours(),
+        localDate: formatDate(new Date()),
       });
     }
   };

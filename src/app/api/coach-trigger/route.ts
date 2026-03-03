@@ -28,7 +28,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const today = formatLocalDate(new Date());
+    // Use client's local date for correct timezone handling, fallback to server date
+    const today = context.localDate || formatLocalDate(new Date());
+    console.log('[CoachTrigger API] Using date:', today, 'from client:', !!context.localDate);
 
     // Fetch user context in parallel
     const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult] = await Promise.all([
@@ -53,6 +55,10 @@ export async function POST(req: Request) {
       }),
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
+
+    console.log('[CoachTrigger API] Meals found:', todayMeals.length);
+    console.log('[CoachTrigger API] Today totals:', todayTotals);
+    console.log('[CoachTrigger API] Goals:', nutritionGoals);
 
     // Get user name from memories
     const userName = memories.find(m => m.key === 'name')?.value || 'there';
