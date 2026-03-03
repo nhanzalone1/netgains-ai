@@ -284,6 +284,8 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 2)
+- **Deterministic macro estimation** — Added `temperature: 0` to Haiku API call and USDA reference values in prompt. Same food + weight now returns identical macros every time. Reference values include chicken, beef, salmon, eggs, rice, oats, dairy, whey, bread, fruits (per 100g).
+- **Coach-trigger protein logic fix** — Fixed contradictory responses like "protein target met" + "eat more protein." Now uses explicit conditional logic: protein HIT + late night = celebrate and close day; protein SHORT + late night = suggest specific snack with exact grams.
 - **Coach-trigger timezone fix** — API was using server date (UTC) instead of client's local date, causing it to query meals from wrong day and report full protein goal as "remaining." Now passes `localDate` from client to API for correct meal lookup.
 - **Auto-trigger time awareness** — Coach-trigger now passes `localTime` and `localHour` so Haiku knows time of day. End-of-day meals (7pm+) get "did you hit protein?" guidance instead of "what's next meal." Late night (9pm+) closes out the day instead of suggesting more food.
 - **Macro estimation respects serving size** — If user enters a serving size before clicking "Estimate Macros", the API calculates macros for that exact amount instead of overwriting it with a default serving.
