@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
+import { triggerCoachResponse } from "@/lib/coach-notification";
 import { formatLocalDate } from "@/lib/date-utils";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
@@ -414,6 +415,11 @@ export default function LogPage() {
       setShowSuccessModal(true);
       if (user?.id) {
         invalidateDailyBriefCache(user.id);
+        // Trigger coach post-workout directive
+        triggerCoachResponse(user.id, 'workout_completed', {
+          workoutName: selectedFolder?.name || 'Training session',
+          exerciseCount: validExercises.length,
+        });
       }
     } catch (err) {
       console.error("Error saving workout:", err);

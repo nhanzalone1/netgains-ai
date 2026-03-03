@@ -18,6 +18,7 @@ import { motion, PanInfo } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
+import { triggerCoachResponse } from "@/lib/coach-notification";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
@@ -490,14 +491,34 @@ export default function NutritionPage() {
     loadRecentFoods();
     // Invalidate daily brief cache so nutrition updates appear
     invalidateDailyBriefCache(user.id);
+    // Trigger coach "next up" directive
+    triggerCoachResponse(user.id, 'meal_logged', {
+      mealName: foodName.trim(),
+      calories: parseFloat(foodCalories) || 0,
+      protein: parseFloat(foodProtein) || 0,
+      carbs: parseFloat(foodCarbs) || 0,
+      fat: parseFloat(foodFat) || 0,
+    });
   };
 
   const markAsConsumed = async (mealId: string) => {
     if (!user) return;
+    // Get meal data before updating
+    const meal = meals.find(m => m.id === mealId);
     await supabase.from("meals").update({ consumed: true }).eq("id", mealId);
     setMeals((prev) => prev.map((m) => (m.id === mealId ? { ...m, consumed: true } : m)));
     loadWeekData();
     invalidateDailyBriefCache(user.id);
+    // Trigger coach "next up" directive
+    if (meal) {
+      triggerCoachResponse(user.id, 'meal_logged', {
+        mealName: meal.food_name,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+      });
+    }
   };
 
   const deleteMeal = async (mealId: string) => {
@@ -540,6 +561,14 @@ export default function NutritionPage() {
       }
       loadWeekData();
       invalidateDailyBriefCache(user.id);
+      // Trigger coach "next up" directive
+      triggerCoachResponse(user.id, 'meal_logged', {
+        mealName: meal.food_name,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+      });
     }
   };
 
