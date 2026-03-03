@@ -89,6 +89,8 @@ export async function triggerCoachResponse(
     exerciseCount?: number;
   }
 ): Promise<{ success: boolean; error?: string }> {
+  console.log('[CoachTrigger] Starting trigger:', { userId, triggerType, context });
+
   try {
     const response = await fetch('/api/coach-trigger', {
       method: 'POST',
@@ -101,14 +103,18 @@ export async function triggerCoachResponse(
 
     if (!response.ok) {
       const data = await response.json();
+      console.error('[CoachTrigger] API error:', response.status, data);
       return { success: false, error: data.error || 'Failed to trigger coach' };
     }
+
+    const result = await response.json();
+    console.log('[CoachTrigger] Success:', result);
 
     // Notify components to recheck for new messages
     notifyNewCoachMessage();
     return { success: true };
   } catch (error) {
-    console.error('Coach trigger error:', error);
+    console.error('[CoachTrigger] Network error:', error);
     return { success: false, error: 'Network error' };
   }
 }

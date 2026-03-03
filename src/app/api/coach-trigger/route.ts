@@ -8,14 +8,20 @@ const TRIGGER_MODEL = AI_MODELS.DAILY_BRIEF; // claude-3-haiku-20240307
 const TRIGGER_MAX_TOKENS = 300;
 
 export async function POST(req: Request) {
+  console.log('[CoachTrigger API] Request received');
+
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (authError || !user) {
+    console.log('[CoachTrigger API] Auth failed:', authError?.message);
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  console.log('[CoachTrigger API] User authenticated:', user.id);
+
   const { triggerType, context } = await req.json();
+  console.log('[CoachTrigger API] Trigger:', triggerType, 'Context:', context);
 
   if (!triggerType || !['meal_logged', 'workout_completed'].includes(triggerType)) {
     return Response.json({ error: 'Invalid trigger type' }, { status: 400 });
