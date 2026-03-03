@@ -650,6 +650,14 @@ export default function CoachPage() {
     }
   }, [user?.id, messagesLoaded]);
 
+  // Check if we need to generate an opening message for today
+  useEffect(() => {
+    if (messagesLoaded && user?.id) {
+      checkAndGenerateOpening(messages);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messagesLoaded, user?.id]);
+
   // Cleanup: abort any pending request when component unmounts
   useEffect(() => {
     return () => {
