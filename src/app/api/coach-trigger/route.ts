@@ -74,39 +74,69 @@ export async function POST(req: Request) {
         protein: nutritionGoals.protein - todayTotals.protein,
       };
 
-      // Determine time of day context
+      // Determine time of day and protein status
       const hour = context.localHour ?? new Date().getHours();
       const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
       const isLateNight = hour >= 21 || hour < 5;
       const isEndOfDay = hour >= 19;
+      const proteinHit = remaining.protein <= 0;
+      const proteinShort = remaining.protein > 0;
 
-      prompt = `You are Coach, an elite fitness trainer. The user just logged a meal. Generate a SHORT (2-3 sentences max) "next up" directive.
+      // Build response instruction based on state
+      let responseInstruction: string;
+
+      if (proteinHit && isLateNight) {
+        // PROTEIN HIT + LATE NIGHT = Close the day, celebrate, no more food
+        responseInstruction = `PROTEIN TARGET IS HIT. It's late night. CELEBRATE and CLOSE THE DAY.
+Say something like: "Protein target locked in. Biological ledger is closed — your muscles have everything they need for overnight repair. Get to sleep."
+DO NOT suggest eating more protein. DO NOT suggest any food. The day is done.`;
+      } else if (proteinHit && isEndOfDay) {
+        // PROTEIN HIT + END OF DAY = Close the day
+        responseInstruction = `PROTEIN TARGET IS HIT. It's end of day. Close out the day positively.
+${remaining.calories > 300 && profile?.goal === 'bulking' ? 'Optionally mention a small snack for calories only — NO protein push.' : 'Do not suggest more food.'}
+End with: "biological ledger: protein target hit, muscles are fueled for recovery."`;
+      } else if (proteinHit) {
+        // PROTEIN HIT + EARLIER IN DAY = Acknowledge, move on
+        responseInstruction = `PROTEIN TARGET IS HIT for today. Acknowledge this win.
+Focus on the next meal timing and maintaining the lead. No need to push more protein — they've already hit it.`;
+      } else if (proteinShort && isLateNight) {
+        // PROTEIN SHORT + LATE NIGHT = Suggest specific protein snack
+        responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g and it's late night.
+Tell them exactly what to eat before bed to close the gap. Be specific: "${remaining.protein}g protein needed — [specific food from their staples]."
+Then close the day.`;
+      } else if (proteinShort && isEndOfDay) {
+        // PROTEIN SHORT + END OF DAY = Push to close the gap
+        responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g and it's end of day.
+Tell them exactly what to eat to hit the target before bed. Be specific with grams needed.`;
+      } else {
+        // PROTEIN SHORT + EARLIER IN DAY = Normal next meal guidance
+        responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g.
+Tell them what's next: when to eat, what to focus on for the next meal to close the gap.
+End with: "next up: [specific food] — [why it matters]"`;
+      }
+
+      prompt = `You are Coach, an elite fitness trainer. The user just logged a meal. Generate a SHORT (2-3 sentences max) directive.
 
 CURRENT TIME: ${context.localTime || 'unknown'} (${timeOfDay})
 
-USER CONTEXT:
-- Name: ${userName}
-- Goal: ${profile?.goal || 'not set'}
-- Weight: ${profile?.weight_lbs || '?'} lbs
+USER: ${userName} | Goal: ${profile?.goal || 'not set'} | Weight: ${profile?.weight_lbs || '?'} lbs
 
-MEAL JUST LOGGED:
-- ${context.mealName}: ${context.calories} cal, ${context.protein}g protein
+MEAL LOGGED: ${context.mealName}: ${context.calories} cal, ${context.protein}g protein
 
-TODAY'S PROGRESS (IMPORTANT - use this to give specific advice):
-- Consumed so far: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
-- Daily targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
-- Remaining: ${remaining.calories} cal, ${remaining.protein}g protein
-- Protein ${remaining.protein > 0 ? `still ${remaining.protein}g short` : 'target HIT'}
+TODAY'S STATUS:
+- Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
+- Targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
+- Protein: ${proteinHit ? 'TARGET HIT ✓' : `${remaining.protein}g SHORT`}
 
-${foodStaples ? `USER'S FOOD STAPLES: ${foodStaples}` : ''}
+${foodStaples ? `STAPLES: ${foodStaples}` : ''}
+
+YOUR RESPONSE:
+${responseInstruction}
 
 RULES:
-1. Start with ONE line acknowledging the meal with biological context
-2. ${isEndOfDay ? 'This is END OF DAY — focus on whether they hit their protein target. If short, tell them exactly what to eat before bed.' : 'Tell them exactly what\'s next: when to eat, what to focus on'}
-3. ${isLateNight ? 'It\'s late night — if they\'re done eating, close out the day. Don\'t suggest more meals unless protein is significantly short.' : ''}
-4. End with: "next up: [specific food/action] — [why it matters]" OR if end of day: "biological ledger: [summary]"
-5. If ${profile?.goal === 'cutting' ? 'cutting: do NOT tell them to eat more calories. Only mention protein if short.' : 'bulking: encourage hitting calorie targets.'}
-6. Keep it punchy and direct. No fluff. Be SPECIFIC to their current numbers.`;
+- Start with ONE line acknowledging the meal with biological context
+- ${profile?.goal === 'cutting' ? 'Cutting: NEVER suggest eating more calories.' : ''}
+- Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed
       prompt = `You are Coach, an elite fitness trainer. The user just finished a workout. Generate a SHORT (2-3 sentences max) post-workout directive.
