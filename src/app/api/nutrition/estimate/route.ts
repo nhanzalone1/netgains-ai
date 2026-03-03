@@ -26,10 +26,30 @@ export async function POST(req: Request) {
   try {
     const anthropic = new Anthropic();
 
+    // USDA reference values for deterministic calculations
+    const usdaReference = `USDA STANDARD VALUES (per 100g raw unless noted):
+- Chicken breast: 31g protein, 3.6g fat, 0g carbs, 165 cal
+- Chicken thigh: 26g protein, 10g fat, 0g carbs, 209 cal
+- Beef (93% lean): 26g protein, 7g fat, 0g carbs, 170 cal
+- Salmon: 20g protein, 13g fat, 0g carbs, 208 cal
+- Eggs (1 large = 50g): 6g protein, 5g fat, 0.6g carbs, 72 cal
+- Rice (cooked): 2.7g protein, 0.3g fat, 28g carbs, 130 cal
+- Oats (dry): 13g protein, 7g fat, 66g carbs, 389 cal
+- Whole milk: 3.3g protein, 3.3g fat, 4.8g carbs, 61 cal
+- Greek yogurt: 10g protein, 0.7g fat, 3.6g carbs, 59 cal
+- Whey protein (1 scoop = 30g): 24g protein, 1g fat, 2g carbs, 120 cal
+- Bread (1 slice = 30g): 3g protein, 1g fat, 13g carbs, 75 cal
+- Banana (1 medium = 120g): 1.3g protein, 0.4g fat, 27g carbs, 105 cal
+- Apple (1 medium = 180g): 0.5g protein, 0.3g fat, 25g carbs, 95 cal
+
+Calculate EXACTLY from these values. Scale linearly based on weight.`;
+
     const prompt = hasUserServing
-      ? `Estimate the nutritional information for: "${fullDescription}"
+      ? `Calculate the nutritional information for: "${fullDescription}"
 
 The user has specified a serving size of "${servingSize.trim()}". Calculate macros for EXACTLY that amount.
+
+${usdaReference}
 
 Return ONLY a JSON object with these exact fields (numbers only, no units):
 {
@@ -40,8 +60,10 @@ Return ONLY a JSON object with these exact fields (numbers only, no units):
   "fat": number (grams)
 }
 
-Return ONLY the JSON, no explanation.`
-      : `Estimate the nutritional information for: "${foodDescription}"
+Use USDA values. Calculate exactly — do not estimate or round loosely. Return ONLY the JSON.`
+      : `Calculate the nutritional information for: "${foodDescription}"
+
+${usdaReference}
 
 Return ONLY a JSON object with these exact fields (numbers only, no units):
 {
@@ -53,12 +75,12 @@ Return ONLY a JSON object with these exact fields (numbers only, no units):
   "serving_size": "serving description"
 }
 
-Be realistic with portions. If no quantity specified, assume a typical single serving.
-Return ONLY the JSON, no explanation.`;
+Use USDA values. If no quantity specified, assume a typical single serving. Calculate exactly — do not estimate or round loosely. Return ONLY the JSON.`;
 
     const response = await anthropic.messages.create({
       model: AI_MODELS.NUTRITION_ESTIMATE,
       max_tokens: AI_TOKEN_LIMITS.NUTRITION_ESTIMATE,
+      temperature: 0, // Deterministic output for consistent macro values
       messages: [{ role: 'user', content: prompt }]
     });
 
