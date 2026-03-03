@@ -269,7 +269,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Mar 2)
+## Current State (Mar 3)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -283,7 +283,12 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Mar 2)
+### Recent Updates (Mar 3)
+- **Morning greeting fix** — The `checkAndGenerateOpening()` function was defined but never called. Added useEffect to invoke it after messages load, so users now get a personalized morning greeting when opening the coach tab on a new day.
+- **Meal trigger batching** — Fixed duplicate messages when checking off multiple meals quickly. Meals logged within 3 seconds are now batched into a single coach response. Instead of 2 separate "protein is low" warnings, you get one unified message: "breakfast locked in: protein shake, rice cakes, fruit."
+- **Meal trigger conversation context** — Coach-trigger now fetches the last 3 assistant messages before responding. If coach suggested specific foods and user logs those exact foods, the response acknowledges they followed through ("you executed the plan") instead of giving generic advice.
+
+### Previous Updates (Mar 2)
 - **Deterministic macro estimation** — Added `temperature: 0` to Haiku API call and USDA reference values in prompt. Same food + weight now returns identical macros every time. Reference values include chicken, beef, salmon, eggs, rice, oats, dairy, whey, bread, fruits (per 100g).
 - **Coach-trigger protein logic fix** — Fixed contradictory responses like "protein target met" + "eat more protein." Now uses explicit conditional logic: protein HIT + late night = celebrate and close day; protein SHORT + late night = suggest specific snack with exact grams.
 - **Coach-trigger timezone fix** — API was using server date (UTC) instead of client's local date, causing it to query meals from wrong day and report full protein goal as "remaining." Now passes `localDate` from client to API for correct meal lookup.
@@ -293,7 +298,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Daily message counter** — Shows count of user messages sent today in coach header, resets at midnight.
 - **Proactive momentum system** — Coach now automatically provides next-step directives after every interaction. Weight check-ins get full day plans, meal logs get "next up" instructions, workouts trigger recovery nutrition guidance. User never has to ask "what's next."
 
-### Previous Updates (Feb 27)
+### Updates (Feb 27)
 - **Elite trainer voice upgrade** — Coach persona shifted from casual "texting a friend" to elite personal trainer. Opens with punchy headlines, explains biological mechanisms instead of labeling foods, uses exact numbers, treats each interaction like a mission briefing.
 - **Labeling vs mechanism examples** — Added explicit examples in system prompt showing bad (labeling) vs good (mechanism) food explanations.
 - **Token limit increased** — Coaching responses now allow up to 2048 tokens (was 1024) to support the new narrative style.
