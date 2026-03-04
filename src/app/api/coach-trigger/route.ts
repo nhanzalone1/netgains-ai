@@ -32,14 +32,16 @@ export async function POST(req: Request) {
     const today = context.localDate || formatLocalDate(new Date());
     console.log('[CoachTrigger API] Using date:', today, 'from client:', !!context.localDate);
 
-    // Fetch user context in parallel (including recent conversation)
-    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult] = await Promise.all([
+    // Fetch user context in parallel (including recent conversation and today's workout)
+    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult, todayWorkoutResult] = await Promise.all([
       supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
-      supabase.from('meals').select('food_name, calories, protein, carbs, fat').eq('user_id', user.id).eq('date', today).eq('consumed', true),
+      supabase.from('meals').select('food_name, calories, protein, carbs, fat, created_at').eq('user_id', user.id).eq('date', today).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
       // Fetch last 3 assistant messages for conversation context
       supabase.from('chat_messages').select('content, role').eq('user_id', user.id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(3),
+      // Check if user already worked out today
+      supabase.from('workouts').select('id, notes, created_at').eq('user_id', user.id).eq('date', today).order('created_at', { ascending: false }).limit(1),
     ]);
 
     const profile = profileResult.data;
@@ -47,6 +49,11 @@ export async function POST(req: Request) {
     const todayMeals = todayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
     const recentMessages = recentMessagesResult.data || [];
+    const todayWorkout = todayWorkoutResult.data?.[0] || null;
+
+    // Determine if user already trained today
+    const alreadyTrainedToday = !!todayWorkout;
+    console.log('[CoachTrigger API] Already trained today:', alreadyTrainedToday, todayWorkout?.notes);
 
     // Build recent conversation context (reversed to chronological order)
     const recentConversation = recentMessages.reverse().map(m => m.content).join('\n---\n');
@@ -142,18 +149,19 @@ CURRENT TIME: ${context.localTime || 'unknown'} (${timeOfDay})
 
 USER: ${userName} | Goal: ${profile?.goal || 'not set'} | Weight: ${profile?.weight_lbs || '?'} lbs
 
+TODAY'S TRAINING STATUS: ${alreadyTrainedToday ? `ALREADY TRAINED TODAY ✓ (${todayWorkout?.notes || 'workout logged'})` : 'NOT YET TRAINED'}
+${alreadyTrainedToday ? '→ This meal is POST-WORKOUT. Focus on recovery and next meal timing.' : '→ Training still ahead. This could be pre-workout fuel.'}
+
 ${recentConversation ? `RECENT CONVERSATION (READ THIS CAREFULLY — this is what you just told them):
 ---
 ${recentConversation.substring(0, 1000)}
 ---
-CRITICAL: If you told them to eat this as a PRE-WORKOUT meal, then "next up" is TRAINING, not more food.
-If you mentioned class, work, gym, or any schedule, follow that plan.
 ` : ''}
 MEALS JUST LOGGED (${meals.length} item${meals.length > 1 ? 's' : ''}):
 ${mealsSummary}
 Total just logged: ${totalLoggedCalories} cal, ${totalLoggedProtein}g protein
 
-TODAY'S RUNNING STATUS (after this meal):
+TODAY'S NUTRITION STATUS (after this meal):
 - Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
 - Targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
 - Protein: ${proteinHit ? 'TARGET HIT ✓' : `${remaining.protein}g SHORT`}
@@ -165,15 +173,13 @@ YOUR RESPONSE:
 ${responseInstruction}
 
 RULES:
-- Acknowledge the meal: "pre-workout fuel loaded" or "breakfast locked in: ${mealNames}"
+- Acknowledge the meal appropriately based on training status:
+  - ALREADY TRAINED: "post-workout recovery fuel locked in" — next up is rest/next meal
+  - NOT YET TRAINED: "pre-workout fuel loaded" — next up is training (or class then gym)
+- NEVER say "time to hit the gym" if they ALREADY TRAINED TODAY
 - If you recently suggested these exact foods, acknowledge: "you executed the plan"
-- "NEXT UP" can be TRAINING, CLASS, or an ACTIVITY — not always food!
-  - Pre-workout meal → next up is GYM/TRAINING
-  - Morning meal before class → next up is CLASS, then GYM
-  - Post-workout meal → next up is recovery/next meal
-- Read the recent conversation and STAY CONSISTENT with the plan you laid out
+- Read the recent conversation and STAY CONSISTENT with the plan
 - ${profile?.goal === 'cutting' ? 'Cutting: NEVER suggest eating more calories.' : ''}
-- Do NOT contradict what you said in the recent conversation
 - Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed
