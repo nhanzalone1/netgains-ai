@@ -129,10 +129,11 @@ Then close the day.`;
         responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g and it's end of day.
 Tell them exactly what to eat to hit the target before bed. Be specific with grams needed.`;
       } else {
-        // PROTEIN SHORT + EARLIER IN DAY = Normal next meal guidance
-        responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g.
-Tell them what's next: when to eat, what to focus on for the next meal to close the gap.
-End with: "next up: [specific food] — [why it matters]"`;
+        // PROTEIN SHORT + EARLIER IN DAY = Context-aware guidance
+        responseInstruction = `PROTEIN IS SHORT by ${remaining.protein}g — but READ THE RECENT CONVERSATION first.
+If this was a PRE-WORKOUT meal, the next step is TRAINING, not more food. Say "fuel is loaded — go lift."
+If coach mentioned a schedule (class, work, gym), follow that schedule for "next up."
+Only suggest more food if it's clearly time for another meal AND coach didn't just set up a training window.`;
       }
 
       prompt = `You are Coach, an elite fitness trainer. The user just logged ${meals.length > 1 ? 'their meal' : 'a meal'}. Generate a SHORT (2-3 sentences max) directive.
@@ -141,10 +142,12 @@ CURRENT TIME: ${context.localTime || 'unknown'} (${timeOfDay})
 
 USER: ${userName} | Goal: ${profile?.goal || 'not set'} | Weight: ${profile?.weight_lbs || '?'} lbs
 
-${recentConversation ? `RECENT CONVERSATION (what you said recently — stay consistent):
+${recentConversation ? `RECENT CONVERSATION (READ THIS CAREFULLY — this is what you just told them):
 ---
-${recentConversation.substring(0, 800)}
+${recentConversation.substring(0, 1000)}
 ---
+CRITICAL: If you told them to eat this as a PRE-WORKOUT meal, then "next up" is TRAINING, not more food.
+If you mentioned class, work, gym, or any schedule, follow that plan.
 ` : ''}
 MEALS JUST LOGGED (${meals.length} item${meals.length > 1 ? 's' : ''}):
 ${mealsSummary}
@@ -155,17 +158,22 @@ TODAY'S RUNNING STATUS (after this meal):
 - Targets: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
 - Protein: ${proteinHit ? 'TARGET HIT ✓' : `${remaining.protein}g SHORT`}
 
+${splitRotation ? `TRAINING SPLIT: ${splitRotation}` : ''}
 ${foodStaples ? `STAPLES: ${foodStaples}` : ''}
 
 YOUR RESPONSE:
 ${responseInstruction}
 
 RULES:
-- Acknowledge ALL the meals logged together (e.g., "breakfast locked in: ${mealNames}")
-- If you recently suggested these exact foods, acknowledge they followed through: "you executed the plan"
+- Acknowledge the meal: "pre-workout fuel loaded" or "breakfast locked in: ${mealNames}"
+- If you recently suggested these exact foods, acknowledge: "you executed the plan"
+- "NEXT UP" can be TRAINING, CLASS, or an ACTIVITY — not always food!
+  - Pre-workout meal → next up is GYM/TRAINING
+  - Morning meal before class → next up is CLASS, then GYM
+  - Post-workout meal → next up is recovery/next meal
+- Read the recent conversation and STAY CONSISTENT with the plan you laid out
 - ${profile?.goal === 'cutting' ? 'Cutting: NEVER suggest eating more calories.' : ''}
-- Do NOT repeat the same information from your recent messages
-- Tie the response to what's NEXT — training timing, carb absorption, next meal
+- Do NOT contradict what you said in the recent conversation
 - Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed
