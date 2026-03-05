@@ -253,6 +253,9 @@ Technical details:
 - Messages stored in `chat_messages` table (not localStorage)
 - Cross-device sync (Mac ↔ iPhone)
 - Messages load from DB on component mount
+- **User messages**: Saved client-side immediately when sent
+- **Assistant messages**: Saved server-side after streaming completes (ensures responses aren't lost if user navigates away)
+- Badge polling: Bottom nav checks for new messages every 5 seconds when not on coach page
 
 ### Profile Fields
 Key fields in `profiles` table:
@@ -355,6 +358,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 5)
+- **Coach badge when navigating away** — When user sends a message and navigates to another tab (Log, Nutrition) while waiting for a response, the coach response is now saved server-side and badge appears on Coach tab. Server saves assistant messages to DB after streaming completes. Bottom nav polls every 5 seconds (when not on coach page) to check for new responses. Fixes lost responses when navigating away.
 - **Exercise categorization overhaul** — Complete rewrite of exercise picker. Now uses detailed muscle groups (front_delt, side_delt, rear_delt instead of just "shoulders") with AI-powered categorization. Tabs match user's split rotation (Rest days excluded). Features:
   - **14 muscle groups**: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core, other
   - **AI categorization**: Haiku categorizes new exercises automatically (user can override via dropdown)
