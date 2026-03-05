@@ -34,6 +34,7 @@ src/
 │   │   ├── daily-brief/       # Daily training card (Haiku)
 │   │   ├── coach-reset/       # Reset coach state (supports ?full=true)
 │   │   ├── nutrition-onboarding/ # Macro calculation + save
+│   │   ├── nutrition/recalculate/ # Recalc goals when intensity changes
 │   │   └── ...
 │   ├── login/
 │   └── signup/
@@ -52,7 +53,7 @@ src/
 
 ## Database Tables
 
-- **profiles** — user info (height, weight, goal, training mode, coaching mode)
+- **profiles** — user info (height, weight, goal, training mode, coaching mode, coaching_intensity)
 - **workouts** — workout sessions (date, notes, muscle group)
 - **sets** — individual sets (exercise, weight, reps, variant: normal/warmup/drop/failure)
 - **nutrition_logs** — logged meals (name, calories, protein, carbs, fat, date)
@@ -192,6 +193,14 @@ Technical details:
 - Cross-device sync (Mac ↔ iPhone)
 - Messages load from DB on component mount
 
+### Profile Fields
+Key fields in `profiles` table:
+- `goal` — "cutting", "bulking", or "maintaining"
+- `coaching_intensity` — "light", "moderate", or "aggressive" (affects calorie deficit/surplus size)
+- `coaching_mode` — "full" (coach builds program) or "assist" (user has own program)
+- `height_inches` — User's height in total inches
+- `weight_lbs` — User's weight in pounds
+
 ### Coach Memory Keys
 Special keys in `coach_memory` table:
 - `name` — User's preferred name
@@ -269,7 +278,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Mar 3)
+## Current State (Mar 5)
 
 ### What's Working
 - **Workout logging** with set variants (warmup, drop, failure)
@@ -283,7 +292,14 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Mar 3)
+### Recent Updates (Mar 5)
+- **Intensity-aware nutrition goals** — Goal intensity (light/moderate/aggressive) now affects calorie targets. Light = ~300 cal deficit/surplus, moderate = ~500, aggressive = ~750+. When user changes intensity in profile settings, nutrition goals automatically recalculate via `/api/nutrition/recalculate`.
+- **User profile context on every message** — AI coach now sees a `[USER PROFILE]` block on every message containing goal, intensity, height, weight, training split, split rotation, today's scheduled workout, and injuries. No longer needs to call tools to access this info.
+- **Training split rotation awareness** — Coach calculates today's scheduled workout based on the user's split rotation and last logged workout. Morning greetings now say "back day today" instead of asking what they're training. Rotation supports any split (PPL, Upper/Lower, bro split, custom).
+- **Adaptive split handling** — If user wants to do a different workout than scheduled, coach adapts without arguing. Missed days don't break the rotation — it continues from the last logged workout. Rest days in rotation are respected.
+- **Cardio guidance for cutting** — System prompt now includes cardio recommendations scaled to intensity: light (optional 1-2x/week), moderate (2-3x/week LISS+HIIT), aggressive (4-5x/week + 10k daily steps). Includes HIIT vs LISS guidance and timing recommendations.
+
+### Previous Updates (Mar 3)
 - **Morning greeting fix** — The `checkAndGenerateOpening()` function was defined but never called. Added useEffect to invoke it after messages load, so users now get a personalized morning greeting when opening the coach tab on a new day.
 - **Meal trigger batching** — Fixed duplicate messages when checking off multiple meals quickly. Meals logged within 3 seconds are now batched into a single coach response. Instead of 2 separate "protein is low" warnings, you get one unified message: "breakfast locked in: protein shake, rice cakes, fruit."
 - **Meal trigger conversation context** — Coach-trigger now fetches the last 3 assistant messages before responding. If coach suggested specific foods and user logs those exact foods, the response acknowledges they followed through ("you executed the plan") instead of giving generic advice.
