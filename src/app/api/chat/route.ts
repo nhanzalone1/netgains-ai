@@ -180,6 +180,24 @@ CUTTING phases:
 - Week 6-8+: Suggest a 1-2 week diet break at maintenance to reduce metabolic adaptation and improve adherence. "you've been cutting 6+ weeks — consider a maintenance week to reset."
 - Rate of loss: 0.5-1% of bodyweight per week. Faster risks muscle loss.
 
+CARDIO FOR CUTTING (check user's intensity setting):
+Cardio accelerates fat loss by increasing calorie expenditure without further restricting food intake.
+
+- Light intensity cut: Cardio optional. 1-2 sessions/week of 20-30 min LISS (walking, cycling) if user wants to speed things up.
+- Moderate intensity cut: Recommend 2-3 cardio sessions/week. Mix of LISS (30-45 min) and HIIT (15-20 min). "you're on a moderate cut — 2-3 cardio sessions a week will keep the deficit moving without destroying recovery."
+- Aggressive intensity cut: Cardio is essential. 4-5 sessions/week recommended. Daily step goal of 10k+. "aggressive cut means we need cardio in the mix — 4-5 sessions a week, plus hit your 10k steps daily. that's how we move fat without crashing your metabolism."
+
+Cardio timing:
+- Fasted cardio (morning before eating): Marginally better for fat oxidation, but difference is small. If user prefers it, support it.
+- Post-weights cardio: Good option — glycogen depleted, body pulls from fat stores. Keep it to 20-30 min LISS to avoid interfering with recovery.
+- Separate session: Best for recovery. If user trains hard, suggest cardio on rest days or as a separate AM/PM session.
+
+HIIT vs LISS:
+- HIIT (sprints, intervals): Time-efficient, boosts metabolism for hours after. But taxing on CNS — limit to 2x/week max during a cut.
+- LISS (walking, incline treadmill, cycling): Lower stress, can do daily, doesn't impact lifting recovery. The workhorse of cutting cardio.
+
+If weight stalls during a cut and user is already at low calories, suggest ADDING cardio before dropping calories further. "before we cut more food, let's add 2 cardio sessions. that gives us somewhere to go without starving you."
+
 BULKING phases:
 - Week 1-2: Expect rapid weight gain (water/glycogen/food volume — not all muscle). "first week jumps fast, mostly water and glycogen. don't panic."
 - Month 2+: Rate of gain should be 0.5-1 lb/week for moderate bulk, less for lean bulk.
@@ -272,6 +290,35 @@ If performance is declining, check these variables BEFORE changing diet:
 - Stress — life stress affects recovery directly. Acknowledge it.
 - Training volume — too much volume without deloads leads to accumulated fatigue.
 Don't immediately blame the diet. A real coach checks all variables first.
+
+=== TRAINING SPLIT AWARENESS ===
+The user's split rotation is shown in [USER PROFILE] context. This tells you their planned workout order (e.g., Chest → Back → Arms → Legs → Rest → repeat).
+
+USING THE ROTATION:
+- "Today's scheduled workout" tells you what they SHOULD be doing today based on their rotation
+- Use this in morning greetings: "back day today" not "what are you training?"
+- If today's scheduled workout is "Rest", acknowledge it: "rest day today — recover up"
+
+HANDLING SCHEDULE CHANGES:
+- If user says "I'm doing legs today" but rotation says chest, ADAPT. Don't argue.
+- Say something like "switching it up — legs it is. chest moves to tomorrow then?"
+- The rotation naturally resets based on whatever workout they actually log
+- Next time they open the app, the rotation will have advanced from their actual last workout
+
+MISSED DAYS:
+- If user missed a day, the rotation picks up where they left off
+- Don't guilt them: "missed yesterday? no problem — [scheduled workout] is still on deck"
+- The rotation doesn't "skip" days — it just continues from the last logged workout
+
+REST DAYS IN ROTATION:
+- If "Rest" appears in their rotation, respect it
+- On scheduled rest days, focus on recovery, nutrition, sleep
+- Don't suggest training on their planned rest day unless they ask
+
+ADAPTIVE COACHING:
+- The rotation is a PLAN, not a rigid rule
+- Life happens — be flexible
+- What matters is that the user trains consistently, not that they follow the exact order
 
 === PROTEIN DISTRIBUTION ===
 Spreading protein across 3-5 meals with 30-50g per meal is more effective for muscle protein synthesis than one large meal. If all protein is in one meal, suggest spreading it out. "most of your protein is at dinner — try adding 30g at lunch for better absorption." This applies to all phases.
@@ -920,6 +967,65 @@ export async function POST(req: Request) {
 
     console.log('[Coach] Milestones detected:', milestoneContext.newMilestones.map(m => m.type));
 
+    // === TRAINING SPLIT ROTATION ===
+    // Parse split rotation and calculate today's suggested workout
+    const splitRotationMemory = memories.find(m => m.key === 'split_rotation');
+    let splitRotation: string[] = [];
+    if (splitRotationMemory?.value) {
+      try {
+        splitRotation = JSON.parse(splitRotationMemory.value);
+      } catch {
+        splitRotation = [];
+      }
+    }
+
+    let todaysSuggestedWorkout = '';
+    let rotationPosition = -1;
+    let lastWorkoutType = '';
+
+    if (splitRotation.length > 0) {
+      // Find the last workout BEFORE today to determine rotation position
+      const workoutsBeforeToday = recentWorkouts.filter(w => w.date < todayStr);
+
+      if (workoutsBeforeToday.length > 0 && workoutsBeforeToday[0].notes) {
+        lastWorkoutType = workoutsBeforeToday[0].notes.replace(/^\[DEBUG\]\s*/, '').trim();
+        const normalizedLast = lastWorkoutType.toLowerCase();
+
+        // Find where the last workout matches in the rotation
+        for (let i = 0; i < splitRotation.length; i++) {
+          const day = splitRotation[i].toLowerCase();
+          if (normalizedLast.includes(day) || day.includes(normalizedLast) ||
+              normalizedLast.split(/\s+/).some(word => day.includes(word)) ||
+              day.split(/\s+/).some(word => normalizedLast.includes(word))) {
+            rotationPosition = i;
+            break;
+          }
+        }
+
+        // Suggest next in rotation
+        if (rotationPosition >= 0) {
+          const nextIndex = (rotationPosition + 1) % splitRotation.length;
+          todaysSuggestedWorkout = splitRotation[nextIndex];
+        } else {
+          // Couldn't match - suggest first non-rest day
+          todaysSuggestedWorkout = splitRotation.find(d => d.toLowerCase() !== 'rest') || splitRotation[0];
+        }
+      } else {
+        // No previous workout - start from beginning
+        todaysSuggestedWorkout = splitRotation[0];
+        rotationPosition = -1;
+      }
+    }
+
+    const splitRotationSection = splitRotation.length > 0
+      ? `
+TRAINING SPLIT ROTATION:
+Full rotation: ${splitRotation.join(' → ')} (then repeats)
+${lastWorkoutType ? `Last workout logged: ${lastWorkoutType}` : 'No workouts logged yet'}
+${todaysSuggestedWorkout ? `TODAY'S SCHEDULED WORKOUT: ${todaysSuggestedWorkout}${todaysSuggestedWorkout.toLowerCase() === 'rest' ? ' (Rest Day)' : ''}` : ''}
+`
+      : '';
+
     // Build milestone section for context
     const milestoneSection = milestoneContext.newMilestones.length > 0
       ? `
@@ -946,7 +1052,7 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
       : '';
 
     // Build context for opening generation - compact format to save tokens
-    const profileSummary = profile ? `onboarding:${profile.onboarding_complete ?? false}, goal:${profile.goal || 'unset'}, mode:${profile.coaching_mode || 'unset'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
+    const profileSummary = profile ? `onboarding:${profile.onboarding_complete ?? false}, goal:${profile.goal || 'unset'}, mode:${profile.coaching_mode || 'unset'}, intensity:${profile.coaching_intensity || 'moderate'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
 
     const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
 
@@ -954,7 +1060,7 @@ User: ${profileSummary}
 
 User Memories (things you've learned about them):
 ${memories.filter(m => m.key !== 'food_staples').map(m => `- ${m.key}: ${m.value}`).join('\n') || 'None yet'}
-${foodStaplesSection}${milestoneSection}
+${foodStaplesSection}${splitRotationSection}${milestoneSection}
 === TODAY'S DATA (${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 Today's Workout:
@@ -1047,13 +1153,15 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     console.log('[Coach] Using todayStr:', todayStr);
     console.log('[Coach] Server date:', formatLocalDate(new Date()));
 
-    // Fetch profile, today's nutrition data, conversation summary, and message count
-    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal').eq('id', user.id).single(),
+    // Fetch profile, today's nutrition data, conversation summary, message count, key memories, and recent workouts
+    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult] = await Promise.all([
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).single(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
+      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries']),
+      supabase.from('workouts').select('date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(3),
     ]);
 
     // Check if profile is complete
@@ -1076,6 +1184,14 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
     const existingSummary = summaryResult.data?.value || null;
     const lastSummaryCount = parseInt(messageCountResult.data?.value || '0');
+
+    // Parse key memories into a map
+    const keyMemories: Record<string, string> = {};
+    if (memoriesResult.data) {
+      for (const m of memoriesResult.data) {
+        keyMemories[m.key] = m.value;
+      }
+    }
 
     // Calculate today's nutrition totals
     const todayNutrition = todayMeals.reduce(
@@ -1101,12 +1217,73 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
 
 `;
 
-    console.log('[Coach] Nutrition context length:', nutritionContext.length);
-    if (nutritionContext) {
-      console.log('[Coach] Nutrition context:', nutritionContext);
-    } else {
-      console.log('[Coach] No nutrition context (no meals found for', todayStr, ')');
+    // Parse split rotation and calculate today's suggested workout
+    let splitRotation: string[] = [];
+    if (keyMemories.split_rotation) {
+      try {
+        splitRotation = JSON.parse(keyMemories.split_rotation);
+      } catch {
+        splitRotation = [];
+      }
     }
+
+    const recentWorkouts = recentWorkoutsResult.data || [];
+    let todaysSuggestedWorkout = '';
+    let lastWorkoutInfo = '';
+
+    if (splitRotation.length > 0) {
+      // Find the last workout BEFORE today to determine rotation position
+      const workoutsBeforeToday = recentWorkouts.filter(w => w.date < todayStr);
+      const todaysWorkout = recentWorkouts.find(w => w.date === todayStr);
+
+      if (todaysWorkout?.notes) {
+        lastWorkoutInfo = `Today's workout: ${todaysWorkout.notes.replace(/^\[DEBUG\]\s*/, '').trim()}`;
+      } else if (workoutsBeforeToday.length > 0 && workoutsBeforeToday[0].notes) {
+        const lastWorkoutType = workoutsBeforeToday[0].notes.replace(/^\[DEBUG\]\s*/, '').trim();
+        lastWorkoutInfo = `Last workout: ${lastWorkoutType} (${workoutsBeforeToday[0].date})`;
+        const normalizedLast = lastWorkoutType.toLowerCase();
+
+        // Find where the last workout matches in the rotation
+        let rotationPosition = -1;
+        for (let i = 0; i < splitRotation.length; i++) {
+          const day = splitRotation[i].toLowerCase();
+          if (normalizedLast.includes(day) || day.includes(normalizedLast) ||
+              normalizedLast.split(/\s+/).some(word => day.includes(word)) ||
+              day.split(/\s+/).some(word => normalizedLast.includes(word))) {
+            rotationPosition = i;
+            break;
+          }
+        }
+
+        // Suggest next in rotation
+        if (rotationPosition >= 0) {
+          const nextIndex = (rotationPosition + 1) % splitRotation.length;
+          todaysSuggestedWorkout = splitRotation[nextIndex];
+        } else {
+          todaysSuggestedWorkout = splitRotation.find(d => d.toLowerCase() !== 'rest') || splitRotation[0];
+        }
+      } else {
+        todaysSuggestedWorkout = splitRotation[0];
+      }
+    }
+
+    // Build user profile context string with key settings
+    const userProfileContext = `[USER PROFILE]
+Goal: ${profile?.goal || 'not set'}
+Intensity: ${profile?.coaching_intensity || 'moderate'} (${profile?.coaching_intensity === 'light' ? '~300 cal deficit/surplus' : profile?.coaching_intensity === 'aggressive' ? '~750+ cal deficit/surplus' : '~500 cal deficit/surplus'})
+Height: ${profile?.height_inches ? `${Math.floor(profile.height_inches / 12)}'${profile.height_inches % 12}"` : 'not set'}
+Weight: ${profile?.weight_lbs ? `${profile.weight_lbs} lbs` : 'not set'}
+Training split: ${keyMemories.training_split || 'not set'}
+Split rotation: ${splitRotation.length > 0 ? splitRotation.join(' → ') + ' (repeats)' : 'not set'}
+${lastWorkoutInfo ? lastWorkoutInfo : ''}
+${todaysSuggestedWorkout ? `Today's scheduled workout: ${todaysSuggestedWorkout}${todaysSuggestedWorkout.toLowerCase() === 'rest' ? ' (Rest Day)' : ''}` : ''}
+${keyMemories.injuries && keyMemories.injuries !== 'none' ? `Injuries: ${keyMemories.injuries}` : ''}
+[END USER PROFILE]
+
+`;
+
+    console.log('[Coach] Nutrition context length:', nutritionContext.length);
+    console.log('[Coach] User profile context:', userProfileContext);
 
     // Filter out system trigger messages
     const filteredMessages = messages.filter(
@@ -1132,16 +1309,16 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
 
     const mappedMessages = messagesToSend.map((m: { role: string; content: string }, index: number) => ({
       role: m.role as 'user' | 'assistant',
-      // Prepend summary + nutrition context to the first user message
+      // Prepend summary + user profile + nutrition context to the first user message
       content: index === 0 && m.role === 'user'
-        ? summaryPrefix + nutritionContext + m.content
+        ? summaryPrefix + userProfileContext + nutritionContext + m.content
         : m.content,
     }));
 
     // Fix message ordering if needed - if first message is assistant, prepend synthetic user
     if (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
       anthropicMessages = [
-        { role: 'user' as const, content: summaryPrefix + nutritionContext + '[User opened the coach tab]' },
+        { role: 'user' as const, content: summaryPrefix + userProfileContext + nutritionContext + '[User opened the coach tab]' },
         ...mappedMessages,
       ];
     } else {

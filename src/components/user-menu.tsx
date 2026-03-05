@@ -70,10 +70,18 @@ export function UserMenu() {
   const setIntensity = async (newIntensity: IntensityId) => {
     setIntensityState(newIntensity);
     if (user?.id) {
+      // Update intensity in profile
       await supabase
         .from("profiles")
         .update({ coaching_intensity: newIntensity })
         .eq("id", user.id);
+
+      // Recalculate nutrition goals based on new intensity
+      try {
+        await fetch("/api/nutrition/recalculate", { method: "POST" });
+      } catch (error) {
+        console.error("Failed to recalculate nutrition goals:", error);
+      }
     }
   };
 

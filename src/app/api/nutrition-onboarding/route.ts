@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const [profileResult, memoriesResult] = await Promise.all([
     supabase
       .from('profiles')
-      .select('weight_lbs, height_inches, goal')
+      .select('weight_lbs, height_inches, goal, coaching_intensity')
       .eq('id', user.id)
       .single(),
     supabase
@@ -58,6 +58,7 @@ export async function POST(request: Request) {
   const age = parseInt(memoryMap.age) || 30;
   const daysPerWeek = parseInt(memoryMap.days_per_week) || 4;
   const goal = profile.goal || 'maintaining';
+  const intensity = profile.coaching_intensity || 'moderate';
 
   // Convert to metric for Mifflin-St Jeor
   const weightKg = weightLbs * 0.453592;
@@ -89,17 +90,33 @@ export async function POST(request: Request) {
   const tdee = bmr * activityFactor;
   console.log('[Nutrition Calc] Activity factor:', activityFactor, 'TDEE:', Math.round(tdee));
 
+  // Get calorie adjustment based on intensity
+  // light: ~300 cal, moderate: ~500 cal, aggressive: ~750 cal
+  let calorieAdjustment: number;
+  switch (intensity) {
+    case 'light':
+      calorieAdjustment = 300;
+      break;
+    case 'aggressive':
+      calorieAdjustment = 750;
+      break;
+    case 'moderate':
+    default:
+      calorieAdjustment = 500;
+      break;
+  }
+
   // Adjust for goal
   let suggestedCalories: number;
   let goalDescription: string;
 
   switch (goal) {
     case 'bulking':
-      suggestedCalories = Math.round(tdee + 300);
+      suggestedCalories = Math.round(tdee + calorieAdjustment);
       goalDescription = 'bulk';
       break;
     case 'cutting':
-      suggestedCalories = Math.round(tdee - 500);
+      suggestedCalories = Math.round(tdee - calorieAdjustment);
       goalDescription = 'cut';
       break;
     case 'maintaining':
@@ -108,6 +125,8 @@ export async function POST(request: Request) {
       goalDescription = 'maintain';
       break;
   }
+
+  console.log('[Nutrition Calc] Intensity:', intensity, 'Calorie adjustment:', calorieAdjustment);
 
   // Calculate macros
   // Protein: 1g per lb bodyweight
