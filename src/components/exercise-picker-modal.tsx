@@ -20,125 +20,54 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 // Equipment order for section display
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
-// All muscle groups
-const ALL_MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Abs"];
+// Detailed muscle groups for categorization
+const DETAILED_MUSCLE_GROUPS = [
+  "chest",
+  "front_delt",
+  "side_delt",
+  "rear_delt",
+  "lats",
+  "upper_back",
+  "biceps",
+  "triceps",
+  "quads",
+  "hamstrings",
+  "glutes",
+  "calves",
+  "core",
+  "other",
+] as const;
 
-// Predefined ab exercises that should always be categorized as Abs (not Legs or other)
-const ABS_EXERCISES = [
-  "hanging leg raise", "hanging leg raises",
-  "cable crunch", "cable crunches",
-  "ab rollout", "ab rollouts", "ab wheel",
-  "plank", "planks", "side plank",
-  "leg raise", "leg raises", "lying leg raise",
-  "sit-up", "sit-ups", "situp", "situps",
-  "crunch", "crunches", "reverse crunch",
-  "dead bug", "dead bugs",
-  "hollow hold", "hollow body",
-  "ab", "abs", "core",
-  "v-up", "v-ups",
-  "toe touch", "toe touches",
-  "woodchop", "wood chop",
-  "pallof press",
-  "decline crunch", "decline sit-up",
-  "captain's chair", "captains chair",
-  "dragon flag",
-];
+type MuscleGroup = typeof DETAILED_MUSCLE_GROUPS[number];
 
-// Keywords for muscle group categorization
-const MUSCLE_KEYWORDS: Record<string, string[]> = {
-  Chest: ["bench", "fly", "chest", "pec", "pushup", "push-up", "incline press", "decline press"],
-  Back: ["row", "pull", "lat", "pulldown", "pullup", "pull-up", "deadlift", "back", "shrug"],
-  Shoulders: ["shoulder", "ohp", "overhead press", "lateral raise", "front raise", "rear delt", "delt", "military"],
-  Legs: ["squat", "lunge", "calf", "quad", "hamstring", "glute", "hip", "rdl", "leg press", "leg extension", "leg curl"],
-  Arms: ["curl", "tricep", "bicep", "arm", "pushdown", "hammer", "preacher", "skull", "dip", "extension"],
-  Abs: ["ab", "core", "plank", "crunch", "sit-up", "situp", "oblique", "hanging leg", "cable crunch", "rollout", "hollow", "v-up", "dead bug"],
+// Display names for muscle groups
+const MUSCLE_GROUP_DISPLAY: Record<MuscleGroup, string> = {
+  chest: "Chest",
+  front_delt: "Front Delt",
+  side_delt: "Side Delt",
+  rear_delt: "Rear Delt",
+  lats: "Lats",
+  upper_back: "Upper Back",
+  biceps: "Biceps",
+  triceps: "Triceps",
+  quads: "Quads",
+  hamstrings: "Hamstrings",
+  glutes: "Glutes",
+  calves: "Calves",
+  core: "Core",
+  other: "Other",
 };
 
-// Parse workout name to determine relevant muscle groups
-const getContextualTabs = (workoutName: string): string[] => {
-  const name = workoutName.toLowerCase();
-  const relevantGroups: string[] = [];
-
-  // Check for specific patterns
-  if (name.includes("push")) {
-    relevantGroups.push("Chest", "Shoulders", "Arms");
-  } else if (name.includes("pull")) {
-    relevantGroups.push("Back", "Arms");
-  } else if (name.includes("upper")) {
-    relevantGroups.push("Chest", "Back", "Shoulders", "Arms");
-  } else if (name.includes("lower")) {
-    relevantGroups.push("Legs", "Abs");
-  } else {
-    // Check for individual muscle group keywords
-    if (name.includes("chest") || name.includes("pec")) {
-      relevantGroups.push("Chest");
-    }
-    if (name.includes("back") || name.includes("lat")) {
-      relevantGroups.push("Back");
-    }
-    if (name.includes("shoulder") || name.includes("delt")) {
-      relevantGroups.push("Shoulders");
-    }
-    if (name.includes("arm") || name.includes("bicep") || name.includes("tricep")) {
-      relevantGroups.push("Arms");
-    }
-    if (name.includes("leg") || name.includes("quad") || name.includes("hamstring") || name.includes("glute")) {
-      relevantGroups.push("Legs");
-    }
-    if (name.includes("core") || name.includes("ab")) {
-      relevantGroups.push("Abs");
-    }
-    // Add Legs -> Abs association (common pairing)
-    if (relevantGroups.includes("Legs") && !relevantGroups.includes("Abs")) {
-      relevantGroups.push("Abs");
-    }
-  }
-
-  // Always include Abs in the tabs since abs can be trained any day
-  if (!relevantGroups.includes("Abs") && relevantGroups.length > 0) {
-    relevantGroups.push("Abs");
-  }
-
-  // If no specific groups found, show all
-  if (relevantGroups.length === 0) {
-    return ["Recent", ...ALL_MUSCLE_GROUPS, "All"];
-  }
-
-  // Return: Recent + relevant groups + All
-  return ["Recent", ...relevantGroups, "All"];
-};
-
-const categorizeExercise = (name: string): string => {
-  const lowerName = name.toLowerCase();
-
-  // Check predefined ab exercises FIRST to avoid mis-categorization
-  // (e.g., "hanging leg raises" should be Abs, not Legs)
-  if (ABS_EXERCISES.some(abEx => lowerName.includes(abEx))) {
-    return "Abs";
-  }
-
-  // Then check other muscle groups by keyword
-  for (const [group, keywords] of Object.entries(MUSCLE_KEYWORDS)) {
-    // Skip Abs since we already checked predefined list
-    if (group === "Abs") continue;
-    if (keywords.some(kw => lowerName.includes(kw))) {
-      return group;
-    }
-  }
-
-  // Finally check Abs keywords for any remaining matches
-  if (MUSCLE_KEYWORDS.Abs.some(kw => lowerName.includes(kw))) {
-    return "Abs";
-  }
-
-  return "Other";
-};
+// Extended exercise template type with muscle_group
+interface ExerciseWithMuscleGroup extends ExerciseTemplate {
+  muscle_group?: MuscleGroup | null;
+}
 
 interface ExercisePickerModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (template: ExerciseTemplate) => void;
-  onCreateNew: (data: { name: string; equipment: string }) => Promise<ExerciseTemplate | null>;
+  onCreateNew: (data: { name: string; equipment: string; muscle_group?: string }) => Promise<ExerciseTemplate | null>;
   userId: string;
   folderId: string;
   folderName?: string;
@@ -159,28 +88,33 @@ export function ExercisePickerModal({
   const tabsRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
 
-  // Get contextual tabs based on folder name
-  const contextualTabs = useMemo(() => getContextualTabs(folderName), [folderName]);
-
   // State
-  const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
-  const [recentExercises, setRecentExercises] = useState<ExerciseTemplate[]>([]);
+  const [exercises, setExercises] = useState<ExerciseWithMuscleGroup[]>([]);
+  const [recentExercises, setRecentExercises] = useState<ExerciseWithMuscleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("Recent");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Split-based tabs
+  const [splitTabs, setSplitTabs] = useState<string[]>(["Recent", "All"]);
+  const [splitMapping, setSplitMapping] = useState<Record<string, MuscleGroup[]>>({});
+
   // Create form state
   const [newName, setNewName] = useState("");
   const [newEquipment, setNewEquipment] = useState("barbell");
+  const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup | "">("");
+  const [aiSuggestedGroup, setAiSuggestedGroup] = useState<MuscleGroup | null>(null);
   const [creating, setCreating] = useState(false);
+  const [categorizingNew, setCategorizingNew] = useState(false);
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
-  const [editingExercise, setEditingExercise] = useState<ExerciseTemplate | null>(null);
+  const [editingExercise, setEditingExercise] = useState<ExerciseWithMuscleGroup | null>(null);
   const [editName, setEditName] = useState("");
   const [editEquipment, setEditEquipment] = useState("");
+  const [editMuscleGroup, setEditMuscleGroup] = useState<MuscleGroup | "">("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -192,6 +126,58 @@ export function ExercisePickerModal({
     };
   }, []);
 
+  // Load split rotation and parse into tabs
+  useEffect(() => {
+    if (open) {
+      loadSplitTabs();
+    }
+  }, [open, userId]);
+
+  const loadSplitTabs = async () => {
+    // Fetch user's split rotation from coach_memory
+    const { data: splitData } = await supabase
+      .from("coach_memory")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("key", "split_rotation")
+      .single();
+
+    if (!splitData?.value) {
+      // No split defined, use folder name for context
+      setSplitTabs(["Recent", folderName || "All", "All"]);
+      return;
+    }
+
+    try {
+      const splitRotation = JSON.parse(splitData.value) as string[];
+      // Filter out "Rest" days
+      const trainingDays = splitRotation.filter(day => day.toLowerCase() !== "rest");
+
+      if (trainingDays.length === 0) {
+        setSplitTabs(["Recent", "All"]);
+        return;
+      }
+
+      // Call API to parse split days into muscle groups
+      const response = await fetch("/api/exercise/parse-split", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ splitDays: trainingDays }),
+      });
+
+      if (response.ok) {
+        const { mapping } = await response.json();
+        setSplitMapping(mapping);
+        setSplitTabs(["Recent", ...trainingDays, "All"]);
+      } else {
+        // Fallback to simple tabs
+        setSplitTabs(["Recent", ...trainingDays, "All"]);
+      }
+    } catch {
+      setSplitTabs(["Recent", "All"]);
+    }
+  };
+
   // Load exercises on mount
   useEffect(() => {
     if (open) {
@@ -202,6 +188,8 @@ export function ExercisePickerModal({
       setShowCreateForm(false);
       setNewName("");
       setNewEquipment("barbell");
+      setNewMuscleGroup("");
+      setAiSuggestedGroup(null);
       setEditMode(false);
       setEditingExercise(null);
     }
@@ -215,14 +203,12 @@ export function ExercisePickerModal({
       .eq("folder_id", folderId)
       .order("name", { ascending: true });
 
-    // Check if component is still mounted before updating state
     if (!isMountedRef.current) return;
-    setExercises((data || []) as ExerciseTemplate[]);
+    setExercises((data || []) as ExerciseWithMuscleGroup[]);
     setLoading(false);
   };
 
   const loadRecentExercises = async () => {
-    // Get recent exercises from workout history
     const { data: recentWorkouts } = await supabase
       .from("exercises")
       .select(`
@@ -237,7 +223,6 @@ export function ExercisePickerModal({
       .limit(50);
 
     if (recentWorkouts) {
-      // Get unique exercise names (most recent first)
       const uniqueNames = new Set<string>();
       const recentNames: string[] = [];
       recentWorkouts.forEach((ex) => {
@@ -248,7 +233,6 @@ export function ExercisePickerModal({
         }
       });
 
-      // Match with templates
       const { data: templates } = await supabase
         .from("exercise_templates")
         .select("*")
@@ -257,10 +241,16 @@ export function ExercisePickerModal({
       if (templates && isMountedRef.current) {
         const matched = recentNames.slice(0, 8).map(name =>
           templates.find(t => t.name.toLowerCase() === name.toLowerCase())
-        ).filter(Boolean) as ExerciseTemplate[];
+        ).filter(Boolean) as ExerciseWithMuscleGroup[];
         setRecentExercises(matched);
       }
     }
+  };
+
+  // Get muscle groups for the active tab
+  const getActiveMuscleGroups = (): MuscleGroup[] | null => {
+    if (activeTab === "Recent" || activeTab === "All") return null;
+    return splitMapping[activeTab] || null;
   };
 
   // Filter and group exercises
@@ -276,19 +266,24 @@ export function ExercisePickerModal({
       );
     }
 
-    // Apply muscle group filter
+    // Apply muscle group filter based on tab
     if (activeTab === "Recent") {
       return recentExercises;
     } else if (activeTab !== "All") {
-      filtered = filtered.filter(ex => categorizeExercise(ex.name) === activeTab);
+      const muscleGroups = getActiveMuscleGroups();
+      if (muscleGroups && muscleGroups.length > 0) {
+        filtered = filtered.filter(ex =>
+          ex.muscle_group && muscleGroups.includes(ex.muscle_group)
+        );
+      }
     }
 
     return filtered;
-  }, [exercises, recentExercises, searchQuery, activeTab]);
+  }, [exercises, recentExercises, searchQuery, activeTab, splitMapping]);
 
   // Group exercises by equipment (for single muscle group tabs)
   const groupedExercises = useMemo(() => {
-    const groups: Record<string, ExerciseTemplate[]> = {};
+    const groups: Record<string, ExerciseWithMuscleGroup[]> = {};
 
     filteredExercises.forEach(ex => {
       const equip = ex.equipment.toLowerCase();
@@ -296,7 +291,6 @@ export function ExercisePickerModal({
       groups[equip].push(ex);
     });
 
-    // Sort by equipment order
     return EQUIPMENT_ORDER
       .filter(eq => groups[eq]?.length > 0)
       .map(eq => ({
@@ -311,7 +305,6 @@ export function ExercisePickerModal({
 
     let filtered = exercises;
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = exercises.filter((ex) =>
@@ -320,19 +313,19 @@ export function ExercisePickerModal({
       );
     }
 
-    const muscleGroups: Record<string, ExerciseTemplate[]> = {};
+    const muscleGroups: Record<string, ExerciseWithMuscleGroup[]> = {};
 
     filtered.forEach(ex => {
-      const group = categorizeExercise(ex.name);
+      const group = ex.muscle_group || "other";
       if (!muscleGroups[group]) muscleGroups[group] = [];
       muscleGroups[group].push(ex);
     });
 
-    // Return in order, including "Other"
-    return [...ALL_MUSCLE_GROUPS, "Other"]
+    return DETAILED_MUSCLE_GROUPS
       .filter(group => muscleGroups[group]?.length > 0)
       .map(group => ({
         muscleGroup: group,
+        displayName: MUSCLE_GROUP_DISPLAY[group],
         exercises: muscleGroups[group].sort((a, b) => a.name.localeCompare(b.name))
       }));
   }, [exercises, searchQuery, activeTab]);
@@ -356,6 +349,40 @@ export function ExercisePickerModal({
     onClose();
   };
 
+  // AI categorization when typing exercise name
+  const handleNameChange = async (name: string) => {
+    setNewName(name);
+    setAiSuggestedGroup(null);
+
+    // Debounce: only categorize if name is long enough
+    if (name.trim().length >= 3) {
+      setCategorizingNew(true);
+      try {
+        const response = await fetch("/api/exercise/categorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ exerciseName: name.trim() }),
+        });
+
+        if (response.ok) {
+          const { muscleGroup } = await response.json();
+          if (isMountedRef.current) {
+            setAiSuggestedGroup(muscleGroup);
+            // Auto-select if user hasn't manually chosen
+            if (!newMuscleGroup) {
+              setNewMuscleGroup(muscleGroup);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to categorize exercise:", error);
+      }
+      if (isMountedRef.current) {
+        setCategorizingNew(false);
+      }
+    }
+  };
+
   // Handle creating new exercise
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -364,12 +391,13 @@ export function ExercisePickerModal({
     const result = await onCreateNew({
       name: newName.trim(),
       equipment: newEquipment,
+      muscle_group: newMuscleGroup || aiSuggestedGroup || undefined,
     });
 
     setCreating(false);
 
     if (result) {
-      setExercises((prev) => [...prev, result]);
+      setExercises((prev) => [...prev, result as ExerciseWithMuscleGroup]);
       onSelect(result);
       onClose();
     }
@@ -395,10 +423,11 @@ export function ExercisePickerModal({
   };
 
   // Handle opening edit modal for an exercise
-  const handleEditExercise = (exercise: ExerciseTemplate) => {
+  const handleEditExercise = (exercise: ExerciseWithMuscleGroup) => {
     setEditingExercise(exercise);
     setEditName(exercise.name);
     setEditEquipment(exercise.equipment);
+    setEditMuscleGroup(exercise.muscle_group || "");
   };
 
   // Handle saving edited exercise
@@ -412,6 +441,7 @@ export function ExercisePickerModal({
         .update({
           name: editName.trim(),
           equipment: editEquipment,
+          muscle_group: editMuscleGroup || null,
         })
         .eq("id", editingExercise.id);
 
@@ -419,14 +449,14 @@ export function ExercisePickerModal({
         setExercises((prev) =>
           prev.map((e) =>
             e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment }
+              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: editMuscleGroup || null }
               : e
           )
         );
         setRecentExercises((prev) =>
           prev.map((e) =>
             e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment }
+              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: editMuscleGroup || null }
               : e
           )
         );
@@ -513,13 +543,13 @@ export function ExercisePickerModal({
               </div>
             </div>
 
-            {/* Filter Tabs */}
+            {/* Filter Tabs - Dynamic from split rotation */}
             <div
               ref={tabsRef}
               className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
-              {contextualTabs.map(tab => (
+              {splitTabs.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -550,7 +580,7 @@ export function ExercisePickerModal({
                     <input
                       type="text"
                       value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
+                      onChange={(e) => handleNameChange(e.target.value)}
                       placeholder="e.g., Incline Press"
                       className="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#22d3ee] min-h-[44px]"
                       style={{ background: "rgba(255, 255, 255, 0.08)" }}
@@ -580,6 +610,42 @@ export function ExercisePickerModal({
                             }}
                           >
                             {formatEquipment(equip)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Muscle Group Selection */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                      Muscle Group
+                      {categorizingNew && (
+                        <span className="ml-2 text-[#22d3ee]">detecting...</span>
+                      )}
+                      {aiSuggestedGroup && !categorizingNew && (
+                        <span className="ml-2 text-green-400">
+                          AI suggests: {MUSCLE_GROUP_DISPLAY[aiSuggestedGroup]}
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {DETAILED_MUSCLE_GROUPS.map((group) => {
+                        const isActive = newMuscleGroup === group;
+                        const isSuggested = aiSuggestedGroup === group && !newMuscleGroup;
+                        return (
+                          <button
+                            key={group}
+                            onClick={() => setNewMuscleGroup(group)}
+                            className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
+                              isActive
+                                ? "bg-[#22d3ee] text-black"
+                                : isSuggested
+                                ? "bg-green-500/20 text-green-400 ring-1 ring-green-500/50"
+                                : "bg-white/10 text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            {MUSCLE_GROUP_DISPLAY[group]}
                           </button>
                         );
                       })}
@@ -641,7 +707,10 @@ export function ExercisePickerModal({
                         >
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white truncate">{exercise.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{exercise.equipment}</p>
+                            <p className="text-xs text-gray-500 capitalize">
+                              {exercise.equipment}
+                              {exercise.muscle_group && ` · ${MUSCLE_GROUP_DISPLAY[exercise.muscle_group]}`}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span
@@ -664,7 +733,7 @@ export function ExercisePickerModal({
               ) : activeTab === "All" ? (
                 /* All - grouped by muscle group with collapsible sections */
                 <div className="space-y-4 pb-4">
-                  {groupedByMuscle.map(({ muscleGroup, exercises: muscleExercises }) => {
+                  {groupedByMuscle.map(({ muscleGroup, displayName, exercises: muscleExercises }) => {
                     const isCollapsed = collapsedGroups.has(muscleGroup);
                     return (
                       <div key={muscleGroup}>
@@ -673,7 +742,7 @@ export function ExercisePickerModal({
                           className="w-full flex items-center justify-between py-2 px-1"
                         >
                           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                            {muscleGroup}
+                            {displayName}
                             <span className="ml-2 text-xs font-normal text-gray-500">
                               ({muscleExercises.length})
                             </span>
@@ -734,7 +803,7 @@ export function ExercisePickerModal({
                   })}
                 </div>
               ) : (
-                /* Grouped by equipment (single muscle group tab) */
+                /* Split day tab - grouped by equipment */
                 <div className="space-y-6 pb-4">
                   {groupedExercises.map(group => {
                     const equipStyle = getEquipmentStyle(group.equipment);
@@ -768,6 +837,11 @@ export function ExercisePickerModal({
                               >
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-white truncate">{exercise.name}</p>
+                                  {exercise.muscle_group && (
+                                    <p className="text-xs text-gray-500">
+                                      {MUSCLE_GROUP_DISPLAY[exercise.muscle_group]}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span
@@ -825,7 +899,7 @@ export function ExercisePickerModal({
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full max-w-sm rounded-2xl p-6 border border-gray-800"
+                    className="w-full max-w-sm rounded-2xl p-6 border border-gray-800 max-h-[90vh] overflow-y-auto"
                     style={{ background: "#1a1a24" }}
                   >
                     <h2 className="text-lg font-bold text-white mb-4">Edit Exercise</h2>
@@ -845,7 +919,7 @@ export function ExercisePickerModal({
                     </div>
 
                     {/* Equipment Selection */}
-                    <div className="mb-6">
+                    <div className="mb-4">
                       <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
                         Equipment
                       </label>
@@ -867,6 +941,31 @@ export function ExercisePickerModal({
                               }}
                             >
                               {formatEquipment(equip)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Muscle Group Selection */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                        Muscle Group
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {DETAILED_MUSCLE_GROUPS.map((group) => {
+                          const isActive = editMuscleGroup === group;
+                          return (
+                            <button
+                              key={group}
+                              onClick={() => setEditMuscleGroup(group)}
+                              className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
+                                isActive
+                                  ? "bg-[#22d3ee] text-black"
+                                  : "bg-white/10 text-gray-400 hover:text-white"
+                              }`}
+                            >
+                              {MUSCLE_GROUP_DISPLAY[group]}
                             </button>
                           );
                         })}

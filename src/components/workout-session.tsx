@@ -565,7 +565,7 @@ export function WorkoutSession({
   };
 
   // Handle creating new exercise from superset picker
-  const handleSupersetCreateNew = async (data: { name: string; equipment: string }): Promise<ExerciseTemplate | null> => {
+  const handleSupersetCreateNew = async (data: { name: string; equipment: string; muscle_group?: string }): Promise<ExerciseTemplate | null> => {
     const { data: newTemplate, error } = await supabase
       .from("exercise_templates")
       .insert({
@@ -575,6 +575,7 @@ export function WorkoutSession({
         equipment: data.equipment,
         exercise_type: "strength",
         order_index: libraryExercises.length,
+        muscle_group: data.muscle_group || null,
       })
       .select()
       .single();
