@@ -46,11 +46,20 @@ export function BottomNav() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Periodic check for new messages (catches server-saved responses)
+    // Only runs when not on coach page to catch responses from navigating away
+    const intervalId = setInterval(() => {
+      if (pathname !== '/coach') {
+        checkUnread();
+      }
+    }, 5000); // Check every 5 seconds
+
     return () => {
       window.removeEventListener('coach-message-added', handleNewMessage);
       document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(intervalId);
     };
-  }, [user?.id, checkUnread]);
+  }, [user?.id, checkUnread, pathname]);
 
   // Mark as viewed when navigating to coach page
   useEffect(() => {

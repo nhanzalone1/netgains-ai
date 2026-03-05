@@ -35,6 +35,10 @@ src/
 │   │   ├── coach-reset/       # Reset coach state (supports ?full=true)
 │   │   ├── nutrition-onboarding/ # Macro calculation + save
 │   │   ├── nutrition/recalculate/ # Recalc goals when intensity changes
+│   │   ├── exercise/
+│   │   │   ├── categorize/        # AI categorizes exercise → muscle group
+│   │   │   ├── parse-split/       # AI parses split day names → muscle groups
+│   │   │   └── recategorize-all/  # Batch re-categorize all exercises
 │   │   └── ...
 │   ├── login/
 │   └── signup/
@@ -60,6 +64,7 @@ src/
 - **coach_memory** — persistent coach state (split_rotation, conversation_summary, onboarding data, food_staples)
 - **chat_messages** — persisted chat messages for cross-device sync
 - **exercise_library** — master list of exercises with muscle groups
+- **exercise_templates** — user's custom exercises (name, muscle_group, user_id)
 
 ## Architecture Decisions
 
@@ -177,6 +182,62 @@ Technical details:
 - Triggers from: `handleSaveFood`, `markAsConsumed`, `copyMeal` (nutrition), `handleSaveWorkout` (log)
 - Context includes: `localTime`, `localHour`, `localDate` for timezone-aware responses
 
+**Exercise Categorization System (Mar 5):**
+Exercises are categorized into 14 detailed muscle groups for split-aware filtering.
+
+Muscle groups:
+- **Upper push**: chest, front_delt, side_delt, triceps
+- **Upper pull**: rear_delt, lats, upper_back, biceps
+- **Lower**: quads, hamstrings, glutes, calves
+- **Core**: core
+- **Fallback**: other
+
+How it works:
+1. User creates new exercise in exercise picker
+2. `/api/exercise/categorize` uses Haiku to determine muscle group
+3. User can override with dropdown in create/edit modal
+4. Category stored in `muscle_group` column on `exercise_templates`
+
+Split-based tabs:
+- Tabs are generated from user's `split_rotation` (Rest days excluded)
+- `/api/exercise/parse-split` maps split day names to muscle groups:
+  - "Chest/Front Delt" → ["chest", "front_delt"]
+  - "Back/Rear Delt" → ["lats", "upper_back", "rear_delt"]
+  - "Arms/Side Delt" → ["biceps", "triceps", "side_delt"]
+- Exercises show under the tab if their muscle_group is in that tab's muscle array
+
+Auto-migration:
+- When picker opens, if any exercises have null muscle_group, calls `/api/exercise/recategorize-all`
+- Batch categorizes all uncategorized exercises in parallel (10 at a time)
+- Shows loading state during migration
+
+Technical details:
+- `src/components/exercise-picker-modal.tsx` — Main picker with tabs, search, create/edit modals
+- `src/app/api/exercise/categorize/route.ts` — Single exercise categorization (Haiku)
+- `src/app/api/exercise/parse-split/route.ts` — Split day → muscle group mapping (Haiku)
+- `src/app/api/exercise/recategorize-all/route.ts` — Batch recategorize all user exercises
+- Database: `exercise_templates.muscle_group` column with enum constraint
+
+**Settings Change Acknowledgment (Mar 5):**
+When users change settings (intensity, training split), the AI acknowledges changes in its next response without sending an extra message.
+
+How it works:
+1. User changes intensity or split in profile settings
+2. Change saved to `pending_changes` array in coach_memory (e.g., `["intensity: moderate → aggressive"]`)
+3. On next user message, chat API sees pending_changes and adds `[SETTINGS CHANGED]` context block
+4. AI acknowledges changes naturally in response: "noted — switching to aggressive mode..."
+5. After response, pending_changes is cleared from coach_memory
+
+Benefits:
+- No separate "settings changed" message cluttering the chat
+- Acknowledgment feels natural as part of conversation
+- User knows AI is aware of their changes
+
+Technical details:
+- Changes saved in `user-menu.tsx` when intensity or split is modified
+- `src/app/api/chat/route.ts` reads pending_changes and includes in system context
+- Cleared after AI response completes (in stream handler)
+
 ### Timezone Handling
 - Client sends `localDate` with every message
 - Server uses client date for all meal/workout queries
@@ -213,6 +274,7 @@ Special keys in `coach_memory` table:
 - `conversation_summary` — Haiku-generated summary of older messages
 - `summary_message_count` — Number of messages included in the summary
 - `coach_last_viewed_at` — ISO timestamp of when user last opened coach tab (for unread badge)
+- `pending_changes` — JSON array of settings changes to acknowledge in next response (e.g., `["intensity: moderate → aggressive"]`)
 
 RLS policies: users can only access their own data
 
@@ -293,6 +355,14 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 5)
+- **Exercise categorization overhaul** — Complete rewrite of exercise picker. Now uses detailed muscle groups (front_delt, side_delt, rear_delt instead of just "shoulders") with AI-powered categorization. Tabs match user's split rotation (Rest days excluded). Features:
+  - **14 muscle groups**: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core, other
+  - **AI categorization**: Haiku categorizes new exercises automatically (user can override via dropdown)
+  - **Split-based tabs**: Tabs come from user's split_rotation (e.g., "Chest/Front Delt", "Back/Rear Delt")
+  - **Auto-recategorize**: On picker open, if any exercises have null muscle_group, batch recategorizes all uncategorized exercises
+  - **New endpoints**: `/api/exercise/categorize`, `/api/exercise/parse-split`, `/api/exercise/recategorize-all`
+  - **Database migration**: Added `muscle_group` column to `exercise_templates` table
+- **Pending changes acknowledgment** — When user changes intensity or split in settings, changes are saved to `pending_changes` in coach_memory. On next chat message, AI sees `[SETTINGS CHANGED]` block, acknowledges the changes naturally, and pending_changes is cleared. No extra message sent — just incorporated into the next response.
 - **Intensity-aware nutrition goals** — Goal intensity (light/moderate/aggressive) now affects calorie targets. Light = ~300 cal deficit/surplus, moderate = ~500, aggressive = ~750+. When user changes intensity in profile settings, nutrition goals automatically recalculate via `/api/nutrition/recalculate`.
 - **User profile context on every message** — AI coach now sees a `[USER PROFILE]` block on every message containing goal, intensity, height, weight, training split, split rotation, today's scheduled workout, and injuries. No longer needs to call tools to access this info.
 - **Training split rotation awareness** — Coach calculates today's scheduled workout based on the user's split rotation and last logged workout. Morning greetings now say "back day today" instead of asking what they're training. Rotation supports any split (PPL, Upper/Lower, bro split, custom).

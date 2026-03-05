@@ -1778,6 +1778,7 @@ ${pendingChangesSection}
       try {
         const currentMessages = [...anthropicMessages];
         let textStreamed = false;
+        let fullResponseText = ''; // Accumulate full response for DB save
 
         // Log tools being sent to API
         console.log('[Coach] Tools passed to API:', tools.map(t => t.name).join(', '));
@@ -1882,6 +1883,7 @@ ${pendingChangesSection}
               const formatted = `0:${JSON.stringify(block.text)}\n`;
               controller.enqueue(encoder.encode(formatted));
               textStreamed = true;
+              fullResponseText += block.text; // Accumulate for DB save
             }
           }
 
@@ -1909,6 +1911,22 @@ ${pendingChangesSection}
             .delete()
             .eq('user_id', user.id)
             .eq('key', 'pending_changes');
+        }
+
+        // Save assistant message to database (enables badge when user navigates away)
+        if (textStreamed && fullResponseText.trim()) {
+          console.log('[Coach] Saving assistant message to DB, length:', fullResponseText.length);
+          const { error: saveError } = await supabase
+            .from('chat_messages')
+            .insert({
+              user_id: user.id,
+              role: 'assistant',
+              content: fullResponseText.trim(),
+              hidden: false,
+            });
+          if (saveError) {
+            console.error('[Coach] Failed to save assistant message:', saveError);
+          }
         }
 
         controller.close();

@@ -726,8 +726,8 @@ export default function CoachPage() {
 
     const saveNewMessages = async () => {
       for (const message of messages) {
-        // Skip empty assistant messages (still streaming)
-        if (message.role === "assistant" && !message.content.trim()) continue;
+        // Skip assistant messages - server saves these to enable badge when user navigates away
+        if (message.role === "assistant") continue;
 
         // Check if this message needs to be saved (new or updated)
         const lastSaved = lastSavedContentRef.current.get(message.id);
