@@ -758,6 +758,17 @@ export function ExercisePickerModal({
                             )}
                           </div>
                         </button>
+                        {!editMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditExercise(exercise);
+                            }}
+                            className="ml-2 w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -825,6 +836,17 @@ export function ExercisePickerModal({
                                       )}
                                     </div>
                                   </button>
+                                  {!editMode && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditExercise(exercise);
+                                      }}
+                                      className="ml-2 w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })}
@@ -889,6 +911,17 @@ export function ExercisePickerModal({
                                   )}
                                 </div>
                               </button>
+                              {!editMode && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditExercise(exercise);
+                                  }}
+                                  className="ml-2 w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>

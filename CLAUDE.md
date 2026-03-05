@@ -362,6 +362,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Exercise categorization overhaul** — Complete rewrite of exercise picker. Now uses detailed muscle groups (front_delt, side_delt, rear_delt instead of just "shoulders") with AI-powered categorization. Tabs match user's split rotation (Rest days excluded). Features:
   - **14 muscle groups**: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core, other
   - **AI categorization**: Haiku categorizes new exercises automatically (user can override via dropdown)
+  - **Quick edit button**: Pencil icon on each exercise row opens edit modal directly (no need to enter edit mode). Change muscle group, name, or equipment instantly.
   - **Split-based tabs**: Tabs come from user's split_rotation (e.g., "Chest/Front Delt", "Back/Rear Delt")
   - **Auto-recategorize**: On picker open, if any exercises have null muscle_group, batch recategorizes all uncategorized exercises
   - **New endpoints**: `/api/exercise/categorize`, `/api/exercise/parse-split`, `/api/exercise/recategorize-all`
