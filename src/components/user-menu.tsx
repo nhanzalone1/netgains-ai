@@ -68,6 +68,7 @@ export function UserMenu() {
   }, [user?.id, supabase]);
 
   const setIntensity = async (newIntensity: IntensityId) => {
+    const oldIntensity = intensity;
     setIntensityState(newIntensity);
     if (user?.id) {
       // Update intensity in profile
@@ -78,7 +79,27 @@ export function UserMenu() {
 
       // Recalculate nutrition goals based on new intensity
       try {
-        await fetch("/api/nutrition/recalculate", { method: "POST" });
+        const response = await fetch("/api/nutrition/recalculate", { method: "POST" });
+        const data = await response.json();
+
+        // Save pending change for coach to acknowledge
+        if (data.goals) {
+          await supabase
+            .from("coach_memory")
+            .upsert(
+              {
+                user_id: user.id,
+                key: "pending_changes",
+                value: JSON.stringify({
+                  type: "intensity",
+                  from: oldIntensity,
+                  to: newIntensity,
+                  newCalories: data.goals.calories,
+                })
+              },
+              { onConflict: "user_id,key" }
+            );
+        }
       } catch (error) {
         console.error("Failed to recalculate nutrition goals:", error);
       }
@@ -116,6 +137,21 @@ export function UserMenu() {
           .from("coach_memory")
           .insert({ user_id: user.id, key: "split_rotation", value: JSON.stringify(newRotation) });
       }
+
+      // Save pending change for coach to acknowledge
+      await supabase
+        .from("coach_memory")
+        .upsert(
+          {
+            user_id: user.id,
+            key: "pending_changes",
+            value: JSON.stringify({
+              type: "split",
+              newRotation: newRotation,
+            })
+          },
+          { onConflict: "user_id,key" }
+        );
 
       setSplitRotation(newRotation);
     } catch (error) {

@@ -712,6 +712,7 @@ export async function POST(req: Request) {
   let milestoneContext: MilestoneContext | null = null;
   let dynamicSystemPrompt: string;
   let profileComplete: boolean = true; // Default to true, will be set in each branch
+  let pendingChanges: { type: string; from?: string; to?: string; newCalories?: number; newRotation?: string[] } | null = null;
 
   if (isSystemTrigger) {
     console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
@@ -1160,7 +1161,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
-      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries']),
+      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes']),
       supabase.from('workouts').select('date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(3),
     ]);
 
@@ -1227,6 +1228,15 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
       }
     }
 
+    // Parse pending changes (settings user updated that coach should acknowledge)
+    if (keyMemories.pending_changes) {
+      try {
+        pendingChanges = JSON.parse(keyMemories.pending_changes);
+      } catch {
+        pendingChanges = null;
+      }
+    }
+
     const recentWorkouts = recentWorkoutsResult.data || [];
     let todaysSuggestedWorkout = '';
     let lastWorkoutInfo = '';
@@ -1267,6 +1277,29 @@ Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nut
       }
     }
 
+    // Build pending changes section if user updated settings
+    let pendingChangesSection = '';
+    if (pendingChanges) {
+      if (pendingChanges.type === 'intensity') {
+        pendingChangesSection = `
+[SETTINGS CHANGED - ACKNOWLEDGE THIS]
+User just switched intensity from "${pendingChanges.from}" to "${pendingChanges.to}".
+New calorie target: ${pendingChanges.newCalories} cal.
+Briefly acknowledge this change in your response: "switched to ${pendingChanges.to} — target is now ${pendingChanges.newCalories} cal" and explain what this means for their approach.
+[END SETTINGS CHANGED]
+`;
+      } else if (pendingChanges.type === 'split') {
+        const newRotation = pendingChanges.newRotation || [];
+        pendingChangesSection = `
+[SETTINGS CHANGED - ACKNOWLEDGE THIS]
+User just updated their training split rotation.
+New rotation: ${newRotation.join(' → ')} (repeats)
+Briefly acknowledge this change in your response: "got it — updated your rotation" and confirm what's scheduled next.
+[END SETTINGS CHANGED]
+`;
+      }
+    }
+
     // Build user profile context string with key settings
     const userProfileContext = `[USER PROFILE]
 Goal: ${profile?.goal || 'not set'}
@@ -1279,7 +1312,7 @@ ${lastWorkoutInfo ? lastWorkoutInfo : ''}
 ${todaysSuggestedWorkout ? `Today's scheduled workout: ${todaysSuggestedWorkout}${todaysSuggestedWorkout.toLowerCase() === 'rest' ? ' (Rest Day)' : ''}` : ''}
 ${keyMemories.injuries && keyMemories.injuries !== 'none' ? `Injuries: ${keyMemories.injuries}` : ''}
 [END USER PROFILE]
-
+${pendingChangesSection}
 `;
 
     console.log('[Coach] Nutrition context length:', nutritionContext.length);
@@ -1866,6 +1899,16 @@ ${keyMemories.injuries && keyMemories.injuries !== 'none' ? `Injuries: ${keyMemo
         if (textStreamed && milestoneContext && milestoneContext.newMilestones.length > 0) {
           console.log('[Coach] Marking milestones as celebrated:', milestoneContext.newMilestones.map(m => m.type));
           await markMilestonesCelebrated(supabase, user.id, milestoneContext.newMilestones);
+        }
+
+        // Clear pending_changes after coach has acknowledged them
+        if (textStreamed && pendingChanges) {
+          console.log('[Coach] Clearing pending_changes after acknowledgment');
+          await supabase
+            .from('coach_memory')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('key', 'pending_changes');
         }
 
         controller.close();
