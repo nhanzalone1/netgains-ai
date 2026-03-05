@@ -204,8 +204,40 @@ export function ExercisePickerModal({
       .order("name", { ascending: true });
 
     if (!isMountedRef.current) return;
-    setExercises((data || []) as ExerciseWithMuscleGroup[]);
+    const exerciseList = (data || []) as ExerciseWithMuscleGroup[];
+    setExercises(exerciseList);
     setLoading(false);
+
+    // Auto-recategorize if any exercises have null muscle_group
+    const needsRecategorization = exerciseList.some(ex => !ex.muscle_group);
+    if (needsRecategorization && exerciseList.length > 0) {
+      console.log("[ExercisePicker] Detected exercises without muscle_group, triggering recategorization...");
+      triggerRecategorization();
+    }
+  };
+
+  // Trigger background recategorization
+  const triggerRecategorization = async () => {
+    try {
+      const response = await fetch("/api/exercise/recategorize-all", { method: "POST" });
+      if (response.ok) {
+        const result = await response.json();
+        console.log("[ExercisePicker] Recategorization complete:", result);
+        // Reload exercises to get updated muscle groups
+        if (isMountedRef.current) {
+          const { data } = await supabase
+            .from("exercise_templates")
+            .select("*")
+            .eq("folder_id", folderId)
+            .order("name", { ascending: true });
+          if (isMountedRef.current && data) {
+            setExercises(data as ExerciseWithMuscleGroup[]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[ExercisePicker] Recategorization failed:", error);
+    }
   };
 
   const loadRecentExercises = async () => {
