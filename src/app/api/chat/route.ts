@@ -16,7 +16,7 @@ function getSupabaseAdmin() {
 export const maxDuration = 60;
 
 // Dynamic system prompt - includes profile collection guidance when profile is incomplete
-function getSystemPrompt(profileComplete: boolean): string {
+function getSystemPrompt(profileComplete: boolean, showAppTour: boolean = false): string {
   const basePrompt = `You are Coach, an elite fitness trainer for NetGains AI. You are not a chatbot. You are not an assistant. You are the user's personal trainer who is locked in with them every single day — you know their numbers, their goals, their body, and their history.
 
 VOICE AND STYLE:
@@ -141,13 +141,29 @@ SPLIT PRESETS (use these for split_rotation):
 - Bro: '["Chest","Back","Shoulders","Arms","Legs","Rest","Rest"]'
 - Full Body: '["Full Body","Rest","Full Body","Rest","Full Body","Rest"]'
 
-After saving, respond naturally:
-"got it — [summarize their info]. bottom nav: Log for workouts, Nutrition for meals, Stats for your PRs."
+After saving, respond naturally and confirm you have their info. Then ask one follow-up if needed.
 
 If they leave stuff out, ask naturally — one follow-up at a time.`;
   }
 
-  return basePrompt + `
+  // App tour for users who just completed onboarding
+  const appTourSection = showAppTour ? `
+
+APP TOUR (SHOW THIS ONCE):
+This user just completed onboarding. Before diving into coaching, give them a quick tour of the app.
+
+Include this in your NEXT response (naturally, not robotic):
+1. **Coach tab** (where they are now) — Chat with you anytime. Ask questions, get advice, log meals by describing them.
+2. **Log tab** — Track workouts. Add exercises, log sets with weight/reps. You'll see their workout history here.
+3. **Nutrition tab** — See daily calories and macros. The ring shows progress toward their goal. They can add meals directly here too.
+4. **Stats tab** — View PRs and exercise history. Track progress over time.
+
+After explaining, call updateUserProfile with app_tour_shown:true so this doesn't repeat.
+
+End with: "ready to get started? tell me what you're working with today — meals prepped, workout planned, whatever's on deck."
+` : '';
+
+  return basePrompt + appTourSection + `
 
 SCIENCE-BASED COACHING: Every recommendation should be grounded in exercise science and sports nutrition research. No broscience. If evidence is mixed or unclear, say so — "research suggests X but it's not definitive" is better than "you must do X."
 
@@ -765,9 +781,11 @@ export async function POST(req: Request) {
 
     // Check if profile is complete (has height, weight, and goal)
     profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
-    dynamicSystemPrompt = getSystemPrompt(profileComplete);
+    const showAppTour = profileComplete && !profile?.app_tour_shown;
+    dynamicSystemPrompt = getSystemPrompt(profileComplete, showAppTour);
 
     console.log('[Coach] Profile complete:', profileComplete);
+    console.log('[Coach] Show app tour:', showAppTour);
     console.log('[Coach] Recent workouts count:', recentWorkouts.length);
     console.log('[Coach] Recent workout dates:', recentWorkouts.map(w => w.date));
     console.log('[Coach] Today meals count:', todayMeals.length);
@@ -1157,7 +1175,7 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
 
     // Fetch profile, today's nutrition data, conversation summary, message count, key memories, and recent workouts
     const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).single(),
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown').eq('id', user.id).single(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
@@ -1169,8 +1187,10 @@ Keep it conversational. 2-4 sentences. Use real numbers. Sound like a friend who
     // Check if profile is complete
     const profile = profileResult.data;
     profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
-    dynamicSystemPrompt = getSystemPrompt(profileComplete);
+    const showAppTour = profileComplete && !profile?.app_tour_shown;
+    dynamicSystemPrompt = getSystemPrompt(profileComplete, showAppTour);
     console.log('[Coach] Profile complete (normal flow):', profileComplete);
+    console.log('[Coach] Show app tour (normal flow):', showAppTour);
 
     // Log query results for debugging
     if (todayMealsResult.error) {
