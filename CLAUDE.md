@@ -299,6 +299,8 @@ There is no separate onboarding flow. New users go directly to the coach chat.
 2. User types whatever they want in the normal chat input
 3. The chat API handles it with tool_use — coach uses `updateUserProfile` and `saveMemory` tools to save info
 4. System prompt includes guidance to focus on collecting basics first before discussing nutrition/workouts
+5. Once profile is complete (has height, weight, goal) AND `app_tour_shown` is false, coach gives a one-time tour of the app tabs
+6. After showing tour, coach calls `updateUserProfile app_tour_shown:true` so it doesn't repeat
 
 ### Hardcoded first message (shown when profile is empty)
 "hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know."
@@ -358,6 +360,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 7)
+- **App tour after onboarding** — When a user completes onboarding (has height, weight, goal), the coach gives a one-time tour explaining each tab: Coach (chat/advice), Log (track workouts), Nutrition (daily calories/macros), Stats (PRs/progress). Tracked via `app_tour_shown` in profiles so it only shows once.
 - **Onboarding profile save fix** — The system prompt was telling the AI to save height, weight, and goal to `coach_memory` via `saveMemory`, but the app reads these from the `profiles` table. Now instructs AI to use `updateUserProfile` for profile fields (height_inches, weight_lbs, goal) and `saveMemory` for memory fields (name, age, training_split, injuries). New users will now have their profile data saved correctly.
 - **Quick edit button for exercises** — Added pencil icon to each exercise row in the library. Tap to open edit modal directly without entering edit mode. Change muscle group, name, or equipment instantly.
 
