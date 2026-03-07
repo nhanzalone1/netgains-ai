@@ -1628,18 +1628,31 @@ ${pendingChangesSection}
         // Use explicit date param, then client's localDate, then server fallback
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
         const foodName = input.food_name as string;
+        const calories = input.calories as number;
 
-        // Check for duplicate: same food name logged in the last 2 minutes
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        // Check for duplicate: similar meal logged in the last 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         const { data: recentMeals } = await supabase
           .from('meals')
-          .select('id, food_name, created_at')
+          .select('id, food_name, calories, created_at')
           .eq('user_id', user.id)
           .eq('date', targetDate)
-          .ilike('food_name', foodName)
-          .gte('created_at', twoMinutesAgo);
+          .gte('created_at', fiveMinutesAgo);
 
-        if (recentMeals && recentMeals.length > 0) {
+        // Check for duplicates by name similarity OR same calories
+        const foodNameLower = foodName.toLowerCase().trim();
+        const isDuplicate = recentMeals?.some(meal => {
+          const mealNameLower = meal.food_name.toLowerCase().trim();
+          // Check if names are similar (one contains the other or exact match)
+          const nameMatch = mealNameLower === foodNameLower ||
+                           mealNameLower.includes(foodNameLower) ||
+                           foodNameLower.includes(mealNameLower);
+          // Check if calories are exactly the same (likely same meal)
+          const calorieMatch = meal.calories === calories;
+          return nameMatch || calorieMatch;
+        });
+
+        if (isDuplicate) {
           console.log('[Coach] Duplicate meal detected, skipping:', foodName);
           return JSON.stringify({
             success: true,
@@ -1670,18 +1683,31 @@ ${pendingChangesSection}
         // Use explicit date param, then client's localDate, then server fallback
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
         const foodName = input.food_name as string;
+        const calories = input.calories as number;
 
-        // Check for duplicate: same food name logged in the last 2 minutes
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        // Check for duplicate: similar meal logged in the last 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         const { data: recentMeals } = await supabase
           .from('meals')
-          .select('id, food_name, created_at')
+          .select('id, food_name, calories, created_at')
           .eq('user_id', user.id)
           .eq('date', targetDate)
-          .ilike('food_name', foodName)
-          .gte('created_at', twoMinutesAgo);
+          .gte('created_at', fiveMinutesAgo);
 
-        if (recentMeals && recentMeals.length > 0) {
+        // Check for duplicates by name similarity OR same calories
+        const foodNameLower = foodName.toLowerCase().trim();
+        const isDuplicate = recentMeals?.some(meal => {
+          const mealNameLower = meal.food_name.toLowerCase().trim();
+          // Check if names are similar (one contains the other or exact match)
+          const nameMatch = mealNameLower === foodNameLower ||
+                           mealNameLower.includes(foodNameLower) ||
+                           foodNameLower.includes(mealNameLower);
+          // Check if calories are exactly the same (likely same meal)
+          const calorieMatch = meal.calories === calories;
+          return nameMatch || calorieMatch;
+        });
+
+        if (isDuplicate) {
           console.log('[Coach] Duplicate meal detected, skipping:', foodName);
           return JSON.stringify({
             success: true,
