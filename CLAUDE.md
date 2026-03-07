@@ -360,6 +360,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 7)
+- **Duplicate meal detection** — When logging a meal via `addMealPlan` or `logMeal`, the system now checks if the same food was logged within the last 2 minutes. If so, it returns `duplicate: true` and skips the insert. Prevents double-logging when user asks about a meal, coach shows breakdown, then user says "log it" again.
 - **App tour after onboarding** — When a user completes onboarding (has height, weight, goal), the coach gives a one-time tour explaining each tab: Coach (chat/advice), Log (track workouts), Nutrition (daily calories/macros), Stats (PRs/progress). Tracked via `app_tour_shown` in profiles so it only shows once.
 - **Onboarding profile save fix** — The system prompt was telling the AI to save height, weight, and goal to `coach_memory` via `saveMemory`, but the app reads these from the `profiles` table. Now instructs AI to use `updateUserProfile` for profile fields (height_inches, weight_lbs, goal) and `saveMemory` for memory fields (name, age, training_split, injuries). New users will now have their profile data saved correctly.
 - **Quick edit button for exercises** — Added pencil icon to each exercise row in the library. Tap to open edit modal directly without entering edit mode. Change muscle group, name, or equipment instantly.
