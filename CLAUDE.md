@@ -357,7 +357,11 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Mar 5)
+### Recent Updates (Mar 7)
+- **Onboarding profile save fix** — The system prompt was telling the AI to save height, weight, and goal to `coach_memory` via `saveMemory`, but the app reads these from the `profiles` table. Now instructs AI to use `updateUserProfile` for profile fields (height_inches, weight_lbs, goal) and `saveMemory` for memory fields (name, age, training_split, injuries). New users will now have their profile data saved correctly.
+- **Quick edit button for exercises** — Added pencil icon to each exercise row in the library. Tap to open edit modal directly without entering edit mode. Change muscle group, name, or equipment instantly.
+
+### Previous Updates (Mar 5)
 - **Coach badge when navigating away** — When user sends a message and navigates to another tab (Log, Nutrition) while waiting for a response, the coach response is now saved server-side and badge appears on Coach tab. Server saves assistant messages to DB after streaming completes. Bottom nav polls every 5 seconds (when not on coach page) to check for new responses. Fixes lost responses when navigating away.
 - **Exercise categorization overhaul** — Complete rewrite of exercise picker. Now uses detailed muscle groups (front_delt, side_delt, rear_delt instead of just "shoulders") with AI-powered categorization. Tabs match user's split rotation (Rest days excluded). Features:
   - **14 muscle groups**: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core, other
