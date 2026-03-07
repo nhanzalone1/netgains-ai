@@ -179,6 +179,11 @@ NUTRITION LOGGING FLOW:
 4. If user wants to edit a pending meal → call updateMeal
 5. Do NOT use logMeal — always go through the pending flow
 
+DUPLICATE PREVENTION:
+- If you already showed a meal breakdown and logged it, don't log it again when user says "log it"
+- The system will automatically detect and skip duplicates logged within 2 minutes
+- If the tool returns "duplicate: true", just say "already logged" — don't apologize or over-explain
+
 DAILY NUTRITION RESET (CRITICAL):
 When the user asks about their daily calories, macros, or what they've eaten today, you MUST call getTodaysMeals FIRST before responding. Do not estimate or guess from conversation history. Check the actual data.
 
@@ -1622,13 +1627,34 @@ ${pendingChangesSection}
       case 'logMeal': {
         // Use explicit date param, then client's localDate, then server fallback
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        const foodName = input.food_name as string;
+
+        // Check for duplicate: same food name logged in the last 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data: recentMeals } = await supabase
+          .from('meals')
+          .select('id, food_name, created_at')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .ilike('food_name', foodName)
+          .gte('created_at', twoMinutesAgo);
+
+        if (recentMeals && recentMeals.length > 0) {
+          console.log('[Coach] Duplicate meal detected, skipping:', foodName);
+          return JSON.stringify({
+            success: true,
+            duplicate: true,
+            message: `${foodName} was already logged moments ago — skipping duplicate`
+          });
+        }
+
         const { error } = await supabase
           .from('meals')
           .insert({
             user_id: user.id,
             date: targetDate,
             meal_type: input.meal_type as string,
-            food_name: input.food_name as string,
+            food_name: foodName,
             calories: input.calories as number,
             protein: input.protein as number,
             carbs: input.carbs as number,
@@ -1638,18 +1664,39 @@ ${pendingChangesSection}
             consumed: true,
           });
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify({ success: true, message: `Logged ${input.food_name} (${input.calories} cal, ${input.protein}g protein)` });
+        return JSON.stringify({ success: true, message: `Logged ${foodName} (${input.calories} cal, ${input.protein}g protein)` });
       }
       case 'addMealPlan': {
         // Use explicit date param, then client's localDate, then server fallback
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
+        const foodName = input.food_name as string;
+
+        // Check for duplicate: same food name logged in the last 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data: recentMeals } = await supabase
+          .from('meals')
+          .select('id, food_name, created_at')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .ilike('food_name', foodName)
+          .gte('created_at', twoMinutesAgo);
+
+        if (recentMeals && recentMeals.length > 0) {
+          console.log('[Coach] Duplicate meal detected, skipping:', foodName);
+          return JSON.stringify({
+            success: true,
+            duplicate: true,
+            message: `${foodName} was already logged moments ago — skipping duplicate`
+          });
+        }
+
         const { error } = await supabase
           .from('meals')
           .insert({
             user_id: user.id,
             date: targetDate,
             meal_type: input.meal_type as string,
-            food_name: input.food_name as string,
+            food_name: foodName,
             calories: input.calories as number,
             protein: input.protein as number,
             carbs: input.carbs as number,
@@ -1659,7 +1706,7 @@ ${pendingChangesSection}
             consumed: false,
           });
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify({ success: true, message: `Added ${input.food_name} as pending — user can review in Nutrition tab or confirm via chat` });
+        return JSON.stringify({ success: true, message: `Added ${foodName} as pending — user can review in Nutrition tab or confirm via chat` });
       }
       case 'updateMeal': {
         const targetDate = (input.date as string) || localDate || formatLocalDate(new Date());
