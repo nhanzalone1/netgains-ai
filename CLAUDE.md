@@ -330,6 +330,14 @@ Built waitlist/allowlist system for controlled beta access.
 ### Database tables
 - `waitlist_emails` — collected emails from waitlist signups (email, created_at)
 - `allowed_testers` — approved tester emails (email, created_at, added_by)
+- `auth.users` — Supabase Auth users who created accounts (separate from waitlist)
+
+### Important: These tables are separate
+- Someone can sign up on waitlist but never create an account → in `waitlist_emails` only
+- Someone can create an account directly (bypassing waitlist) → in `auth.users` only
+- Someone can do both → in both tables
+
+If you see a user in Auth → Users but not in `waitlist_emails`, they created an account directly without going through the waitlist page.
 
 ### Flow
 ```
