@@ -1036,32 +1036,14 @@ export function WorkoutSession({
         />
       )}
 
-      {/* Finish Button */}
-      {activeExercises.length > 0 && (
-        <div className="fixed left-0 right-0 z-50 px-4 bottom-44">
-          <div className="max-w-lg mx-auto">
-            <Button onClick={handleFinish} loading={saving}>
-              Finish & Save
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Background fill below nav to prevent scroll bleed-through */}
+      {/* Add Exercise Button (primary action - on top) */}
       <div
-        className="fixed bottom-0 left-0 right-0 h-24 z-30"
-        style={{ background: "#0f0f13" }}
-      />
-
-      {/* Exercise Library Button */}
-      <div
-        className="fixed bottom-24 left-0 right-0 z-40"
+        className="fixed bottom-48 left-0 right-0 z-50"
         style={{
           background: "#0f0f13",
-          borderTop: "1px solid rgba(255, 255, 255, 0.05)",
         }}
       >
-        <div className="max-w-lg mx-auto px-4 py-4">
+        <div className="max-w-lg mx-auto px-4 py-2">
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowExercisePicker(true)}
@@ -1077,6 +1059,23 @@ export function WorkoutSession({
           </motion.button>
         </div>
       </div>
+
+      {/* Finish & Save Button (below Add Exercise) */}
+      {activeExercises.length > 0 && (
+        <div className="fixed left-0 right-0 z-40 px-4 bottom-28">
+          <div className="max-w-lg mx-auto">
+            <Button onClick={handleFinish} loading={saving}>
+              Finish & Save
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Background fill below nav to prevent scroll bleed-through */}
+      <div
+        className="fixed bottom-0 left-0 right-0 h-24 z-30"
+        style={{ background: "#0f0f13" }}
+      />
 
       {/* Main Exercise Picker Modal */}
       <ExercisePickerModal
