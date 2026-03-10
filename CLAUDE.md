@@ -360,6 +360,7 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Workout logging** with set variants (warmup, drop, failure) and time-based sets
 - **Nutrition logging** with calorie ring and macro tracking
 - **AI coach chat** with persistent memory and cross-device sync
+- **Coach Workout Generator** — Ask for a workout, Coach generates and loads it into Log
 - **Dynamic Daily Brief** — Pre-workout/post-workout/rest day modes
 - **PR detection** — Shared utility, excludes warmup sets
 - **15 message daily limit** per user
@@ -369,6 +370,11 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Default to Coach tab** — App always opens to /coach after login
 
 ### Recent Updates (Mar 10)
+- **Coach Workout Generator** — Users can ask Coach for a workout (e.g., "give me a 45 min chest workout") and Coach will generate a complete workout with exercises, sets, and equipment. Coach asks clarifying questions (equipment available, time constraints), suggests the best-matching split folder, and loads the workout directly into the Log tab pre-populated. User only needs to fill in weight and reps. Target reps appear as cyan placeholder text in the reps input.
+  - New tools: `generateWorkout`, `getSuggestedFolder`, `loadWorkoutToFolder`
+  - New endpoint: `/api/workout/pending` (GET/DELETE)
+  - New component: `PendingWorkoutBanner` — shows at top of Log page when workout is ready
+  - Pending workout stored in `coach_memory` with key `pending_workout`
 - **Time-based sets for bodyweight exercises** — Added support for seconds-based sets (plank, wall sit, dead hang, L-sit, carries, isometric holds). Auto-detects time-based exercises by name keywords. Toggle between reps/secs on bodyweight exercises. Database: `measure_type` column on sets, `default_measure_type` on exercise_templates.
 - **Multi-select muscle groups** — Exercises can now belong to multiple muscle groups (e.g., bench press → chest + front_delt + triceps). Database: `muscle_group` converted from TEXT to TEXT[]. Exercises appear in all matching split tabs.
 - **Simple/Advanced muscle group mode** — Users can toggle between Simple mode (6 groups: chest, back, shoulders, arms, legs, core) and Advanced mode (17 groups including front_delt, side_delt, rear_delt, lats, upper_back, etc.). Preference stored in `profiles.muscle_group_mode` for cross-device sync.

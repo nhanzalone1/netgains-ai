@@ -39,6 +39,7 @@ interface WorkoutSet {
   variant: SetVariant;
   measureType: MeasureType;
   label?: string; // For special set labels
+  targetReps?: string; // Coach-suggested target reps (e.g., "8-12")
 }
 
 interface ActiveExercise {
@@ -131,11 +132,12 @@ export function WorkoutSession({
         const parsed = JSON.parse(stored);
         if (parsed.exercises && Array.isArray(parsed.exercises)) {
           return parsed.exercises.map(
-            (ex: { name: string; equipment: string; templateId?: string | null; sets: { weight: string; reps: string; variant: string; label?: string }[] }) => ({
+            (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string }[] }) => ({
               id: Math.random().toString(36).substring(2, 9),
               name: ex.name,
               equipment: ex.equipment,
               templateId: ex.templateId || null,
+              defaultMeasureType: (ex.defaultMeasureType || "reps") as MeasureType,
               sets:
                 ex.sets.length > 0
                   ? ex.sets.map((s) => ({
@@ -143,9 +145,11 @@ export function WorkoutSession({
                       weight: s.weight || "",
                       reps: s.reps || "",
                       variant: (s.variant || "normal") as SetVariant,
+                      measureType: (s.measureType || "reps") as MeasureType,
                       label: s.label,
+                      targetReps: s.targetReps, // Coach-suggested target
                     }))
-                  : [{ id: Math.random().toString(36).substring(2, 9), weight: "", reps: "", variant: "normal" as SetVariant }],
+                  : [{ id: Math.random().toString(36).substring(2, 9), weight: "", reps: "", variant: "normal" as SetVariant, measureType: "reps" as MeasureType }],
             })
           );
         }
@@ -186,11 +190,14 @@ export function WorkoutSession({
           name: ex.name,
           equipment: ex.equipment,
           templateId: ex.templateId,
+          defaultMeasureType: ex.defaultMeasureType,
           sets: ex.sets.map((s) => ({
             weight: s.weight,
             reps: s.reps,
             variant: s.variant,
+            measureType: s.measureType,
             label: s.label,
+            targetReps: s.targetReps, // Preserve coach targets
           })),
         })),
       };
@@ -1050,8 +1057,10 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "reps", e.target.value)
                             }
-                            placeholder="—"
-                            className="w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                            placeholder={set.targetReps || "—"}
+                            className={`w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
+                              set.targetReps ? "placeholder:text-cyan-500/60" : ""
+                            }`}
                             style={{ background: variantStyle.inputBg }}
                           />
                           {/* Toggle button for bodyweight exercises */}

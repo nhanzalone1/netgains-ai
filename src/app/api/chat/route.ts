@@ -409,7 +409,50 @@ After logging a WORKOUT:
 - Suggest next steps: "tomorrow should be legs based on your split. anything you want to work on?"
 - If they crushed it: "solid session. recovery day tomorrow — sleep and eat"
 
-DON'T just say "logged" and go silent. The user is here for coaching, not just tracking. Lead them.`;
+DON'T just say "logged" and go silent. The user is here for coaching, not just tracking. Lead them.
+
+=== WORKOUT GENERATION ===
+When a user asks you to create a workout (e.g., "give me a chest workout", "45 min leg day", "quick arm pump", "build me a workout"), use the workout generation tools.
+
+STEP 1 - GATHER INFO (if not already known):
+- What gym/equipment do they have access to? Check their location context or ask: "which gym are you at — main gym or home?"
+- Any time constraints? "how much time do you have?"
+- Any injuries to avoid? Check their memories for injury notes.
+
+STEP 2 - GENERATE THE WORKOUT:
+Call generateWorkout with:
+- workout_name: Something descriptive ("45min Chest Blast", "Quick Pull Day")
+- target_muscles: Array of muscle groups (use detailed groups: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core)
+- exercises: Full exercise array with sets, target reps, and variants
+- notes: Rest times, intensity guidance, technique cues
+
+Workout structure guidelines:
+- Include 1-2 warmup sets for compound lifts (bench, squat, deadlift, OHP)
+- 3-4 working sets per exercise for most movements
+- 4-6 exercises for a 30-45 min session, 6-8 for 60+ min
+- Start with compound movements, end with isolation
+- Include rest time guidance in notes
+
+STEP 3 - SUGGEST A FOLDER:
+After generating, call getSuggestedFolder with the target_muscles.
+- If a good match is found, suggest it: "this looks like a chest day — want me to load it into your 'Chest/Front Delt' folder?"
+- If no good match, offer options: "want me to create a 'Coach Workouts' folder for this, or pick one of your splits?"
+- Show alternatives if they want to pick a different folder
+
+STEP 4 - LOAD THE WORKOUT:
+When user confirms the folder, call loadWorkoutToFolder with folder_id and folder_name (or create_coach_folder:true).
+- Tell them: "workout loaded — head to the Log tab to start. just fill in your weights as you go."
+
+EXAMPLE FLOW:
+User: "give me a 45 min chest workout"
+You: "main gym today? any equipment you don't have access to?"
+User: "yeah main gym, full equipment"
+You: [call generateWorkout with full chest workout]
+You: [call getSuggestedFolder with target_muscles]
+You: "45 min chest blast locked in. 6 exercises, 20 sets: flat bench (2 warmup + 4 working), incline dumbbell press (4 sets), cable flyes (3 sets), machine chest press (3 sets), dips (3 sets), push-ups (1 burnout). rest 2 min between bench sets, 60-90 sec for accessories. this looks like a chest day — load it into your 'Chest/Front Delt' folder?"
+User: "yeah do it"
+You: [call loadWorkoutToFolder]
+You: "loaded — head to the Log tab to start."`;
 }
 
 // System prompt is built dynamically based on onboarding status - see getSystemPrompt()
@@ -651,6 +694,78 @@ const tools: Anthropic.Tool[] = [
         items: { type: 'array', items: { type: 'string' }, description: 'Array of food items to add/remove/replace' },
       },
       required: ['action', 'items'],
+    },
+  },
+  {
+    name: 'generateWorkout',
+    description: 'Generate a complete workout with exercises and sets based on user request. Saves as a pending workout that user can load into their workout log. Use this when user asks for a workout recommendation, program, or routine (e.g., "give me a chest workout", "45 min leg day").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workout_name: { type: 'string', description: 'Name for the workout session (e.g., "45min Chest Blast", "Quick Leg Day")' },
+        target_muscles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Primary muscle groups targeted (e.g., ["chest", "front_delt", "triceps"]). Use detailed muscle groups: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core',
+        },
+        duration_minutes: { type: 'number', description: 'Target duration in minutes (optional)' },
+        exercises: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Exercise name' },
+              equipment: { type: 'string', enum: ['barbell', 'dumbbell', 'cable', 'machine', 'smith', 'bodyweight'], description: 'Equipment type' },
+              sets: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    target_reps: { type: 'string', description: 'Target reps as a string (e.g., "8-12", "15", "to failure")' },
+                    variant: { type: 'string', enum: ['normal', 'warmup', 'drop', 'failure'], description: 'Set type (default: normal)' },
+                    measure_type: { type: 'string', enum: ['reps', 'secs'], description: 'Reps or seconds (default: reps)' },
+                  },
+                  required: ['target_reps'],
+                },
+                description: 'Array of sets for this exercise',
+              },
+              notes: { type: 'string', description: 'Optional coaching notes for this exercise (form cues, tempo, etc.)' },
+            },
+            required: ['name', 'equipment', 'sets'],
+          },
+          description: 'Array of exercises in the workout',
+        },
+        notes: { type: 'string', description: 'Overall workout notes (rest times, intensity guidance, etc.)' },
+      },
+      required: ['workout_name', 'target_muscles', 'exercises'],
+    },
+  },
+  {
+    name: 'getSuggestedFolder',
+    description: 'Get the best matching folder/split for a workout based on target muscles. Returns suggested folder and alternatives. Call this after generateWorkout to suggest where to load the workout.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        target_muscles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Target muscle groups to match against user folders',
+        },
+      },
+      required: ['target_muscles'],
+    },
+  },
+  {
+    name: 'loadWorkoutToFolder',
+    description: 'Load the pending workout into a specific folder. Call this after user confirms the folder choice. This marks the workout as ready to load in the Log tab.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'string', description: 'The folder ID to load the workout into' },
+        folder_name: { type: 'string', description: 'The folder name (for display)' },
+        create_coach_folder: { type: 'boolean', description: 'If true, create a new "Coach Workouts" folder instead of using folder_id' },
+      },
+      required: [],
     },
   },
 ];
@@ -1879,6 +1994,261 @@ ${pendingChangesSection}
         }
 
         return JSON.stringify({ success: true, action, items, staples: newStaples });
+      }
+      case 'generateWorkout': {
+        const workoutName = input.workout_name as string;
+        const targetMuscles = input.target_muscles as string[];
+        const durationMinutes = input.duration_minutes as number | undefined;
+        const exercises = input.exercises as Array<{
+          name: string;
+          equipment: string;
+          sets: Array<{ target_reps: string; variant?: string; measure_type?: string }>;
+          notes?: string;
+        }>;
+        const notes = input.notes as string | undefined;
+
+        // Build the pending workout structure (matches localStorage format)
+        const pendingWorkout = {
+          workoutName,
+          targetMuscles,
+          generatedAt: new Date().toISOString(),
+          durationMinutes,
+          notes,
+          readyToLoad: false, // Will be set to true when folder is confirmed
+          folderId: null as string | null,
+          folderName: null as string | null,
+          exercises: exercises.map(ex => ({
+            name: ex.name,
+            equipment: ex.equipment,
+            templateId: null, // Will be matched on load if exercise exists in user's library
+            sets: ex.sets.map(set => ({
+              weight: '',
+              reps: '',
+              targetReps: set.target_reps, // Keep for display
+              variant: set.variant || 'normal',
+              measureType: set.measure_type || 'reps',
+            })),
+            notes: ex.notes || null,
+            defaultMeasureType: ex.sets[0]?.measure_type || 'reps',
+          })),
+        };
+
+        // Save to coach_memory as pending_workout (upsert)
+        const { data: existing } = await supabase
+          .from('coach_memory')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('key', 'pending_workout')
+          .single();
+
+        const workoutJson = JSON.stringify(pendingWorkout);
+
+        if (existing) {
+          const { error } = await supabase
+            .from('coach_memory')
+            .update({ value: workoutJson })
+            .eq('id', existing.id);
+          if (error) return JSON.stringify({ error: error.message });
+        } else {
+          const { error } = await supabase
+            .from('coach_memory')
+            .insert({ user_id: user.id, key: 'pending_workout', value: workoutJson });
+          if (error) return JSON.stringify({ error: error.message });
+        }
+
+        return JSON.stringify({
+          success: true,
+          message: `Workout "${workoutName}" generated and saved`,
+          workout_name: workoutName,
+          target_muscles: targetMuscles,
+          exercise_count: exercises.length,
+          total_sets: exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
+        });
+      }
+      case 'getSuggestedFolder': {
+        const targetMuscles = input.target_muscles as string[];
+
+        // Fetch user's folders with their locations
+        const { data: folders, error: foldersError } = await supabase
+          .from('folders')
+          .select('id, name, location_id, locations(name)')
+          .eq('user_id', user.id)
+          .order('order_index');
+
+        if (foldersError) {
+          return JSON.stringify({ error: foldersError.message });
+        }
+
+        if (!folders || folders.length === 0) {
+          return JSON.stringify({
+            success: true,
+            suggested: null,
+            alternatives: [],
+            message: 'No folders found. Offer to create a "Coach Workouts" folder.',
+          });
+        }
+
+        // Muscle group mapping for folder name matching
+        const muscleKeywords: Record<string, string[]> = {
+          chest: ['chest', 'pec', 'push', 'bench'],
+          front_delt: ['front delt', 'front shoulder', 'push', 'shoulder'],
+          side_delt: ['side delt', 'lateral', 'shoulder'],
+          rear_delt: ['rear delt', 'back', 'pull'],
+          lats: ['lat', 'back', 'pull'],
+          upper_back: ['upper back', 'back', 'pull', 'row'],
+          biceps: ['bicep', 'arm', 'pull', 'curl'],
+          triceps: ['tricep', 'arm', 'push'],
+          quads: ['quad', 'leg', 'squat', 'lower'],
+          hamstrings: ['hamstring', 'leg', 'lower'],
+          glutes: ['glute', 'leg', 'lower', 'hip'],
+          calves: ['calf', 'calves', 'leg', 'lower'],
+          core: ['core', 'ab', 'abs'],
+        };
+
+        // Score each folder based on name matching
+        const scoredFolders = folders.map(folder => {
+          const folderNameLower = folder.name.toLowerCase();
+          let score = 0;
+
+          for (const muscle of targetMuscles) {
+            const keywords = muscleKeywords[muscle] || [muscle];
+            for (const keyword of keywords) {
+              if (folderNameLower.includes(keyword.toLowerCase())) {
+                score += 10;
+              }
+            }
+          }
+
+          // Bonus for exact muscle name in folder
+          for (const muscle of targetMuscles) {
+            const muscleName = muscle.replace('_', ' ');
+            if (folderNameLower.includes(muscleName)) {
+              score += 20;
+            }
+          }
+
+          return {
+            id: folder.id,
+            name: folder.name,
+            location_name: (folder.locations as { name: string } | null)?.name || 'Unknown',
+            score,
+          };
+        });
+
+        // Sort by score descending
+        scoredFolders.sort((a, b) => b.score - a.score);
+
+        const suggested = scoredFolders[0]?.score > 0 ? scoredFolders[0] : null;
+        const alternatives = scoredFolders.slice(suggested ? 1 : 0, 5);
+
+        return JSON.stringify({
+          success: true,
+          suggested,
+          alternatives,
+          all_folders: scoredFolders.slice(0, 10),
+        });
+      }
+      case 'loadWorkoutToFolder': {
+        const folderId = input.folder_id as string | undefined;
+        const folderName = input.folder_name as string | undefined;
+        const createCoachFolder = input.create_coach_folder as boolean | undefined;
+
+        // If creating coach folder, find or create it
+        let targetFolderId = folderId;
+        let targetFolderName = folderName;
+
+        if (createCoachFolder) {
+          // Find user's first location (or create one if none exists)
+          const { data: locations } = await supabase
+            .from('locations')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+
+          if (!locations || locations.length === 0) {
+            return JSON.stringify({ error: 'No gym/location found. Please create a gym first.' });
+          }
+
+          const locationId = locations[0].id;
+
+          // Check if Coach Workouts folder exists
+          const { data: existingFolder } = await supabase
+            .from('folders')
+            .select('id, name')
+            .eq('user_id', user.id)
+            .eq('name', 'Coach Workouts')
+            .single();
+
+          if (existingFolder) {
+            targetFolderId = existingFolder.id;
+            targetFolderName = existingFolder.name;
+          } else {
+            // Create the folder
+            const { data: newFolder, error: createError } = await supabase
+              .from('folders')
+              .insert({
+                user_id: user.id,
+                location_id: locationId,
+                name: 'Coach Workouts',
+                order_index: 999, // Put at end
+              })
+              .select('id, name')
+              .single();
+
+            if (createError) {
+              return JSON.stringify({ error: `Failed to create folder: ${createError.message}` });
+            }
+
+            targetFolderId = newFolder.id;
+            targetFolderName = newFolder.name;
+          }
+        }
+
+        if (!targetFolderId || !targetFolderName) {
+          return JSON.stringify({ error: 'folder_id and folder_name are required, or set create_coach_folder to true' });
+        }
+
+        // Fetch the pending workout
+        const { data: pendingData, error: pendingError } = await supabase
+          .from('coach_memory')
+          .select('id, value')
+          .eq('user_id', user.id)
+          .eq('key', 'pending_workout')
+          .single();
+
+        if (pendingError || !pendingData) {
+          return JSON.stringify({ error: 'No pending workout found. Generate a workout first.' });
+        }
+
+        // Parse and update the pending workout
+        let pendingWorkout;
+        try {
+          pendingWorkout = JSON.parse(pendingData.value);
+        } catch {
+          return JSON.stringify({ error: 'Failed to parse pending workout' });
+        }
+
+        pendingWorkout.folderId = targetFolderId;
+        pendingWorkout.folderName = targetFolderName;
+        pendingWorkout.readyToLoad = true;
+
+        // Save updated pending workout
+        const { error: updateError } = await supabase
+          .from('coach_memory')
+          .update({ value: JSON.stringify(pendingWorkout) })
+          .eq('id', pendingData.id);
+
+        if (updateError) {
+          return JSON.stringify({ error: updateError.message });
+        }
+
+        return JSON.stringify({
+          success: true,
+          message: `Workout ready to load into "${targetFolderName}"`,
+          folder_id: targetFolderId,
+          folder_name: targetFolderName,
+          workout_name: pendingWorkout.workoutName,
+        });
       }
       default:
         return JSON.stringify({ error: 'Unknown tool' });

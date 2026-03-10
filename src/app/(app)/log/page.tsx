@@ -27,11 +27,38 @@ import { Popover } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { WorkoutSession } from "@/components/workout-session";
+import { PendingWorkoutBanner } from "@/components/pending-workout-banner";
 import type {
   Location,
   Folder,
   FolderWithCount,
 } from "@/lib/supabase/types";
+
+// Type for pending workout from coach
+interface PendingWorkout {
+  workoutName: string;
+  targetMuscles: string[];
+  generatedAt: string;
+  durationMinutes?: number;
+  notes?: string;
+  readyToLoad: boolean;
+  folderId: string | null;
+  folderName: string | null;
+  exercises: Array<{
+    name: string;
+    equipment: string;
+    templateId: string | null;
+    sets: Array<{
+      weight: string;
+      reps: string;
+      targetReps: string;
+      variant: string;
+      measureType: string;
+    }>;
+    notes: string | null;
+    defaultMeasureType: string;
+  }>;
+}
 
 const MAX_LOCATIONS = 5;
 
@@ -443,6 +470,37 @@ export default function LogPage() {
     sessionStorage.removeItem("netgains-selected-folder-obj");
   };
 
+  // Handle loading a coach-generated workout
+  const handleLoadCoachWorkout = async (workout: PendingWorkout) => {
+    if (!workout.folderId) {
+      console.error("No folder ID in pending workout");
+      return;
+    }
+
+    // Find the folder to get its location
+    const { data: folderData } = await supabase
+      .from("folders")
+      .select("*, locations(*)")
+      .eq("id", workout.folderId)
+      .single();
+
+    if (!folderData) {
+      console.error("Could not find folder:", workout.folderId);
+      return;
+    }
+
+    // Set the location first
+    const location = folderData.locations as Location;
+    setSelectedLocation(location);
+
+    // Then set the folder (this will trigger the workout session to open)
+    const folderWithCount: FolderWithCount = {
+      ...folderData,
+      exercise_count: 0, // Will be loaded when session opens
+    };
+    setSelectedFolder(folderWithCount);
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -550,6 +608,9 @@ export default function LogPage() {
           </div>
           <UserMenu />
         </div>
+
+        {/* Pending Workout Banner */}
+        <PendingWorkoutBanner onLoadWorkout={handleLoadCoachWorkout} />
 
         {/* Current Split Section */}
         <div className="mb-4">
@@ -755,6 +816,9 @@ export default function LogPage() {
           <UserMenu />
         </div>
       </div>
+
+      {/* Pending Workout Banner */}
+      <PendingWorkoutBanner onLoadWorkout={handleLoadCoachWorkout} />
 
       {/* Section Header */}
       <div className="flex items-center justify-between mb-4">
