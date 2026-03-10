@@ -1044,8 +1044,16 @@ export default function CoachPage() {
                 }
               >
                 {message.role === "assistant" ? (
-                  <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-4 prose-ul:my-2 prose-li:my-0 prose-strong:text-white prose-strong:block prose-strong:mt-8 prose-strong:mb-2">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-3 prose-ul:my-2 prose-li:my-0">
+                    <ReactMarkdown
+                      components={{
+                        strong: ({ children }) => (
+                          <span className="block text-white font-semibold mt-6 mb-2">{children}</span>
+                        ),
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
