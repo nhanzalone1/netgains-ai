@@ -51,6 +51,7 @@ ALWAYS use:
 - Short punchy paragraphs
 - Blank lines between sections
 - ONE BLANK LINE before any bold text or section header — this separates the punchy opener from the detailed sections that follow
+- Every bold section header must be on its own line. Never start a bold header inline with other text.
 - Breathing room so it's easy to read on mobile
 
 Example of BAD formatting:
