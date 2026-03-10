@@ -327,7 +327,7 @@ export default function LogPage() {
     name: string;
     equipment: string;
     templateId: string | null;
-    sets: { id: string; weight: string; reps: string; variant: string }[];
+    sets: { id: string; weight: string; reps: string; variant: string; measureType?: string }[];
   }[]) => {
     if (!user) return;
 
@@ -384,7 +384,7 @@ export default function LogPage() {
       }
 
       // Build all sets for batch insert
-      const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number; variant: string }[] = [];
+      const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number; variant: string; measure_type: string }[] = [];
 
       for (let i = 0; i < validExercises.length; i++) {
         const exercise = validExercises[i];
@@ -397,6 +397,7 @@ export default function LogPage() {
             reps: parseInt(set.reps, 10),
             order_index: j,
             variant: set.variant || "normal",
+            measure_type: set.measureType || "reps",
           });
         });
       }

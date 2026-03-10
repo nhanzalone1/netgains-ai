@@ -20,54 +20,92 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 // Equipment order for section display
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
-// Detailed muscle groups for categorization
-const DETAILED_MUSCLE_GROUPS = [
+// Simple muscle groups (6 options)
+const SIMPLE_MUSCLE_GROUPS = [
+  "chest",
+  "back",
+  "shoulders",
+  "arms",
+  "legs",
+  "core",
+] as const;
+
+type SimpleMuscleGroup = typeof SIMPLE_MUSCLE_GROUPS[number];
+
+// Advanced muscle groups (17 options)
+const ADVANCED_MUSCLE_GROUPS = [
   "chest",
   "front_delt",
   "side_delt",
   "rear_delt",
   "lats",
   "upper_back",
+  "rhomboids",
+  "traps",
   "biceps",
   "triceps",
+  "forearms",
+  "glutes",
   "quads",
   "hamstrings",
-  "glutes",
   "calves",
   "core",
   "other",
 ] as const;
 
-type MuscleGroup = typeof DETAILED_MUSCLE_GROUPS[number];
+type AdvancedMuscleGroup = typeof ADVANCED_MUSCLE_GROUPS[number];
 
-// Display names for muscle groups
-const MUSCLE_GROUP_DISPLAY: Record<MuscleGroup, string> = {
+// All possible muscle groups (union)
+type MuscleGroup = SimpleMuscleGroup | AdvancedMuscleGroup;
+
+// Display names for all muscle groups
+const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
   chest: "Chest",
+  back: "Back",
+  shoulders: "Shoulders",
+  arms: "Arms",
+  legs: "Legs",
   front_delt: "Front Delt",
   side_delt: "Side Delt",
   rear_delt: "Rear Delt",
   lats: "Lats",
   upper_back: "Upper Back",
+  rhomboids: "Rhomboids",
+  traps: "Traps",
   biceps: "Biceps",
   triceps: "Triceps",
+  forearms: "Forearms",
+  glutes: "Glutes",
   quads: "Quads",
   hamstrings: "Hamstrings",
-  glutes: "Glutes",
   calves: "Calves",
   core: "Core",
   other: "Other",
 };
 
-// Extended exercise template type with muscle_group
-interface ExerciseWithMuscleGroup extends ExerciseTemplate {
-  muscle_group?: MuscleGroup | null;
+// Map simple groups to advanced groups for filtering
+const SIMPLE_TO_ADVANCED_MAP: Record<SimpleMuscleGroup, AdvancedMuscleGroup[]> = {
+  chest: ["chest"],
+  back: ["lats", "upper_back", "rhomboids", "traps"],
+  shoulders: ["front_delt", "side_delt", "rear_delt"],
+  arms: ["biceps", "triceps", "forearms"],
+  legs: ["glutes", "quads", "hamstrings", "calves"],
+  core: ["core"],
+};
+
+// Muscle group mode type
+type MuscleGroupMode = "simple" | "advanced";
+
+// Extended exercise template type with muscle_group as array
+interface ExerciseWithMuscleGroup extends Omit<ExerciseTemplate, 'muscle_group'> {
+  muscle_group?: string[] | null;
 }
 
 interface ExercisePickerModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (template: ExerciseTemplate) => void;
-  onCreateNew: (data: { name: string; equipment: string; muscle_group?: string }) => Promise<ExerciseTemplate | null>;
+  onCreateNew: (data: { name: string; equipment: string; muscle_group?: string[] }) => Promise<ExerciseTemplate | null>;
   userId: string;
   folderId: string;
   folderName?: string;
@@ -104,8 +142,8 @@ export function ExercisePickerModal({
   // Create form state
   const [newName, setNewName] = useState("");
   const [newEquipment, setNewEquipment] = useState("barbell");
-  const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup | "">("");
-  const [aiSuggestedGroup, setAiSuggestedGroup] = useState<MuscleGroup | null>(null);
+  const [newMuscleGroups, setNewMuscleGroups] = useState<string[]>([]);
+  const [aiSuggestedGroup, setAiSuggestedGroup] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [categorizingNew, setCategorizingNew] = useState(false);
 
@@ -114,9 +152,13 @@ export function ExercisePickerModal({
   const [editingExercise, setEditingExercise] = useState<ExerciseWithMuscleGroup | null>(null);
   const [editName, setEditName] = useState("");
   const [editEquipment, setEditEquipment] = useState("");
-  const [editMuscleGroup, setEditMuscleGroup] = useState<MuscleGroup | "">("");
+  const [editMuscleGroups, setEditMuscleGroups] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Muscle group mode (simple/advanced) - loaded from user profile
+  const [muscleGroupMode, setMuscleGroupMode] = useState<MuscleGroupMode>("simple");
+  const [modeLoaded, setModeLoaded] = useState(false);
 
   // Track mount state for async operations
   useEffect(() => {
@@ -125,6 +167,46 @@ export function ExercisePickerModal({
       isMountedRef.current = false;
     };
   }, []);
+
+  // Load muscle group mode preference from profile
+  useEffect(() => {
+    if (!userId || modeLoaded) return;
+
+    const loadModePreference = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("muscle_group_mode")
+        .eq("id", userId)
+        .single();
+
+      if (data?.muscle_group_mode && isMountedRef.current) {
+        setMuscleGroupMode(data.muscle_group_mode as MuscleGroupMode);
+      }
+      setModeLoaded(true);
+    };
+
+    loadModePreference();
+  }, [userId, modeLoaded, supabase]);
+
+  // Save muscle group mode preference when changed
+  const handleModeChange = async (mode: MuscleGroupMode) => {
+    setMuscleGroupMode(mode);
+
+    // Save to profile
+    await supabase
+      .from("profiles")
+      .update({ muscle_group_mode: mode })
+      .eq("id", userId);
+  };
+
+  // Toggle a muscle group in the selection (multi-select)
+  const toggleMuscleGroup = (group: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+    setter(prev =>
+      prev.includes(group)
+        ? prev.filter(g => g !== group)
+        : [...prev, group]
+    );
+  };
 
   // Load split rotation and parse into tabs
   useEffect(() => {
@@ -188,7 +270,7 @@ export function ExercisePickerModal({
       setShowCreateForm(false);
       setNewName("");
       setNewEquipment("barbell");
-      setNewMuscleGroup("");
+      setNewMuscleGroups([]);
       setAiSuggestedGroup(null);
       setEditMode(false);
       setEditingExercise(null);
@@ -304,9 +386,11 @@ export function ExercisePickerModal({
     } else if (activeTab !== "All") {
       const muscleGroups = getActiveMuscleGroups();
       if (muscleGroups && muscleGroups.length > 0) {
-        filtered = filtered.filter(ex =>
-          ex.muscle_group && muscleGroups.includes(ex.muscle_group)
-        );
+        // Filter exercises that have ANY matching muscle group (array overlap)
+        filtered = filtered.filter(ex => {
+          if (!ex.muscle_group || ex.muscle_group.length === 0) return false;
+          return ex.muscle_group.some(mg => muscleGroups.includes(mg as MuscleGroup));
+        });
       }
     }
 
@@ -347,13 +431,19 @@ export function ExercisePickerModal({
 
     const muscleGroups: Record<string, ExerciseWithMuscleGroup[]> = {};
 
+    // With array-based muscle groups, an exercise can appear in multiple groups
     filtered.forEach(ex => {
-      const group = ex.muscle_group || "other";
-      if (!muscleGroups[group]) muscleGroups[group] = [];
-      muscleGroups[group].push(ex);
+      const groups = ex.muscle_group && ex.muscle_group.length > 0 ? ex.muscle_group : ["other"];
+      groups.forEach(group => {
+        if (!muscleGroups[group]) muscleGroups[group] = [];
+        // Avoid duplicates if exercise is already in this group
+        if (!muscleGroups[group].some(e => e.id === ex.id)) {
+          muscleGroups[group].push(ex);
+        }
+      });
     });
 
-    return DETAILED_MUSCLE_GROUPS
+    return ADVANCED_MUSCLE_GROUPS
       .filter(group => muscleGroups[group]?.length > 0)
       .map(group => ({
         muscleGroup: group,
@@ -362,8 +452,8 @@ export function ExercisePickerModal({
       }));
   }, [exercises, searchQuery, activeTab]);
 
-  // Toggle muscle group collapse
-  const toggleMuscleGroup = (group: string) => {
+  // Toggle muscle group section collapse (for UI accordion)
+  const toggleMuscleGroupCollapse = (group: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(group)) {
@@ -400,9 +490,9 @@ export function ExercisePickerModal({
           const { muscleGroup } = await response.json();
           if (isMountedRef.current) {
             setAiSuggestedGroup(muscleGroup);
-            // Auto-select if user hasn't manually chosen
-            if (!newMuscleGroup) {
-              setNewMuscleGroup(muscleGroup);
+            // Auto-select if user hasn't manually chosen any
+            if (newMuscleGroups.length === 0) {
+              setNewMuscleGroups([muscleGroup]);
             }
           }
         }
@@ -420,10 +510,17 @@ export function ExercisePickerModal({
     if (!newName.trim()) return;
 
     setCreating(true);
+    // Use selected muscle groups, or AI suggestion if nothing selected
+    const muscleGroupsToSave = newMuscleGroups.length > 0
+      ? newMuscleGroups
+      : aiSuggestedGroup
+        ? [aiSuggestedGroup]
+        : undefined;
+
     const result = await onCreateNew({
       name: newName.trim(),
       equipment: newEquipment,
-      muscle_group: newMuscleGroup || aiSuggestedGroup || undefined,
+      muscle_group: muscleGroupsToSave,
     });
 
     setCreating(false);
@@ -459,7 +556,7 @@ export function ExercisePickerModal({
     setEditingExercise(exercise);
     setEditName(exercise.name);
     setEditEquipment(exercise.equipment);
-    setEditMuscleGroup(exercise.muscle_group || "");
+    setEditMuscleGroups(exercise.muscle_group || []);
   };
 
   // Handle saving edited exercise
@@ -468,12 +565,14 @@ export function ExercisePickerModal({
 
     setSavingEdit(true);
     try {
+      const muscleGroupsToSave = editMuscleGroups.length > 0 ? editMuscleGroups : null;
+
       const { error } = await supabase
         .from("exercise_templates")
         .update({
           name: editName.trim(),
           equipment: editEquipment,
-          muscle_group: editMuscleGroup || null,
+          muscle_group: muscleGroupsToSave,
         })
         .eq("id", editingExercise.id);
 
@@ -481,14 +580,14 @@ export function ExercisePickerModal({
         setExercises((prev) =>
           prev.map((e) =>
             e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: editMuscleGroup || null }
+              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: muscleGroupsToSave }
               : e
           )
         );
         setRecentExercises((prev) =>
           prev.map((e) =>
             e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: editMuscleGroup || null }
+              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: muscleGroupsToSave }
               : e
           )
         );
@@ -505,7 +604,6 @@ export function ExercisePickerModal({
   };
 
   const formatEquipment = (equipment: string) => {
-    if (equipment === "bodyweight") return "BW";
     return equipment.charAt(0).toUpperCase() + equipment.slice(1);
   };
 
@@ -650,25 +748,50 @@ export function ExercisePickerModal({
 
                   {/* Muscle Group Selection */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
-                      Muscle Group
-                      {categorizingNew && (
-                        <span className="ml-2 text-[#22d3ee]">detecting...</span>
-                      )}
-                      {aiSuggestedGroup && !categorizingNew && (
-                        <span className="ml-2 text-green-400">
-                          AI suggests: {MUSCLE_GROUP_DISPLAY[aiSuggestedGroup]}
-                        </span>
-                      )}
-                    </label>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        Muscle Groups
+                        {categorizingNew && (
+                          <span className="ml-2 text-[#22d3ee]">detecting...</span>
+                        )}
+                        {aiSuggestedGroup && !categorizingNew && newMuscleGroups.length === 0 && (
+                          <span className="ml-2 text-green-400">
+                            AI: {MUSCLE_GROUP_DISPLAY[aiSuggestedGroup]}
+                          </span>
+                        )}
+                      </label>
+                      {/* Simple/Advanced Toggle */}
+                      <div className="flex rounded-lg overflow-hidden bg-white/5">
+                        <button
+                          onClick={() => handleModeChange("simple")}
+                          className={`px-3 py-1 text-xs font-medium transition-all ${
+                            muscleGroupMode === "simple"
+                              ? "bg-[#22d3ee] text-black"
+                              : "text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          Simple
+                        </button>
+                        <button
+                          onClick={() => handleModeChange("advanced")}
+                          className={`px-3 py-1 text-xs font-medium transition-all ${
+                            muscleGroupMode === "advanced"
+                              ? "bg-[#22d3ee] text-black"
+                              : "text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          Advanced
+                        </button>
+                      </div>
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                      {DETAILED_MUSCLE_GROUPS.map((group) => {
-                        const isActive = newMuscleGroup === group;
-                        const isSuggested = aiSuggestedGroup === group && !newMuscleGroup;
+                      {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : ADVANCED_MUSCLE_GROUPS).map((group) => {
+                        const isActive = newMuscleGroups.includes(group);
+                        const isSuggested = aiSuggestedGroup === group && newMuscleGroups.length === 0;
                         return (
                           <button
                             key={group}
-                            onClick={() => setNewMuscleGroup(group)}
+                            onClick={() => toggleMuscleGroup(group, setNewMuscleGroups)}
                             className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
                               isActive
                                 ? "bg-[#22d3ee] text-black"
@@ -682,6 +805,11 @@ export function ExercisePickerModal({
                         );
                       })}
                     </div>
+                    {newMuscleGroups.length > 1 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        {newMuscleGroups.length} muscle groups selected
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-3 pt-2">
@@ -741,7 +869,7 @@ export function ExercisePickerModal({
                             <p className="font-semibold text-white truncate">{exercise.name}</p>
                             <p className="text-xs text-gray-500 capitalize">
                               {exercise.equipment}
-                              {exercise.muscle_group && ` · ${MUSCLE_GROUP_DISPLAY[exercise.muscle_group]}`}
+                              {exercise.muscle_group && exercise.muscle_group.length > 0 && ` · ${exercise.muscle_group.map(g => MUSCLE_GROUP_DISPLAY[g] || g).join(', ')}`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -781,7 +909,7 @@ export function ExercisePickerModal({
                     return (
                       <div key={muscleGroup}>
                         <button
-                          onClick={() => toggleMuscleGroup(muscleGroup)}
+                          onClick={() => toggleMuscleGroupCollapse(muscleGroup)}
                           className="w-full flex items-center justify-between py-2 px-1"
                         >
                           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -891,9 +1019,9 @@ export function ExercisePickerModal({
                               >
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold text-white truncate">{exercise.name}</p>
-                                  {exercise.muscle_group && (
+                                  {exercise.muscle_group && exercise.muscle_group.length > 0 && (
                                     <p className="text-xs text-gray-500">
-                                      {MUSCLE_GROUP_DISPLAY[exercise.muscle_group]}
+                                      {exercise.muscle_group.map(g => MUSCLE_GROUP_DISPLAY[g] || g).join(', ')}
                                     </p>
                                   )}
                                 </div>
@@ -1014,16 +1142,41 @@ export function ExercisePickerModal({
 
                     {/* Muscle Group Selection */}
                     <div className="mb-6">
-                      <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
-                        Muscle Group
-                      </label>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                          Muscle Groups
+                        </label>
+                        {/* Simple/Advanced Toggle */}
+                        <div className="flex rounded-lg overflow-hidden bg-white/5">
+                          <button
+                            onClick={() => handleModeChange("simple")}
+                            className={`px-3 py-1 text-xs font-medium transition-all ${
+                              muscleGroupMode === "simple"
+                                ? "bg-[#22d3ee] text-black"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            Simple
+                          </button>
+                          <button
+                            onClick={() => handleModeChange("advanced")}
+                            className={`px-3 py-1 text-xs font-medium transition-all ${
+                              muscleGroupMode === "advanced"
+                                ? "bg-[#22d3ee] text-black"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            Advanced
+                          </button>
+                        </div>
+                      </div>
                       <div className="flex flex-wrap gap-2">
-                        {DETAILED_MUSCLE_GROUPS.map((group) => {
-                          const isActive = editMuscleGroup === group;
+                        {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : ADVANCED_MUSCLE_GROUPS).map((group) => {
+                          const isActive = editMuscleGroups.includes(group);
                           return (
                             <button
                               key={group}
-                              onClick={() => setEditMuscleGroup(group)}
+                              onClick={() => toggleMuscleGroup(group, setEditMuscleGroups)}
                               className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
                                 isActive
                                   ? "bg-[#22d3ee] text-black"
@@ -1035,6 +1188,11 @@ export function ExercisePickerModal({
                           );
                         })}
                       </div>
+                      {editMuscleGroups.length > 1 && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          {editMuscleGroups.length} muscle groups selected
+                        </p>
+                      )}
                     </div>
 
                     {/* Buttons */}

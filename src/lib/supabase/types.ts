@@ -14,16 +14,19 @@ export interface Database {
           id: string;
           created_at: string;
           updated_at: string;
+          muscle_group_mode: string; // 'simple' | 'advanced'
         };
         Insert: {
           id: string;
           created_at?: string;
           updated_at?: string;
+          muscle_group_mode?: string;
         };
         Update: {
           id?: string;
           created_at?: string;
           updated_at?: string;
+          muscle_group_mode?: string;
         };
         Relationships: [];
       };
@@ -136,6 +139,7 @@ export interface Database {
           weight: number;
           reps: number;
           variant: string;  // 'normal' | 'warmup' | 'failure' | 'drop' | 'drop-parent' | 'assisted-parent' | 'assisted-child' | 'left' | 'right'
+          measure_type: string;  // 'reps' | 'secs'
           order_index: number;
           created_at: string;
         };
@@ -145,6 +149,7 @@ export interface Database {
           weight: number;
           reps: number;
           variant?: string;
+          measure_type?: string;
           order_index?: number;
           created_at?: string;
         };
@@ -154,6 +159,7 @@ export interface Database {
           weight?: number;
           reps?: number;
           variant?: string;
+          measure_type?: string;
           order_index?: number;
           created_at?: string;
         };
@@ -245,6 +251,8 @@ export interface Database {
           name: string;
           equipment: string;
           exercise_type: string;
+          default_measure_type: string;  // 'reps' | 'secs'
+          muscle_group: string[] | null;  // Array of muscle groups
           order_index: number;
           created_at: string;
         };
@@ -255,6 +263,8 @@ export interface Database {
           name: string;
           equipment?: string;
           exercise_type?: string;
+          default_measure_type?: string;
+          muscle_group?: string[] | null;
           order_index?: number;
           created_at?: string;
         };
@@ -265,6 +275,8 @@ export interface Database {
           name?: string;
           equipment?: string;
           exercise_type?: string;
+          default_measure_type?: string;
+          muscle_group?: string[] | null;
           order_index?: number;
           created_at?: string;
         };

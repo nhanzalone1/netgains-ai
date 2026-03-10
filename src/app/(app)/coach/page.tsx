@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Sparkles, RotateCcw, MessageCircle } from "lucide-react";
+import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
@@ -248,6 +248,7 @@ export default function CoachPage() {
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -297,6 +298,28 @@ export default function CoachPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Track scroll position to show/hide scroll-to-bottom button
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Show button if user is NOT near the bottom
+      setShowScrollButton(!isNearBottom());
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isNearBottom]);
+
+  // Auto-scroll when new messages are added
+  useEffect(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      // New message added - scroll to bottom
+      scrollToBottom(true);
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   // iOS keyboard handling using Visual Viewport API
   // When keyboard opens, we set container height to viewport height so input sits above keyboard
@@ -1050,6 +1073,23 @@ export default function CoachPage() {
 
         <div ref={messagesEndRef} className="h-4" />
       </div>
+
+      {/* Scroll to bottom button - appears when user scrolls up */}
+      {showScrollButton && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          onClick={() => {
+            scrollToBottom(true);
+            setShowScrollButton(false);
+          }}
+          className="absolute right-4 bottom-24 w-10 h-10 rounded-full bg-primary/90 text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary transition-colors z-50"
+          style={{ backdropFilter: 'blur(8px)' }}
+        >
+          <ChevronDown className="w-5 h-5" />
+        </motion.button>
+      )}
 
       {/* Input Area - at bottom of flex container, above nav bar */}
       <div

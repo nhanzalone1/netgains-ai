@@ -30,7 +30,11 @@ export async function POST() {
   }
 
   // Filter to only exercises without a muscle_group (or recategorize all if needed)
-  const needsCategorization = exercises.filter(ex => !ex.muscle_group);
+  // Handle both old single-value format and new array format
+  const needsCategorization = exercises.filter(ex =>
+    !ex.muscle_group ||
+    (Array.isArray(ex.muscle_group) && ex.muscle_group.length === 0)
+  );
 
   console.log(`[Recategorize] Found ${exercises.length} exercises, ${needsCategorization.length} need categorization`);
 
@@ -54,9 +58,10 @@ export async function POST() {
   let errorCount = 0;
 
   for (const { id, muscleGroup } of categorized) {
+    // Store as array (AI returns single value, wrap it)
     const { error: updateError } = await supabase
       .from('exercise_templates')
-      .update({ muscle_group: muscleGroup })
+      .update({ muscle_group: [muscleGroup] })
       .eq('id', id);
 
     if (updateError) {

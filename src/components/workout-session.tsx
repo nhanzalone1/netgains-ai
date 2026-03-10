@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   Plus,
   X,
-  MoreHorizontal,
   Zap,
   Layers,
   TrendingDown,
@@ -31,11 +30,14 @@ type SetVariant =
   | "assisted-parent" | "assisted-child"
   | "left" | "right";
 
+type MeasureType = "reps" | "secs";
+
 interface WorkoutSet {
   id: string;
   weight: string;
   reps: string;
   variant: SetVariant;
+  measureType: MeasureType;
   label?: string; // For special set labels
 }
 
@@ -46,6 +48,26 @@ interface ActiveExercise {
   templateId: string | null;
   sets: WorkoutSet[];
   supersetPairId?: string; // Links superset pairs
+  defaultMeasureType: MeasureType; // Default for new sets (reps or secs)
+}
+
+// Time-based exercise detection for bodyweight exercises
+const TIME_BASED_KEYWORDS = [
+  'plank', 'wall sit', 'hollow hold', 'dead hang', 'l-sit', 'l sit',
+  'superman hold', 'isometric', 'carry', "farmer's walk", 'farmers walk',
+  'farmer walk', 'hold', 'hang'
+];
+
+function isTimeBasedExercise(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return TIME_BASED_KEYWORDS.some(keyword => lowerName.includes(keyword));
+}
+
+function detectMeasureType(name: string, equipment: string): MeasureType {
+  if (equipment.toLowerCase() === 'bodyweight' && isTimeBasedExercise(name)) {
+    return 'secs';
+  }
+  return 'reps';
 }
 
 interface WorkoutSessionProps {
@@ -293,23 +315,30 @@ export function WorkoutSession({
   // Generate unique ID
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
-  // Create a new set with variant
-  const createSet = (variant: SetVariant = "normal", weight = "", label?: string): WorkoutSet => ({
+  // Create a new set with variant and measure type
+  const createSet = (variant: SetVariant = "normal", weight = "", label?: string, measureType: MeasureType = "reps"): WorkoutSet => ({
     id: generateId(),
     weight,
     reps: "",
     variant,
+    measureType,
     label,
   });
 
   // Add exercise from library
   const addExerciseFromLibrary = (template: ExerciseTemplate, insertAfterIndex?: number) => {
+    // Use template's default_measure_type if available, otherwise detect from name/equipment
+    const defaultMeasureType: MeasureType =
+      (template.default_measure_type as MeasureType) ||
+      detectMeasureType(template.name, template.equipment);
+
     const newExercise: ActiveExercise = {
       id: generateId(),
       name: template.name,
       equipment: template.equipment,
       templateId: template.id,
-      sets: [createSet()],
+      sets: [createSet("normal", "", undefined, defaultMeasureType)],
+      defaultMeasureType,
     };
 
     setActiveExercises((prev) => {
@@ -338,6 +367,11 @@ export function WorkoutSession({
 
     const pairId = generateId();
 
+    // Use template's default_measure_type if available, otherwise detect from name/equipment
+    const defaultMeasureType: MeasureType =
+      (template.default_measure_type as MeasureType) ||
+      detectMeasureType(template.name, template.equipment);
+
     // Update the current exercise with superset pair ID
     setActiveExercises((prev) =>
       prev.map((ex) =>
@@ -351,8 +385,9 @@ export function WorkoutSession({
       name: template.name,
       equipment: template.equipment,
       templateId: template.id,
-      sets: [createSet()],
+      sets: [createSet("normal", "", undefined, defaultMeasureType)],
       supersetPairId: pairId,
+      defaultMeasureType,
     };
 
     setActiveExercises((prev) => {
@@ -383,6 +418,9 @@ export function WorkoutSession({
   }) => {
     setSavingNewExercise(true);
 
+    // Detect default measure type for bodyweight exercises
+    const detectedMeasureType = detectMeasureType(data.name, data.equipment);
+
     const { data: newTemplate, error } = await supabase
       .from("exercise_templates")
       .insert({
@@ -391,6 +429,7 @@ export function WorkoutSession({
         name: data.name,
         equipment: data.equipment,
         exercise_type: data.exerciseType,
+        default_measure_type: detectedMeasureType,
         order_index: libraryExercises.length,
       })
       .select()
@@ -428,13 +467,13 @@ export function WorkoutSession({
 
         if (hasLRSets) {
           // Auto-add R+L pair to match existing pattern
-          const rightSet = createSet("right", "", "R");
-          const leftSet = createSet("left", "", "L");
+          const rightSet = createSet("right", "", "R", ex.defaultMeasureType);
+          const leftSet = createSet("left", "", "L", ex.defaultMeasureType);
           return { ...ex, sets: [...ex.sets, rightSet, leftSet] };
         }
 
-        // Normal set
-        return { ...ex, sets: [...ex.sets, createSet()] };
+        // Normal set - use exercise's default measure type
+        return { ...ex, sets: [...ex.sets, createSet("normal", "", undefined, ex.defaultMeasureType)] };
       })
     );
   };
@@ -454,7 +493,7 @@ export function WorkoutSession({
         );
 
         // Create child set with same weight
-        const childSet = createSet("assisted-child", lastSet?.weight || "", "Ast");
+        const childSet = createSet("assisted-child", lastSet?.weight || "", "Ast", ex.defaultMeasureType);
         return { ...ex, sets: [...updatedSets, childSet] };
       })
     );
@@ -476,7 +515,7 @@ export function WorkoutSession({
         );
 
         // Create drop child set with empty weight
-        const childSet = createSet("drop", "", "Drop");
+        const childSet = createSet("drop", "", "Drop", ex.defaultMeasureType);
         return { ...ex, sets: [...updatedSets, childSet] };
       })
     );
@@ -498,7 +537,7 @@ export function WorkoutSession({
         );
 
         // Create left set with same weight
-        const leftSet = createSet("left", lastSet?.weight || "", "L");
+        const leftSet = createSet("left", lastSet?.weight || "", "L", ex.defaultMeasureType);
         return { ...ex, sets: [...updatedSets, leftSet] };
       })
     );
@@ -521,7 +560,7 @@ export function WorkoutSession({
         }
 
         // Otherwise add a new warmup set
-        const warmupSet = createSet("warmup", "", "W");
+        const warmupSet = createSet("warmup", "", "W", ex.defaultMeasureType);
         return { ...ex, sets: [...ex.sets, warmupSet] };
       })
     );
@@ -544,7 +583,7 @@ export function WorkoutSession({
         }
 
         // Otherwise add a new failure set
-        const failureSet = createSet("failure", "", "F");
+        const failureSet = createSet("failure", "", "F", ex.defaultMeasureType);
         return { ...ex, sets: [...ex.sets, failureSet] };
       })
     );
@@ -565,7 +604,10 @@ export function WorkoutSession({
   };
 
   // Handle creating new exercise from superset picker
-  const handleSupersetCreateNew = async (data: { name: string; equipment: string; muscle_group?: string }): Promise<ExerciseTemplate | null> => {
+  const handleSupersetCreateNew = async (data: { name: string; equipment: string; muscle_group?: string[] }): Promise<ExerciseTemplate | null> => {
+    // Detect default measure type for bodyweight exercises
+    const detectedMeasureType = detectMeasureType(data.name, data.equipment);
+
     const { data: newTemplate, error } = await supabase
       .from("exercise_templates")
       .insert({
@@ -574,8 +616,9 @@ export function WorkoutSession({
         name: data.name,
         equipment: data.equipment,
         exercise_type: "strength",
+        default_measure_type: detectedMeasureType,
         order_index: libraryExercises.length,
-        muscle_group: data.muscle_group || null,
+        muscle_group: data.muscle_group && data.muscle_group.length > 0 ? data.muscle_group : null,
       })
       .select()
       .single();
@@ -594,6 +637,23 @@ export function WorkoutSession({
     return null;
   };
 
+  // Toggle measure type (reps <-> secs) for a set
+  const toggleSetMeasureType = (exerciseId: string, setId: string) => {
+    setActiveExercises((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exerciseId) return ex;
+        return {
+          ...ex,
+          sets: ex.sets.map((set) =>
+            set.id === setId
+              ? { ...set, measureType: set.measureType === "reps" ? "secs" : "reps" }
+              : set
+          ),
+        };
+      })
+    );
+  };
+
   // Update set value with validation
   const updateSet = (
     exerciseId: string,
@@ -607,10 +667,15 @@ export function WorkoutSession({
       const numValue = parseFloat(value);
       if (!isNaN(numValue) && numValue > 2500) return;
     } else {
-      // Allow only integers up to 999 reps
+      // Allow only integers
       if (value && !/^\d*$/.test(value)) return;
       const numValue = parseInt(value, 10);
-      if (!isNaN(numValue) && numValue > 999) return;
+      // Find the set to check its measureType
+      const exercise = activeExercises.find((ex) => ex.id === exerciseId);
+      const set = exercise?.sets.find((s) => s.id === setId);
+      // Allow up to 3600 secs (1 hour) or 999 reps
+      const maxValue = set?.measureType === "secs" ? 3600 : 999;
+      if (!isNaN(numValue) && numValue > maxValue) return;
     }
 
     setActiveExercises((prev) =>
@@ -765,18 +830,18 @@ export function WorkoutSession({
                       )}
                     </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
-                    {/* More Options Button */}
+                    {/* Advanced Sets Button */}
                     <div className="relative">
                       <motion.button
-                        whileTap={{ scale: 0.9 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() =>
                           setOpenOptionsMenuId(
                             openOptionsMenuId === exercise.id ? null : exercise.id
                           )
                         }
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+                        className="px-2.5 py-1 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
                       >
-                        <MoreHorizontal className="w-5 h-5" />
+                        Advanced
                       </motion.button>
 
                       {/* Advanced Options Dropdown */}
@@ -872,7 +937,9 @@ export function WorkoutSession({
                   <span className="text-right pr-10">
                     {exercise.equipment === "bodyweight" ? "Added Wt" : "Weight"}
                   </span>
-                  <span className="text-right pr-10">Reps</span>
+                  <span className="text-right pr-10">
+                    {exercise.defaultMeasureType === "secs" ? "Time" : "Reps"}
+                  </span>
                   <span></span>
                 </div>
 
@@ -953,7 +1020,7 @@ export function WorkoutSession({
                         <div className="relative">
                           {exercise.equipment === "bodyweight" && (
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-400 pointer-events-none">
-                              BW+
+                              +
                             </span>
                           )}
                           <input
@@ -974,7 +1041,7 @@ export function WorkoutSession({
                           </span>
                         </div>
 
-                        {/* Reps Input */}
+                        {/* Reps/Secs Input */}
                         <div className="relative">
                           <input
                             type="text"
@@ -987,9 +1054,20 @@ export function WorkoutSession({
                             className="w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
                             style={{ background: variantStyle.inputBg }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none">
-                            reps
-                          </span>
+                          {/* Toggle button for bodyweight exercises */}
+                          {exercise.equipment === "bodyweight" ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSetMeasureType(exercise.id, set.id)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-medium rounded bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white transition-colors"
+                            >
+                              {set.measureType === "secs" ? "secs" : "reps"}
+                            </button>
+                          ) : (
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none">
+                              reps
+                            </span>
+                          )}
                         </div>
 
                         {/* Delete Button */}
