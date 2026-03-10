@@ -73,7 +73,7 @@ Key behaviors:
 - **Goal-aware calories** — Cutting: ceiling (never suggest eating more). Bulking: floor.
 - **Proactive momentum** — Every response ends with "next up: [action]"
 - **Split rotation awareness** — Knows today's scheduled workout from `split_rotation`
-- **Formatting** — Short paragraphs, blank line before any bold section header, no bullets
+- **Formatting** — Short paragraphs, bold section headers on own lines with spacing above, no bullets. Chat UI renders `**bold**` as block elements with 24px top margin via custom ReactMarkdown component.
 
 ### Auto-Triggers
 After meal/workout save, `/api/coach-trigger` (Haiku) generates directive, saves to `chat_messages`, badge appears on Coach tab.
