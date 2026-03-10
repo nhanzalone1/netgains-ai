@@ -57,14 +57,14 @@ src/
 
 ## Database Tables
 
-- **profiles** — user info (height, weight, goal, training mode, coaching mode, coaching_intensity)
+- **profiles** — user info (height, weight, goal, training mode, coaching mode, coaching_intensity, muscle_group_mode)
 - **workouts** — workout sessions (date, notes, muscle group)
-- **sets** — individual sets (exercise, weight, reps, variant: normal/warmup/drop/failure)
+- **sets** — individual sets (exercise, weight, reps, variant: normal/warmup/drop/failure, measure_type: reps/secs)
 - **nutrition_logs** — logged meals (name, calories, protein, carbs, fat, date)
 - **coach_memory** — persistent coach state (split_rotation, conversation_summary, onboarding data, food_staples)
 - **chat_messages** — persisted chat messages for cross-device sync
 - **exercise_library** — master list of exercises with muscle groups
-- **exercise_templates** — user's custom exercises (name, muscle_group, user_id)
+- **exercise_templates** — user's custom exercises (name, muscle_group[], default_measure_type, user_id)
 
 ## Architecture Decisions
 
@@ -264,6 +264,7 @@ Key fields in `profiles` table:
 - `coaching_mode` — "full" (coach builds program) or "assist" (user has own program)
 - `height_inches` — User's height in total inches
 - `weight_lbs` — User's weight in pounds
+- `muscle_group_mode` — "simple" or "advanced" (controls muscle group selector UI)
 
 ### Coach Memory Keys
 Special keys in `coach_memory` table:
@@ -353,10 +354,10 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 ### Middleware
 `middleware.ts` checks auth status and allowed_testers table, redirects accordingly.
 
-## Current State (Mar 5)
+## Current State (Mar 10)
 
 ### What's Working
-- **Workout logging** with set variants (warmup, drop, failure)
+- **Workout logging** with set variants (warmup, drop, failure) and time-based sets
 - **Nutrition logging** with calorie ring and macro tracking
 - **AI coach chat** with persistent memory and cross-device sync
 - **Dynamic Daily Brief** — Pre-workout/post-workout/rest day modes
@@ -367,7 +368,16 @@ Add approved emails directly to `allowed_testers` table in Supabase dashboard.
 - **Split folder reordering** — Move Up/Down buttons in edit modal
 - **Default to Coach tab** — App always opens to /coach after login
 
-### Recent Updates (Mar 8)
+### Recent Updates (Mar 10)
+- **Time-based sets for bodyweight exercises** — Added support for seconds-based sets (plank, wall sit, dead hang, L-sit, carries, isometric holds). Auto-detects time-based exercises by name keywords. Toggle between reps/secs on bodyweight exercises. Database: `measure_type` column on sets, `default_measure_type` on exercise_templates.
+- **Multi-select muscle groups** — Exercises can now belong to multiple muscle groups (e.g., bench press → chest + front_delt + triceps). Database: `muscle_group` converted from TEXT to TEXT[]. Exercises appear in all matching split tabs.
+- **Simple/Advanced muscle group mode** — Users can toggle between Simple mode (6 groups: chest, back, shoulders, arms, legs, core) and Advanced mode (17 groups including front_delt, side_delt, rear_delt, lats, upper_back, etc.). Preference stored in `profiles.muscle_group_mode` for cross-device sync.
+- **Auto-scroll in coach chat** — Chat auto-scrolls to bottom on page load and when new messages arrive. Added floating scroll-to-bottom button (appears when scrolled up).
+- **"Advanced" button in workout log** — Replaced confusing three-dot menu (⋯) with clear "Advanced" text button for accessing superset, drop set, and assisted set options.
+- **Coach response formatting** — Added 4-paragraph structure to all coach responses: (1) punchy headline, (2) biological context, (3) specific recommendation, (4) next action. Improves readability and consistency.
+- **Morning greeting fix** — Fixed bug where internal reasoning was leaking to users. Changed from checking `onboarding_complete` flag to calculating profile completeness directly.
+
+### Previous Updates (Mar 8)
 - **Workout log button reorder** — Swapped "Add Exercise" and "Finish & Save" button positions in workout session. "Add Exercise" is now the primary action on top (more frequently used), "Finish & Save" sits below it. Both buttons pushed up to sit fully above the bottom nav bar.
 
 ### Previous Updates (Mar 7)
