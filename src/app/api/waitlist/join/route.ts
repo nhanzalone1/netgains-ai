@@ -65,9 +65,17 @@ export async function POST(request: Request) {
       emailStatus = `failed: ${errorMessage}`;
     }
 
+    // List all env vars that look custom (not Node internals)
+    const customEnvVars = Object.keys(process.env)
+      .filter(k => !k.startsWith('_') && !k.startsWith('npm_') &&
+                   (k.includes('SUPABASE') || k.includes('RESEND') ||
+                    k.includes('ADMIN') || k.includes('ANTHROPIC') ||
+                    k.startsWith('NEXT_')))
+      .sort();
+
     return Response.json({
       success: true,
-      debug: { hasResendKey, emailStatus }
+      debug: { hasResendKey, emailStatus, availableEnvVars: customEnvVars }
     });
   } catch (error) {
     console.error('[Waitlist] Error:', error);
