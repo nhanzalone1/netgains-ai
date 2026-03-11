@@ -13,11 +13,11 @@ export async function POST(request: Request) {
     // Check env vars
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
       console.error('[Waitlist] Missing NEXT_PUBLIC_SUPABASE_URL');
-      return Response.json({ error: 'Server configuration error' }, { status: 500 });
+      return Response.json({ error: 'Missing SUPABASE_URL' }, { status: 500 });
     }
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error('[Waitlist] Missing SUPABASE_SERVICE_ROLE_KEY');
-      return Response.json({ error: 'Server configuration error' }, { status: 500 });
+      return Response.json({ error: 'Missing SERVICE_ROLE_KEY' }, { status: 500 });
     }
 
     const { email } = await request.json();
