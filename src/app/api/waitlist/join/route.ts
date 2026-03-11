@@ -54,16 +54,21 @@ export async function POST(request: Request) {
     }
 
     // Send confirmation email
+    let emailStatus = 'not_attempted';
+    const hasResendKey = !!process.env.RESEND_API_KEY;
+
     try {
-      console.log('[Waitlist] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
       await sendWaitlistConfirmation(normalizedEmail);
-      console.log('[Waitlist] Email sent successfully to:', normalizedEmail);
-    } catch (emailError) {
-      // Log but don't fail the request - user is still on the waitlist
-      console.error('[Waitlist] Email send failed:', emailError);
+      emailStatus = 'sent';
+    } catch (emailError: unknown) {
+      const errorMessage = emailError instanceof Error ? emailError.message : String(emailError);
+      emailStatus = `failed: ${errorMessage}`;
     }
 
-    return Response.json({ success: true });
+    return Response.json({
+      success: true,
+      debug: { hasResendKey, emailStatus }
+    });
   } catch (error) {
     console.error('[Waitlist] Error:', error);
     return Response.json({ error: 'Something went wrong' }, { status: 500 });
