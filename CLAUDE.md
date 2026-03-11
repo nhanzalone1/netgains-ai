@@ -13,6 +13,7 @@ NetGains AI is a vertical AI fitness coaching app. It provides personalized work
 - **Database:** Supabase (PostgreSQL + Auth + RLS)
 - **AI:** Anthropic Claude API (Sonnet for coaching, Haiku for triggers/categorization)
 - **Hosting:** Vercel
+- **Email:** Resend (transactional emails)
 - **PWA:** Progressive Web App (installable on mobile)
 
 ## Project Structure
@@ -26,7 +27,9 @@ src/
 │   │   ├── coach-trigger/     # Auto-triggers after meal/workout (Haiku)
 │   │   ├── workout/pending/   # Pending workout from coach generator
 │   │   ├── exercise/          # categorize, parse-split, recategorize-all
-│   │   └── nutrition/         # estimate, recalculate
+│   │   ├── nutrition/         # estimate, recalculate
+│   │   ├── waitlist/join/     # Waitlist signup + confirmation email
+│   │   └── admin/invite-beta/ # Send beta invite emails
 │   ├── login/ & signup/
 ├── components/
 │   ├── workout-session.tsx    # Main workout logging UI
@@ -35,6 +38,7 @@ src/
 │   └── ...
 ├── lib/
 │   ├── supabase/        # DB client + types
+│   ├── email.ts         # Resend email templates
 │   ├── pr-detection.ts
 │   └── date-utils.ts
 └── constants.ts         # AI models, limits, defaults
@@ -113,7 +117,18 @@ No separate flow. New users chat directly with coach.
 - Non-logged-in → `/waitlist` page
 - Logged-in + email in `allowed_testers` → full access
 - Logged-in + not in `allowed_testers` → waitlist pending page
-- Add testers directly to `allowed_testers` table in Supabase
+- Waitlist signup sends confirmation email automatically via Resend
+- Beta invite email sent manually via `/api/admin/invite-beta`
+
+### Sending Beta Invites
+```bash
+curl -X POST https://netgainsai.com/api/admin/invite-beta \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_API_SECRET" \
+  -d '{"email": "user@example.com", "addToTesters": true}'
+```
+- `addToTesters: true` — adds to `allowed_testers` table AND sends email
+- `addToTesters: false` — just sends email (if already added manually)
 
 ## Current State (Mar 10)
 
@@ -156,4 +171,8 @@ npm run lint         # Lint check
 - `ANTHROPIC_API_KEY` — Claude API key
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, RLS)
-- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (server-side, bypasses RLS) — Vercel only
+- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (server-side, bypasses RLS)
+- `RESEND_API_KEY` — Resend API key for transactional emails
+- `ADMIN_API_SECRET` — Secret for admin API endpoints (beta invites)
+
+**Vercel note:** Make sure env vars are added to the correct Vercel project (`netgains-ai`, not `netgains-ai-8qeb`).
