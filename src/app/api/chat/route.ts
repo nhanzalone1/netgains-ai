@@ -1795,15 +1795,17 @@ ${pendingChangesSection}
           .eq('user_id', user.id)
           .eq('date', targetDate);
 
-        // Check for duplicates by exact name match (case-insensitive)
+        // Check for duplicates: same name AND same calories (exact same meal logged twice)
+        // This allows eating chicken breast twice if portions differ
         const foodNameLower = foodName.toLowerCase().trim();
         const isDuplicate = todaysMeals?.some(meal => {
           const mealNameLower = meal.food_name.toLowerCase().trim();
-          // Exact match or very similar names (one contains the other)
           const nameMatch = mealNameLower === foodNameLower ||
                            (mealNameLower.includes(foodNameLower) && foodNameLower.length > 5) ||
                            (foodNameLower.includes(mealNameLower) && mealNameLower.length > 5);
-          return nameMatch;
+          const calorieMatch = meal.calories === calories;
+          // Must match BOTH name AND calories to be a true duplicate
+          return nameMatch && calorieMatch;
         });
 
         if (isDuplicate) {
