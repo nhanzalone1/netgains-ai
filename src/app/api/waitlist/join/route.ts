@@ -51,7 +51,9 @@ export async function POST(request: Request) {
 
     // Send confirmation email
     try {
+      console.log('[Waitlist] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
       await sendWaitlistConfirmation(normalizedEmail);
+      console.log('[Waitlist] Email sent successfully to:', normalizedEmail);
     } catch (emailError) {
       // Log but don't fail the request - user is still on the waitlist
       console.error('[Waitlist] Email send failed:', emailError);
