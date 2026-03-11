@@ -310,7 +310,7 @@ export default function CoachPage() {
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [isNearBottom]);
+  }, [isNearBottom, messagesLoaded]);
 
   // Auto-scroll when new messages are added
   useEffect(() => {
