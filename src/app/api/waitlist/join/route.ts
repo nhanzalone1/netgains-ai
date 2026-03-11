@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendWaitlistConfirmation } from '@/lib/email';
 
+// Disable caching for this route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Use anon key - RLS policy allows public inserts to waitlist_emails
 function getSupabaseClient() {
   return createClient(
