@@ -1,31 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendWaitlistConfirmation } from '@/lib/email';
 
-function getServiceClient() {
+// Use anon key - RLS policy allows public inserts to waitlist_emails
+function getSupabaseClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 }
 
 export async function POST(request: Request) {
   try {
-    // Check env vars
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      console.error('[Waitlist] Missing NEXT_PUBLIC_SUPABASE_URL');
-      return Response.json({ error: 'Missing SUPABASE_URL' }, { status: 500 });
-    }
-
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    console.log('[Waitlist] SERVICE_ROLE_KEY exists:', !!serviceKey, 'length:', serviceKey?.length || 0);
-
-    if (!serviceKey) {
-      // List all env var keys that contain SUPABASE (without values for security)
-      const supabaseKeys = Object.keys(process.env).filter(k => k.includes('SUPABASE'));
-      console.error('[Waitlist] Missing SUPABASE_SERVICE_ROLE_KEY. Available SUPABASE keys:', supabaseKeys);
-      return Response.json({ error: 'Missing SERVICE_ROLE_KEY', availableKeys: supabaseKeys }, { status: 500 });
-    }
-
     const { email } = await request.json();
 
     if (!email || typeof email !== 'string') {
@@ -40,7 +25,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
-    const supabase = getServiceClient();
+    const supabase = getSupabaseClient();
 
     // Check if already on waitlist
     const { data: existing } = await supabase
