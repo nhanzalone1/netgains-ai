@@ -15,9 +15,15 @@ export async function POST(request: Request) {
       console.error('[Waitlist] Missing NEXT_PUBLIC_SUPABASE_URL');
       return Response.json({ error: 'Missing SUPABASE_URL' }, { status: 500 });
     }
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('[Waitlist] Missing SUPABASE_SERVICE_ROLE_KEY');
-      return Response.json({ error: 'Missing SERVICE_ROLE_KEY' }, { status: 500 });
+
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    console.log('[Waitlist] SERVICE_ROLE_KEY exists:', !!serviceKey, 'length:', serviceKey?.length || 0);
+
+    if (!serviceKey) {
+      // List all env var keys that contain SUPABASE (without values for security)
+      const supabaseKeys = Object.keys(process.env).filter(k => k.includes('SUPABASE'));
+      console.error('[Waitlist] Missing SUPABASE_SERVICE_ROLE_KEY. Available SUPABASE keys:', supabaseKeys);
+      return Response.json({ error: 'Missing SERVICE_ROLE_KEY', availableKeys: supabaseKeys }, { status: 500 });
     }
 
     const { email } = await request.json();
