@@ -147,6 +147,8 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 ### Recent Updates (Mar 11)
 - **Resend email integration** — Waitlist confirmation emails sent automatically on signup. Beta invite emails via `/api/admin/invite-beta`. Templates in `src/lib/email.ts`.
 - **Scroll-to-bottom button** — Appears in coach chat when user scrolls up. Fixed bug where scroll listener wasn't attached due to conditional rendering.
+- **Fixed shadcn styling issue** — shadcn init overwrote `globals.css` with light theme defaults and broke font variables. Reverted to original dark theme (`--background: #0f0f13`, `--primary: #06b6d4`) and fixed `--font-sans` to use `var(--font-geist-sans)`. Unused shadcn packages remain in `package.json` but can be removed.
+- **Meal logging: suggestion vs reporting** — Coach now distinguishes between suggesting meals (asks "want me to log it?") vs user reporting what they ate (logs immediately). Prevents duplicates when user adjusts coach's suggestion to actual portions.
 
 ### Previous Updates (Mar 10)
 - **Coach Workout Generator** — "give me a 45 min chest workout" → Coach generates, suggests folder, loads into Log. Tools: `generateWorkout`, `getSuggestedFolder`, `loadWorkoutToFolder`. Endpoint: `/api/workout/pending`. Component: `PendingWorkoutBanner`.
@@ -163,6 +165,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Use `constants.ts` for models, limits — never hardcode
 - Use `formatLocalDate()` from `date-utils.ts` for dates
 - Coach system prompt in `getSystemPrompt()` in `src/app/api/chat/route.ts`
+- **Do NOT run `shadcn init`** — it overwrites `globals.css` with light theme defaults and breaks the app's dark theme. If adding shadcn components, copy them manually.
 
 ## Commands
 
