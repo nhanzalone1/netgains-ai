@@ -19,6 +19,7 @@ import { Button } from "./ui/button";
 import { NewExerciseModal } from "./new-exercise-modal";
 import { ExercisePickerModal } from "./exercise-picker-modal";
 import { useTheme } from "./theme-provider";
+import { useToast } from "./toast";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
 
 // Set variant types for special sets
@@ -116,6 +117,7 @@ export function WorkoutSession({
 }: WorkoutSessionProps) {
   const supabase = createClient();
   const { theme } = useTheme();
+  const toast = useToast();
 
   // Library exercises (from exercise_templates)
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
@@ -457,7 +459,7 @@ export function WorkoutSession({
       }
     } else if (error) {
       console.error("Failed to create exercise:", error);
-      alert(`Failed to create exercise: ${error.message}`);
+      toast.error("Failed to create exercise. Please try again.");
     }
   };
 
@@ -638,7 +640,7 @@ export function WorkoutSession({
 
     if (error) {
       console.error("Failed to create exercise:", error);
-      alert(`Failed to create exercise: ${error.message}`);
+      toast.error("Failed to create exercise. Please try again.");
     }
 
     return null;
@@ -736,7 +738,7 @@ export function WorkoutSession({
     );
 
     if (validExercises.length === 0) {
-      alert("Please complete at least one set before saving.");
+      toast.error("Complete at least one set before saving.");
       return;
     }
 

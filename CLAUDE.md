@@ -149,6 +149,9 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - **Scroll-to-bottom button** — Appears in coach chat when user scrolls up. Fixed bug where scroll listener wasn't attached due to conditional rendering.
 - **Fixed shadcn styling issue** — shadcn init overwrote `globals.css` with light theme defaults and broke font variables. Reverted to original dark theme (`--background: #0f0f13`, `--primary: #06b6d4`) and fixed `--font-sans` to use `var(--font-geist-sans)`. Unused shadcn packages remain in `package.json` but can be removed.
 - **Meal logging: suggestion vs reporting** — Coach now distinguishes between suggesting meals (asks "want me to log it?") vs user reporting what they ate (logs immediately). Prevents duplicates when user adjusts coach's suggestion to actual portions.
+- **PWA icons** — Generated all required icons (192x192, 512x512, apple-touch-icon, favicons). Icon is upward trending line chart (gains) with cyan accent on dark background. Run `node scripts/generate-icons.mjs` to regenerate.
+- **Toast notifications** — Replaced all `alert()` calls with native-feeling toast system (`useToast` hook). Toasts appear at top with slide animation, auto-dismiss, and support for retry actions. Component: `src/components/toast.tsx`.
+- **Haptic feedback** — Added vibration feedback for native iOS/Android feel. Light tap on buttons, success/error patterns on toasts, success buzz on workout save. Utility: `src/lib/haptics.ts`.
 
 ### Previous Updates (Mar 10)
 - **Coach Workout Generator** — "give me a 45 min chest workout" → Coach generates, suggests folder, loads into Log. Tools: `generateWorkout`, `getSuggestedFolder`, `loadWorkoutToFolder`. Endpoint: `/api/workout/pending`. Component: `PendingWorkoutBanner`.

@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/toast";
+import { hapticSuccess } from "@/lib/haptics";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { triggerCoachResponse } from "@/lib/coach-notification";
 import { formatLocalDate } from "@/lib/date-utils";
@@ -66,6 +68,7 @@ export default function LogPage() {
   const { user } = useAuth();
   const supabase = createClient();
   const router = useRouter();
+  const toast = useToast();
 
   // Core state — restore from sessionStorage immediately on mount
   const [locations, setLocations] = useState<Location[]>([]);
@@ -247,7 +250,7 @@ export default function LogPage() {
 
       if (error) {
         console.error("Failed to create location:", error);
-        alert(`Failed to create location: ${error.message}`);
+        toast.error("Failed to create gym. Please try again.");
         setSavingLocation(false);
         return;
       }
@@ -258,7 +261,7 @@ export default function LogPage() {
       setShowNewLocation(false);
     } catch (err) {
       console.error("Unexpected error creating location:", err);
-      alert("An unexpected error occurred. Check console for details.");
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setSavingLocation(false);
     }
@@ -291,7 +294,7 @@ export default function LogPage() {
 
       if (error) {
         console.error("Failed to create split:", error);
-        alert(`Failed to create split: ${error.message}`);
+        toast.error("Failed to create split. Please try again.");
         setSavingFolder(false);
         return;
       }
@@ -368,7 +371,7 @@ export default function LogPage() {
       .filter((ex) => ex.validSets.length > 0);
 
     if (validExercises.length === 0) {
-      alert("No valid sets to save. Add at least one complete set.");
+      toast.error("Add at least one complete set to save.");
       return;
     }
 
@@ -388,7 +391,7 @@ export default function LogPage() {
 
       if (workoutError || !workout) {
         console.error("Failed to create workout:", workoutError);
-        alert("Failed to save workout. Please try again.");
+        toast.error("Failed to save workout. Please try again.");
         return;
       }
 
@@ -440,6 +443,7 @@ export default function LogPage() {
       }
 
       // Success - show modal and invalidate daily brief cache
+      hapticSuccess();
       setShowSuccessModal(true);
       if (user?.id) {
         invalidateDailyBriefCache(user.id);
@@ -457,7 +461,7 @@ export default function LogPage() {
         await supabase.from("workouts").delete().eq("id", workoutId);
       }
 
-      alert("Failed to save workout. Please try again.");
+      toast.error("Failed to save workout. Please try again.");
     }
   };
 
