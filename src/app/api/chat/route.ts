@@ -1241,7 +1241,10 @@ Today's Nutrition:
 ${todayMeals.length > 0 ? `
 - Calories: ${todayNutrition.calories} / ${nutritionGoals.calories} goal
 - Protein: ${todayNutrition.protein}g / ${nutritionGoals.protein}g goal
-- Foods logged: ${todayMeals.map(m => m.food_name).join(', ')}` : 'No meals logged today'}
+- Meals logged: ${todayMeals.map(m => {
+  const time = new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${time}: ${m.food_name}`;
+}).join(', ')}` : 'No meals logged today'}
 
 === YESTERDAY'S DATA (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
@@ -1378,13 +1381,21 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
 
-    // Build nutrition context string
+    // Helper to format meal time from created_at
+    const formatMealTime = (createdAt: string) => {
+      const date = new Date(createdAt);
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    };
+
+    // Build nutrition context string with meal timestamps
     const nutritionContext = `[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
 This data is pulled from the database right now. ALWAYS use these numbers, NEVER use calorie totals from earlier messages in the conversation.
 ${todayMeals.length > 0
   ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
 Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat
-Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein`
+Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein
+Meals logged today (with times):
+${todayMeals.map(m => `- ${formatMealTime(m.created_at)}: ${m.food_name} (${m.calories} cal, ${m.protein}g protein)`).join('\n')}`
   : `No meals logged today. User is at 0 calories regardless of what was discussed earlier.
 Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat`}
 [END NUTRITION CONTEXT]
@@ -1777,26 +1788,22 @@ ${pendingChangesSection}
         const foodName = input.food_name as string;
         const calories = input.calories as number;
 
-        // Check for duplicate: similar meal logged in the last 5 minutes
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const { data: recentMeals } = await supabase
+        // Check for duplicate: same meal name logged today (prevents re-logging same meal)
+        const { data: todaysMeals } = await supabase
           .from('meals')
           .select('id, food_name, calories, created_at')
           .eq('user_id', user.id)
-          .eq('date', targetDate)
-          .gte('created_at', fiveMinutesAgo);
+          .eq('date', targetDate);
 
-        // Check for duplicates by name similarity OR same calories
+        // Check for duplicates by exact name match (case-insensitive)
         const foodNameLower = foodName.toLowerCase().trim();
-        const isDuplicate = recentMeals?.some(meal => {
+        const isDuplicate = todaysMeals?.some(meal => {
           const mealNameLower = meal.food_name.toLowerCase().trim();
-          // Check if names are similar (one contains the other or exact match)
+          // Exact match or very similar names (one contains the other)
           const nameMatch = mealNameLower === foodNameLower ||
-                           mealNameLower.includes(foodNameLower) ||
-                           foodNameLower.includes(mealNameLower);
-          // Check if calories are exactly the same (likely same meal)
-          const calorieMatch = meal.calories === calories;
-          return nameMatch || calorieMatch;
+                           (mealNameLower.includes(foodNameLower) && foodNameLower.length > 5) ||
+                           (foodNameLower.includes(mealNameLower) && mealNameLower.length > 5);
+          return nameMatch;
         });
 
         if (isDuplicate) {
