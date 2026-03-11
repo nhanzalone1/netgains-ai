@@ -132,6 +132,8 @@ No separate flow. New users chat directly with coach.
 - **Time-based sets** — Bodyweight exercises can use seconds (plank, dead hang). `measure_type` column on sets.
 - **Multi-select muscle groups** — Exercises belong to multiple groups. `muscle_group` is TEXT[].
 - **Simple/Advanced mode** — Toggle between 6 or 17 muscle groups.
+- **Meal timestamps** — Coach sees when each meal was logged (e.g., "7:02 PM: chicken breast"). Prevents "eat at 7 PM" when user just ate at 7 PM.
+- **Duplicate meal detection** — Blocks logging same meal twice only if name AND calories match. Allows same food with different portions.
 
 ## Coding Conventions
 
