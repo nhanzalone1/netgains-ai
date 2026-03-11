@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { WorkoutSession } from "@/components/workout-session";
 import { PendingWorkoutBanner } from "@/components/pending-workout-banner";
+import { SkeletonGymList } from "@/components/ui/skeleton";
 import type {
   Location,
   Folder,
@@ -250,7 +251,7 @@ export default function LogPage() {
 
       if (error) {
         console.error("Failed to create location:", error);
-        toast.error("Failed to create gym. Please try again.");
+        toast.error("Failed to create gym.", { label: "Retry", onClick: handleAddLocation });
         setSavingLocation(false);
         return;
       }
@@ -294,7 +295,7 @@ export default function LogPage() {
 
       if (error) {
         console.error("Failed to create split:", error);
-        toast.error("Failed to create split. Please try again.");
+        toast.error("Failed to create split.", { label: "Retry", onClick: handleAddFolder });
         setSavingFolder(false);
         return;
       }
@@ -510,9 +511,7 @@ export default function LogPage() {
     return (
       <div className="p-4 max-w-lg mx-auto">
         <PageHeader title="Log" action={<UserMenu />} />
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">Loading...</div>
-        </div>
+        <SkeletonGymList />
       </div>
     );
   }

@@ -22,6 +22,7 @@ import { triggerCoachResponse } from "@/lib/coach-notification";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
+import { SkeletonNutrition, Skeleton } from "@/components/ui/skeleton";
 
 interface Meal {
   id: string;
@@ -675,6 +676,27 @@ export default function NutritionPage() {
   };
 
   const weekDates = getWeekDates(selectedDate);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen pb-32" style={{ background: "#0f0f13" }}>
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="w-10 h-10 rounded-full" />
+          </div>
+          <div className="flex justify-between mb-6">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="w-10 h-16 rounded-xl" />
+            ))}
+          </div>
+        </div>
+        <SkeletonNutrition />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-32" style={{ background: "#0f0f13" }}>

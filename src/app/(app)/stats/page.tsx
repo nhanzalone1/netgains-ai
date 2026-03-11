@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { SkeletonStats, Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
@@ -444,8 +445,12 @@ export default function StatsPage() {
 
   if (loadingExercises) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="p-4 pb-48 max-w-lg mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-10 w-10 rounded-full" />
+        </div>
+        <SkeletonStats />
       </div>
     );
   }
@@ -607,8 +612,21 @@ export default function StatsPage() {
       {selectedExercise && (
         <>
           {loadingHistory ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="space-y-4">
+              {/* Stats cards skeleton */}
+              <div className="grid grid-cols-3 gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-20 rounded-2xl" />
+                ))}
+              </div>
+              {/* Chart skeleton */}
+              <Skeleton className="h-64 rounded-2xl" />
+              {/* History list skeleton */}
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 rounded-xl" />
+                ))}
+              </div>
             </div>
           ) : sessionHistory.length === 0 ? (
             <div className="text-center py-16">

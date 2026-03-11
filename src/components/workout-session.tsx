@@ -1149,12 +1149,12 @@ export function WorkoutSession({
         </div>
       </div>
 
-      {/* Finish & Save Button (below Add Exercise) */}
+      {/* End Workout Button (below Add Exercise) */}
       {activeExercises.length > 0 && (
         <div className="fixed left-0 right-0 z-40 px-4 bottom-28">
           <div className="max-w-lg mx-auto">
             <Button onClick={handleFinish} loading={saving}>
-              Finish & Save
+              End Workout
             </Button>
           </div>
         </div>

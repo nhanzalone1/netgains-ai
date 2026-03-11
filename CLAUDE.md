@@ -152,6 +152,8 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - **PWA icons** — Generated all required icons (192x192, 512x512, apple-touch-icon, favicons). Icon is upward trending line chart (gains) with cyan accent on dark background. Run `node scripts/generate-icons.mjs` to regenerate.
 - **Toast notifications** — Replaced all `alert()` calls with native-feeling toast system (`useToast` hook). Toasts appear at top with slide animation, auto-dismiss, and support for retry actions. Component: `src/components/toast.tsx`.
 - **Haptic feedback** — Added vibration feedback for native iOS/Android feel. Light tap on buttons, success/error patterns on toasts, success buzz on workout save. Utility: `src/lib/haptics.ts`.
+- **Skeleton loaders** — Added loading skeletons to Log, Nutrition, and Stats pages. Reusable skeleton components in `src/components/ui/skeleton.tsx` (Skeleton, SkeletonCard, SkeletonList, SkeletonGymList, SkeletonNutrition, SkeletonStats).
+- **Error retry buttons** — Toast errors for gym/split creation now include "Retry" buttons that re-invoke the failed action.
 
 ### Previous Updates (Mar 10)
 - **Coach Workout Generator** — "give me a 45 min chest workout" → Coach generates, suggests folder, loads into Log. Tools: `generateWorkout`, `getSuggestedFolder`, `loadWorkoutToFolder`. Endpoint: `/api/workout/pending`. Component: `PendingWorkoutBanner`.
