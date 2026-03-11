@@ -10,6 +10,16 @@ function getServiceClient() {
 
 export async function POST(request: Request) {
   try {
+    // Check env vars
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.error('[Waitlist] Missing NEXT_PUBLIC_SUPABASE_URL');
+      return Response.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[Waitlist] Missing SUPABASE_SERVICE_ROLE_KEY');
+      return Response.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
     const { email } = await request.json();
 
     if (!email || typeof email !== 'string') {
