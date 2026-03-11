@@ -130,7 +130,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - `addToTesters: true` — adds to `allowed_testers` table AND sends email
 - `addToTesters: false` — just sends email (if already added manually)
 
-## Current State (Mar 10)
+## Current State (Mar 11)
 
 ### What's Working
 - Workout logging with set variants and time-based sets
@@ -141,8 +141,14 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - PR detection (excludes warmup)
 - 15 message daily limit
 - Exercise categorization with split-based tabs
+- Waitlist & beta invite emails via Resend
+- Scroll-to-bottom button in coach chat
 
-### Recent Updates (Mar 10)
+### Recent Updates (Mar 11)
+- **Resend email integration** — Waitlist confirmation emails sent automatically on signup. Beta invite emails via `/api/admin/invite-beta`. Templates in `src/lib/email.ts`.
+- **Scroll-to-bottom button** — Appears in coach chat when user scrolls up. Fixed bug where scroll listener wasn't attached due to conditional rendering.
+
+### Previous Updates (Mar 10)
 - **Coach Workout Generator** — "give me a 45 min chest workout" → Coach generates, suggests folder, loads into Log. Tools: `generateWorkout`, `getSuggestedFolder`, `loadWorkoutToFolder`. Endpoint: `/api/workout/pending`. Component: `PendingWorkoutBanner`.
 - **Time-based sets** — Bodyweight exercises can use seconds (plank, dead hang). `measure_type` column on sets.
 - **Multi-select muscle groups** — Exercises belong to multiple groups. `muscle_group` is TEXT[].
