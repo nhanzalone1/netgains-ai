@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Dumbbell, Mail, Rocket, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { createClient } from "@/lib/supabase/client";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 
@@ -13,38 +12,29 @@ export default function WaitlistPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const emailToSubmit = email.trim().toLowerCase();
+    try {
+      const response = await fetch('/api/waitlist/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
 
-    // Check if already on waitlist
-    const { data: existing } = await supabase
-      .from("waitlist_emails")
-      .select("id")
-      .eq("email", emailToSubmit)
-      .single();
+      const data = await response.json();
 
-    if (existing) {
-      setSubmitted(true);
-      setLoading(false);
-      return;
-    }
-
-    // Add to waitlist
-    const { error: insertError } = await supabase
-      .from("waitlist_emails")
-      .insert([{ email: emailToSubmit }]);
-
-    if (insertError) {
+      if (!response.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+      } else {
+        setSubmitted(true);
+      }
+    } catch (err) {
+      console.error("Waitlist error:", err);
       setError("Something went wrong. Please try again.");
-      console.error("Waitlist error:", insertError);
-    } else {
-      setSubmitted(true);
     }
     setLoading(false);
   };
