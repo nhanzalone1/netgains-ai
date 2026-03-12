@@ -158,6 +158,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Interactive app tour after onboarding (replayable from settings)
 
 ### Recent Updates (Mar 12)
+- **Mobile blur optimization** — Reduced `backdrop-filter` blur on mobile (max-width: 768px) to fix typing lag. Glass classes now use 8px blur on mobile vs 20px on desktop. Glass-elevated uses 12px on mobile vs 32px on desktop.
 - **Interactive App Tour** — Spotlight-style onboarding tour after profile setup. Coach says "let me show you around" then visual tour highlights each nav tab with coach-voice tooltips. Uses clip-path spotlight overlay with cyan glow, glassmorphism tooltip cards, and Framer Motion animations. Ends with CTA to log first workout. Replayable from settings. Components: `app-tour.tsx`, `use-app-tour.ts`.
 - **Equipment-based PR tracking** — PRs now separated by equipment type. Dumbbell lateral raise and machine lateral raise have independent PR tracking. Added `equipment` column to `exercises` table. Stats page filters out warmup sets and time-based sets from PR calculations. Migration: `supabase/migrations/add_exercise_equipment.sql`.
 - **Visual polish pass** — Added micro-interactions and glow effects: active nav item glow, primary button gradient with hover glow (`.btn-primary`), input focus glow (`.input-glow`), notification badge pulse animation, text gradient on "AI" branding, skeleton shimmer animation (`.skeleton-shimmer`), glowing loading dots in coach, glowing calorie ring on nutrition page.
