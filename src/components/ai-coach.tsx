@@ -162,7 +162,7 @@ export function AICoach() {
                   className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                     message.role === "user"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-white/10"
+                      : "glass-subtle"
                   }`}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -172,7 +172,7 @@ export function AICoach() {
 
             {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start">
-                <div className="bg-white/10 rounded-2xl px-4 py-3">
+                <div className="glass-subtle rounded-2xl px-4 py-3">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
               </div>
@@ -192,7 +192,7 @@ export function AICoach() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask the coach..."
-                className="flex-1 bg-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                className="flex-1 glass-subtle rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
               <motion.button
                 whileTap={{ scale: 0.9 }}

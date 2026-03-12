@@ -145,9 +145,10 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Scroll-to-bottom button in coach chat
 
 ### Recent Updates (Mar 11)
+- **Premium glassmorphism UI** — Overhauled dark theme inspired by Linear, Vercel, and Cal.ai. Deep near-black background (`#09090b`), radial gradient with subtle cyan glow, noise texture overlay, and glass utility classes (`.glass`, `.glass-elevated`, `.glass-subtle`). Cards and surfaces now feel like they float with backdrop blur (20-32px), semi-transparent backgrounds, visible borders, and layered shadows. Includes `prefers-reduced-motion` fallback. Updated: `globals.css`, bottom-nav, modals, folder cards, daily brief, coach bubbles.
 - **Resend email integration** — Waitlist confirmation emails sent automatically on signup. Beta invite emails via `/api/admin/invite-beta`. Templates in `src/lib/email.ts`.
 - **Scroll-to-bottom button** — Appears in coach chat when user scrolls up. Fixed bug where scroll listener wasn't attached due to conditional rendering.
-- **Fixed shadcn styling issue** — shadcn init overwrote `globals.css` with light theme defaults and broke font variables. Reverted to original dark theme (`--background: #0f0f13`, `--primary: #06b6d4`) and fixed `--font-sans` to use `var(--font-geist-sans)`. Unused shadcn packages remain in `package.json` but can be removed.
+- **Fixed shadcn styling issue** — shadcn init overwrote `globals.css` with light theme defaults and broke font variables. Reverted to original dark theme and fixed `--font-sans` to use `var(--font-geist-sans)`. Unused shadcn packages remain in `package.json` but can be removed.
 - **Meal logging: suggestion vs reporting** — Coach now distinguishes between suggesting meals (asks "want me to log it?") vs user reporting what they ate (logs immediately). Prevents duplicates when user adjusts coach's suggestion to actual portions.
 - **PWA icons** — Generated all required icons (192x192, 512x512, apple-touch-icon, favicons). Icon is upward trending line chart (gains) with cyan accent on dark background. Run `node scripts/generate-icons.mjs` to regenerate.
 - **Toast notifications** — Replaced all `alert()` calls with native-feeling toast system (`useToast` hook). Toasts appear at top with slide animation, auto-dismiss, and support for retry actions. Component: `src/components/toast.tsx`.

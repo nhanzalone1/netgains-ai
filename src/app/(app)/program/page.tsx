@@ -482,7 +482,7 @@ export default function ProgramPage() {
           <div
             className="rounded-2xl overflow-hidden"
             style={{
-              background: "#1a1a24",
+              background: "var(--card)",
               border: "1px solid rgba(255, 255, 255, 0.05)",
             }}
           >
@@ -607,7 +607,7 @@ export default function ProgramPage() {
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-sm rounded-2xl p-6 border border-gray-800"
               style={{
-                background: "#1a1a24",
+                background: "var(--card)",
               }}
             >
               {/* Icon */}

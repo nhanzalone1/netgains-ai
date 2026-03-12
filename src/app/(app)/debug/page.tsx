@@ -660,7 +660,7 @@ export default function DebugPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 pb-32" style={{ background: "#0f0f13" }}>
+    <div className="min-h-screen p-4 pb-32" style={{ background: "var(--background)" }}>
       {/* DEV MODE Banner */}
       <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-1 text-sm font-bold z-50">
         ⚠️ DEV MODE - DEBUG PANEL ⚠️

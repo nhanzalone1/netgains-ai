@@ -16,7 +16,7 @@ function CoachBubble({ children }: { children: React.ReactNode }) {
       </div>
       <div
         className="flex-1 rounded-2xl px-4 py-3"
-        style={{ background: "#1a1a24" }}
+        style={{ background: "var(--card)" }}
       >
         {children}
       </div>
@@ -449,7 +449,7 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
                 value={restrictionsInput}
                 onChange={(e) => setRestrictionsInput(e.target.value)}
                 placeholder="e.g., dairy-free, no shellfish, hate cilantro"
-                className="flex-1 px-4 py-3 rounded-xl text-sm bg-[#1a1a24] text-white focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                className="flex-1 px-4 py-3 rounded-xl text-sm bg-[var(--card)] text-white focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
               <motion.button
                 whileTap={{ scale: 0.95 }}

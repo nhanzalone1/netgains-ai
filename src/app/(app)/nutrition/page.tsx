@@ -680,7 +680,7 @@ export default function NutritionPage() {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen pb-32" style={{ background: "#0f0f13" }}>
+      <div className="min-h-screen pb-32" style={{ background: "var(--background)" }}>
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
             <Skeleton className="w-10 h-10 rounded-full" />
@@ -699,9 +699,9 @@ export default function NutritionPage() {
   }
 
   return (
-    <div className="min-h-screen pb-32" style={{ background: "#0f0f13" }}>
+    <div className="min-h-screen pb-32" style={{ background: "var(--background)" }}>
       {/* Header */}
-      <div className="sticky top-0 z-20 pt-4 pb-2 px-4" style={{ background: "#0f0f13" }}>
+      <div className="sticky top-0 z-20 pt-4 pb-2 px-4" style={{ background: "var(--background)" }}>
         <div className="flex items-center justify-between">
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -769,7 +769,7 @@ export default function NutritionPage() {
 
       {/* Nutrition Onboarding */}
       {showOnboarding && (
-        <div className="mx-4 mb-4 rounded-2xl overflow-hidden" style={{ background: "#1a1a24", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+        <div className="mx-4 mb-4 rounded-2xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
           <NutritionOnboarding onComplete={handleNutritionOnboardingComplete} />
         </div>
       )}

@@ -480,7 +480,7 @@ export default function StatsPage() {
       <div
         className="mb-6 rounded-2xl overflow-hidden"
         style={{
-          background: "#1a1a24",
+          background: "var(--card)",
           border: "1px solid rgba(255, 255, 255, 0.05)",
         }}
       >
@@ -565,7 +565,7 @@ export default function StatsPage() {
         onClick={() => setShowPicker(true)}
         className="w-full mb-6 p-4 rounded-2xl flex items-center justify-between min-h-[60px]"
         style={{
-          background: "#1a1a24",
+          background: "var(--card)",
           border: "1px solid rgba(255, 255, 255, 0.1)",
         }}
       >
@@ -649,7 +649,7 @@ export default function StatsPage() {
                   <div
                     className="rounded-2xl p-3 text-center"
                     style={{
-                      background: "#1a1a24",
+                      background: "var(--card)",
                       border: "1px solid rgba(255, 255, 255, 0.05)",
                     }}
                   >
@@ -662,7 +662,7 @@ export default function StatsPage() {
                   <div
                     className="rounded-2xl p-3 text-center"
                     style={{
-                      background: "#1a1a24",
+                      background: "var(--card)",
                       border: "1px solid rgba(255, 255, 255, 0.05)",
                     }}
                   >
@@ -675,7 +675,7 @@ export default function StatsPage() {
                   <div
                     className="rounded-2xl p-3 text-center"
                     style={{
-                      background: "#1a1a24",
+                      background: "var(--card)",
                       border: "1px solid rgba(255, 255, 255, 0.05)",
                     }}
                   >
@@ -765,7 +765,7 @@ export default function StatsPage() {
               <div
                 className="rounded-2xl overflow-hidden"
                 style={{
-                  background: "#1a1a24",
+                  background: "var(--card)",
                   border: "1px solid rgba(255, 255, 255, 0.05)",
                 }}
               >
@@ -850,7 +850,7 @@ export default function StatsPage() {
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg rounded-3xl max-h-[70vh] flex flex-col"
               style={{
-                background: "#1a1a24",
+                background: "var(--card)",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
               }}
             >

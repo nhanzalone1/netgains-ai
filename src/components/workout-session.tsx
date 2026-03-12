@@ -92,7 +92,7 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 
 // Set variant styles - backgrounds and borders
 const SET_VARIANT_STYLES: Record<SetVariant, { bg: string; inputBg: string; borderLeft?: string }> = {
-  normal: { bg: "transparent", inputBg: "#0f0f13" },
+  normal: { bg: "transparent", inputBg: "var(--background)" },
   warmup: { bg: "rgba(234, 179, 8, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #eab308" },      // Yellow
   failure: { bg: "rgba(249, 115, 22, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #f97316" },    // Orange
   "assisted-parent": { bg: "rgba(59, 130, 246, 0.12)", inputBg: "rgba(0,0,0,0.3)", borderLeft: "4px solid #3b82f6" },
@@ -806,7 +806,7 @@ export function WorkoutSession({
                 exit={{ opacity: 0, x: -100 }}
                 className={`relative ${isConnectedToNext ? "rounded-t-2xl" : "rounded-2xl"} ${isSecondInPair ? "rounded-b-2xl -mt-1" : ""}`}
                 style={{
-                  background: hasSuperset ? "rgba(168, 85, 247, 0.08)" : "#1a1a24",
+                  background: hasSuperset ? "rgba(168, 85, 247, 0.08)" : "var(--card)",
                   border: "1px solid rgba(255, 255, 255, 0.05)",
                   borderLeft: hasSuperset ? "4px solid #a855f7" : undefined,
                   borderBottom: isConnectedToNext ? "none" : undefined,
@@ -1129,7 +1129,7 @@ export function WorkoutSession({
       <div
         className="fixed bottom-48 left-0 right-0 z-50"
         style={{
-          background: "#0f0f13",
+          background: "var(--background)",
         }}
       >
         <div className="max-w-lg mx-auto px-4 py-2">
@@ -1163,7 +1163,7 @@ export function WorkoutSession({
       {/* Background fill below nav to prevent scroll bleed-through */}
       <div
         className="fixed bottom-0 left-0 right-0 h-24 z-30"
-        style={{ background: "#0f0f13" }}
+        style={{ background: "var(--background)" }}
       />
 
       {/* Main Exercise Picker Modal */}
@@ -1224,7 +1224,7 @@ export function WorkoutSession({
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-sm rounded-2xl p-6"
               style={{
-                background: "#1a1a24",
+                background: "var(--card)",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
               }}
             >

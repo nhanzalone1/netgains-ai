@@ -42,16 +42,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             transition={{ duration: 0.2 }}
             className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-50 max-w-md mx-auto"
           >
-            <div
-              className="rounded-3xl overflow-hidden"
-              style={{
-                background: "rgba(26, 26, 36, 0.95)",
-                backdropFilter: "blur(24px)",
-                WebkitBackdropFilter: "blur(24px)",
-                border: "1px solid rgba(255, 255, 255, 0.05)",
-                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-              }}
-            >
+            <div className="rounded-3xl overflow-hidden glass-elevated">
               {title && (
                 <div className="flex items-center justify-between p-4 border-b border-white/5">
                   <h2 className="text-lg font-black uppercase tracking-tight">

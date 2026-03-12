@@ -121,10 +121,7 @@ export function DailyBriefCard() {
   // Loading skeleton
   if (isLoading) {
     return (
-      <div
-        className="mx-4 mt-4 rounded-2xl p-4"
-        style={{ background: "#1a1a24", border: "1px solid rgba(255, 255, 255, 0.05)" }}
-      >
+      <div className="mx-4 mt-4 rounded-2xl p-4 glass-subtle">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-white/5 animate-pulse" />
           <div className="flex-1 space-y-2">
@@ -146,10 +143,10 @@ export function DailyBriefCard() {
   if (brief?.status === "not_onboarded") {
     return (
       <div
-        className="mx-4 mt-4 rounded-2xl p-4"
+        className="mx-4 mt-4 rounded-2xl p-4 glass-subtle"
         style={{
           background: "rgba(255, 71, 87, 0.1)",
-          border: "1px solid rgba(255, 71, 87, 0.2)",
+          borderColor: "rgba(255, 71, 87, 0.2)",
         }}
       >
         <div className="flex items-center gap-3">
@@ -176,13 +173,8 @@ export function DailyBriefCard() {
 
     return (
       <div
-        className="mx-4 mt-4 rounded-2xl p-4"
-        style={{
-          background: "#1a1a24",
-          border: isPostWorkout
-            ? "1px solid rgba(34, 197, 94, 0.2)"
-            : "1px solid rgba(255, 255, 255, 0.05)",
-        }}
+        className="mx-4 mt-4 rounded-2xl p-4 glass-subtle"
+        style={isPostWorkout ? { borderColor: "rgba(34, 197, 94, 0.2)" } : undefined}
       >
         {/* Focus line */}
         <p className={`text-sm font-bold ${isPostWorkout ? 'text-green-400' : 'text-primary'}`}>

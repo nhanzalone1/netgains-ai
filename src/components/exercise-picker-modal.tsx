@@ -1093,7 +1093,7 @@ export function ExercisePickerModal({
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     onClick={(e) => e.stopPropagation()}
                     className="w-full max-w-sm rounded-2xl p-6 border border-gray-800 max-h-[90vh] overflow-y-auto"
-                    style={{ background: "#1a1a24" }}
+                    style={{ background: "var(--card)" }}
                   >
                     <h2 className="text-lg font-bold text-white mb-4">Edit Exercise</h2>
 
@@ -1125,7 +1125,7 @@ export function ExercisePickerModal({
                               key={equip}
                               onClick={() => setEditEquipment(equip)}
                               className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                                isActive ? "ring-2 ring-offset-2 ring-offset-[#1a1a24]" : ""
+                                isActive ? "ring-2 ring-offset-2 ring-offset-[var(--card)]" : ""
                               }`}
                               style={{
                                 background: style.bg,

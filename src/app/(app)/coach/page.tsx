@@ -936,7 +936,7 @@ export default function CoachPage() {
       <div
         className="flex flex-col fixed left-0 right-0 z-40 items-center justify-center"
         style={{
-          background: "#0f0f13",
+          background: "var(--background)",
           top: 0,
           bottom: isMobile ? 120 : 150,
         }}
@@ -951,7 +951,7 @@ export default function CoachPage() {
       ref={pageRef}
       className="flex flex-col fixed left-0 right-0 z-40"
       style={{
-        background: "#0f0f13",
+        background: "var(--background)",
         top: 0,
         // When keyboard is open, use viewport height so input sits above keyboard
         // When closed, leave space for nav bar (more on desktop, less on mobile)
@@ -967,7 +967,7 @@ export default function CoachPage() {
       {!keyboardOpen && (
         <div
           className="flex-shrink-0 flex items-center justify-between p-4 border-b border-white/5"
-          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "#0f0f13" }}
+          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", background: "var(--background)" }}
         >
           <div className="flex items-center gap-3">
             <div
@@ -1035,13 +1035,8 @@ export default function CoachPage() {
                 className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : ""
+                    : "glass-subtle"
                 }`}
-                style={
-                  message.role === "assistant"
-                    ? { background: "#1a1a24" }
-                    : undefined
-                }
               >
                 {message.role === "assistant" ? (
                   <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-3 prose-ul:my-2 prose-li:my-0">
@@ -1065,10 +1060,7 @@ export default function CoachPage() {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div
-              className="rounded-2xl px-4 py-3 flex items-center gap-2"
-              style={{ background: "#1a1a24" }}
-            >
+            <div className="rounded-2xl px-4 py-3 flex items-center gap-2 glass-subtle">
               <div className="flex gap-1">
                 <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -1103,7 +1095,7 @@ export default function CoachPage() {
       <div
         className="flex-shrink-0 p-4 border-t border-white/5"
         style={{
-          background: "#0f0f13",
+          background: "var(--background)",
           paddingBottom: keyboardOpen ? 8 : "env(safe-area-inset-bottom, 8px)",
         }}
       >
@@ -1133,8 +1125,7 @@ export default function CoachPage() {
             }}
             placeholder="Message your coach..."
             rows={1}
-            className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px] max-h-[150px] resize-none overflow-y-auto"
-            style={{ background: "#1a1a24" }}
+            className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px] max-h-[150px] resize-none overflow-y-auto glass-subtle"
           />
           <motion.button
             whileTap={{ scale: 0.9 }}

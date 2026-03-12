@@ -31,10 +31,11 @@ export function Sheet({ isOpen, onClose, children, title }: SheetProps) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed right-0 top-0 bottom-0 z-[301] w-full max-w-md flex flex-col"
+            className="fixed right-0 top-0 bottom-0 z-[301] w-full max-w-md flex flex-col glass-elevated"
             style={{
-              background: "#0f0f13",
+              background: "var(--background)",
               borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: 0,
             }}
           >
             {/* Header */}

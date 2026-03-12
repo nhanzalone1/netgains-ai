@@ -71,16 +71,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div
-        className="flex items-center gap-2 px-6 py-3 rounded-full"
-        style={{
-          background: "rgba(26, 26, 36, 0.8)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255, 255, 255, 0.05)",
-          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
-        }}
-      >
+      <div className="flex items-center gap-2 px-6 py-3 rounded-full glass-elevated">
         {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || (href === "/log" && pathname === "/");
           const showBadge = href === "/coach" && hasUnread && !isActive;
