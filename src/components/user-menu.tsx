@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2 } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -479,6 +479,22 @@ export function UserMenu() {
                   </AnimatePresence>
                 </div>
               )}
+
+              {/* Replay App Tour */}
+              <div className="border-b border-white/5">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setOpen(false);
+                    // Dispatch event to start the tour
+                    window.dispatchEvent(new CustomEvent("start-app-tour"));
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                >
+                  <PlayCircle className="w-4 h-4 text-primary" />
+                  <span className="font-medium">Replay App Tour</span>
+                </motion.button>
+              </div>
 
               <motion.button
                 whileTap={{ scale: 0.98 }}

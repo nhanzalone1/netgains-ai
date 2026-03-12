@@ -673,6 +673,53 @@ export default function CoachPage() {
     }
   }, [user?.id, messagesLoaded]);
 
+  // Track if we've already triggered the app tour this session
+  const hasTriggeredTourRef = useRef(false);
+
+  // Check if app tour should be shown (profile complete, tour not yet shown)
+  useEffect(() => {
+    if (!user?.id || !messagesLoaded || hasTriggeredTourRef.current) return;
+
+    const checkAndTriggerTour = async () => {
+      // Fetch profile to check tour status
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("height_inches, weight_lbs, goal, app_tour_shown")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile) return;
+
+      // Check if profile is complete (has required fields)
+      const profileComplete = !!(profile.height_inches && profile.weight_lbs && profile.goal);
+
+      // If profile is complete and tour hasn't been shown, trigger it
+      if (profileComplete && !profile.app_tour_shown) {
+        hasTriggeredTourRef.current = true;
+
+        // Add coach message introducing the tour
+        const tourMessageId = getMessageTimestamp().toString();
+        const tourMessage: Message = {
+          id: tourMessageId,
+          role: "assistant",
+          content: "alright, let me show you around.",
+        };
+
+        setMessages((prev) => [...prev, tourMessage]);
+
+        // Save the message to DB
+        await saveMessageToDB(user.id, tourMessage);
+
+        // Trigger the visual tour after a short delay
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("start-app-tour"));
+        }, 1500);
+      }
+    };
+
+    checkAndTriggerTour();
+  }, [user?.id, messagesLoaded]);
+
   // Check if we need to generate an opening message for today
   useEffect(() => {
     if (messagesLoaded && user?.id) {

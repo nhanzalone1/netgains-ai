@@ -110,8 +110,19 @@ Client sends `localDate` with every message. Never rely on server time.
 No separate flow. New users chat directly with coach.
 1. Empty profile (no height/weight/goal) → coach asks for intro
 2. Coach uses `updateUserProfile` and `saveMemory` tools to save data
-3. After profile complete + `app_tour_shown` false → one-time app tour
+3. After profile complete + `app_tour_shown` false → interactive visual app tour
 4. Profile "empty" if missing: `height_inches`, `weight_lbs`, or `goal`
+
+### Interactive App Tour
+After profile setup completes, an interactive spotlight tour walks users through the app:
+- Coach says "alright, let me show you around" then tour starts
+- Spotlight overlay highlights each nav tab (Log, Nutrition, Coach, Stats)
+- Coach-voice tooltips explain each tab's purpose
+- "Next" button progresses through steps, "Skip" exits early
+- Final CTA: "Log your first workout" → navigates to Log tab
+- Sets `app_tour_shown: true` on completion/skip
+- Can be replayed from Settings (profile icon → "Replay App Tour")
+- Components: `src/components/app-tour.tsx`, `src/hooks/use-app-tour.ts`
 
 ## Waitlist / Beta Access
 
@@ -144,8 +155,10 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Exercise categorization with split-based tabs
 - Waitlist & beta invite emails via Resend
 - Scroll-to-bottom button in coach chat
+- Interactive app tour after onboarding (replayable from settings)
 
 ### Recent Updates (Mar 12)
+- **Interactive App Tour** — Spotlight-style onboarding tour after profile setup. Coach says "let me show you around" then visual tour highlights each nav tab with coach-voice tooltips. Uses clip-path spotlight overlay with cyan glow, glassmorphism tooltip cards, and Framer Motion animations. Ends with CTA to log first workout. Replayable from settings. Components: `app-tour.tsx`, `use-app-tour.ts`.
 - **Equipment-based PR tracking** — PRs now separated by equipment type. Dumbbell lateral raise and machine lateral raise have independent PR tracking. Added `equipment` column to `exercises` table. Stats page filters out warmup sets and time-based sets from PR calculations. Migration: `supabase/migrations/add_exercise_equipment.sql`.
 - **Visual polish pass** — Added micro-interactions and glow effects: active nav item glow, primary button gradient with hover glow (`.btn-primary`), input focus glow (`.input-glow`), notification badge pulse animation, text gradient on "AI" branding, skeleton shimmer animation (`.skeleton-shimmer`), glowing loading dots in coach, glowing calorie ring on nutrition page.
 

@@ -79,6 +79,7 @@ export function BottomNav() {
           return (
             <Link key={href} href={href}>
               <motion.div
+                data-tour={label.toLowerCase()}
                 whileTap={{ scale: 0.95 }}
                 className={`relative flex flex-col items-center justify-center min-w-[64px] min-h-[44px] px-4 py-2 rounded-2xl transition-all duration-200 ${
                   isActive

@@ -1,5 +1,6 @@
 import { BottomNav } from "@/components/bottom-nav";
 import { SplashScreen } from "@/components/splash-screen";
+import { AppTour } from "@/components/app-tour";
 
 export default function AppLayout({
   children,
@@ -12,6 +13,7 @@ export default function AppLayout({
         {children}
       </main>
       <BottomNav />
+      <AppTour />
     </SplashScreen>
   );
 }
