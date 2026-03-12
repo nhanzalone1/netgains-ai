@@ -80,11 +80,14 @@ export function BottomNav() {
             <Link key={href} href={href}>
               <motion.div
                 whileTap={{ scale: 0.95 }}
-                className={`relative flex flex-col items-center justify-center min-w-[64px] min-h-[44px] px-4 py-2 rounded-2xl transition-colors ${
+                className={`relative flex flex-col items-center justify-center min-w-[64px] min-h-[44px] px-4 py-2 rounded-2xl transition-all duration-200 ${
                   isActive
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground"
                 }`}
+                style={isActive ? {
+                  boxShadow: "0 0 20px rgba(6, 182, 212, 0.4), 0 0 40px rgba(6, 182, 212, 0.2)"
+                } : undefined}
               >
                 <Icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
                 <span className="text-[10px] mt-1 font-semibold uppercase tracking-wide">
@@ -95,7 +98,7 @@ export function BottomNav() {
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full"
+                    className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full badge-pulse"
                   />
                 )}
               </motion.div>

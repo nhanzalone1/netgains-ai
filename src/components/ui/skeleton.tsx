@@ -10,7 +10,7 @@ export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-lg bg-muted/40",
+        "rounded-lg bg-white/5 skeleton-shimmer",
         className
       )}
     />

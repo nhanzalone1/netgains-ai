@@ -72,7 +72,7 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
               transition={{ duration: 0.4, ease: "easeOut", delay: 0.7 }}
               className="text-3xl font-black uppercase tracking-tighter text-white"
             >
-              NetGains<span className="text-[#06b6d4]">AI</span>
+              NetGains<span className="bg-gradient-to-r from-cyan-400 to-cyan-200 bg-clip-text text-transparent">AI</span>
             </motion.h1>
           </motion.div>
         )}

@@ -1062,9 +1062,9 @@ export default function CoachPage() {
           <div className="flex justify-start">
             <div className="rounded-2xl px-4 py-3 flex items-center gap-2 glass-subtle">
               <div className="flex gap-1">
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.8)]" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.8)]" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.8)]" style={{ animationDelay: "300ms" }} />
               </div>
               <span className="text-sm text-muted-foreground">Coach is thinking...</span>
             </div>
@@ -1125,13 +1125,13 @@ export default function CoachPage() {
             }}
             placeholder="Message your coach..."
             rows={1}
-            className="flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[48px] max-h-[150px] resize-none overflow-y-auto glass-subtle"
+            className="flex-1 rounded-xl px-4 py-3 text-sm min-h-[48px] max-h-[150px] resize-none overflow-y-auto glass-subtle input-glow"
           />
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.95 }}
             type="submit"
             disabled={!inputValue.trim() || isLoading}
-            className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            className="w-12 h-12 rounded-xl flex items-center justify-center btn-primary disabled:cursor-not-allowed flex-shrink-0"
           >
             <Send className="w-5 h-5" />
           </motion.button>

@@ -192,13 +192,13 @@ export function AICoach() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask the coach..."
-                className="flex-1 glass-subtle rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
+                className="flex-1 glass-subtle rounded-xl px-4 py-3 text-sm min-h-[44px] input-glow"
               />
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-12 h-12 rounded-xl flex items-center justify-center btn-primary disabled:cursor-not-allowed"
               >
                 <Send className="w-5 h-5" />
               </motion.button>

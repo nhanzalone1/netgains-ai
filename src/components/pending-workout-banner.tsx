@@ -182,7 +182,7 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
           <button
             onClick={handleLoad}
             disabled={isLoadingWorkout}
-            className="mt-3 w-full flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+            className="mt-3 w-full flex items-center justify-center gap-2 btn-primary py-2.5 px-4 rounded-lg"
           >
             {isLoadingWorkout ? (
               <>
