@@ -1172,7 +1172,7 @@ export default function CoachPage() {
             }}
             placeholder="Message your coach..."
             rows={1}
-            className="flex-1 rounded-xl px-4 py-3 text-sm min-h-[48px] max-h-[150px] resize-none overflow-y-auto glass-subtle input-glow"
+            className="flex-1 rounded-xl px-4 py-3 text-sm min-h-[48px] max-h-[150px] resize-none overflow-y-auto bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none transition-colors"
           />
           <motion.button
             whileTap={{ scale: 0.95 }}
