@@ -48,11 +48,12 @@ src/
 
 - **profiles** — user info (height, weight, goal, coaching_intensity, muscle_group_mode)
 - **workouts** — workout sessions (date, notes)
+- **exercises** — exercises in a workout (name, equipment, order_index)
 - **sets** — individual sets (weight, reps, variant, measure_type)
 - **nutrition_logs** — meals (name, calories, protein, carbs, fat, date)
 - **coach_memory** — persistent state (split_rotation, food_staples, pending_workout, pending_changes)
 - **chat_messages** — persisted chat for cross-device sync
-- **exercise_templates** — user's exercises (name, muscle_group[], default_measure_type)
+- **exercise_templates** — user's exercises (name, equipment, muscle_group[], default_measure_type)
 
 ## Architecture Decisions
 
@@ -130,7 +131,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - `addToTesters: true` — adds to `allowed_testers` table AND sends email
 - `addToTesters: false` — just sends email (if already added manually)
 
-## Current State (Mar 11)
+## Current State (Mar 12)
 
 ### What's Working
 - Workout logging with set variants and time-based sets
@@ -138,13 +139,14 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - AI coach chat with persistent memory
 - Coach Workout Generator — ask for a workout, loads into Log pre-populated
 - Dynamic Daily Brief
-- PR detection (excludes warmup)
+- PR detection (excludes warmup, separates by equipment)
 - 15 message daily limit
 - Exercise categorization with split-based tabs
 - Waitlist & beta invite emails via Resend
 - Scroll-to-bottom button in coach chat
 
 ### Recent Updates (Mar 12)
+- **Equipment-based PR tracking** — PRs now separated by equipment type. Dumbbell lateral raise and machine lateral raise have independent PR tracking. Added `equipment` column to `exercises` table. Stats page filters out warmup sets and time-based sets from PR calculations. Migration: `supabase/migrations/add_exercise_equipment.sql`.
 - **Visual polish pass** — Added micro-interactions and glow effects: active nav item glow, primary button gradient with hover glow (`.btn-primary`), input focus glow (`.input-glow`), notification badge pulse animation, text gradient on "AI" branding, skeleton shimmer animation (`.skeleton-shimmer`), glowing loading dots in coach, glowing calorie ring on nutrition page.
 
 ### Previous Updates (Mar 11)
