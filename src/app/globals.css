@@ -225,6 +225,20 @@ body::after {
   }
 }
 
+/* Mobile: reduce blur for better typing performance */
+@media (max-width: 768px) {
+  .glass,
+  .glass-subtle {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .glass-elevated {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
 /* Ensure minimum touch target size */
 button, a, input, select, textarea {
   min-height: 44px;
