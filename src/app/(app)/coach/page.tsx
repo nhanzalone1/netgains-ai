@@ -1082,7 +1082,7 @@ export default function CoachPage() {
                 className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : "glass-subtle"
+                    : "bg-white/5 border border-white/10"
                 }`}
               >
                 {message.role === "assistant" ? (
@@ -1107,7 +1107,7 @@ export default function CoachPage() {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="rounded-2xl px-4 py-3 flex items-center gap-2 glass-subtle">
+            <div className="rounded-2xl px-4 py-3 flex items-center gap-2 bg-white/5 border border-white/10">
               <div className="flex gap-1">
                 <span className="w-2 h-2 bg-primary rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.8)]" style={{ animationDelay: "0ms" }} />
                 <span className="w-2 h-2 bg-primary rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.8)]" style={{ animationDelay: "150ms" }} />
