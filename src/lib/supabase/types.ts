@@ -106,6 +106,7 @@ export interface Database {
           id: string;
           workout_id: string;
           name: string;
+          equipment: string;  // barbell, dumbbell, cable, machine, smith, bodyweight
           order_index: number;
           created_at: string;
         };
@@ -113,6 +114,7 @@ export interface Database {
           id?: string;
           workout_id: string;
           name: string;
+          equipment?: string;
           order_index?: number;
           created_at?: string;
         };
@@ -120,6 +122,7 @@ export interface Database {
           id?: string;
           workout_id?: string;
           name?: string;
+          equipment?: string;
           order_index?: number;
           created_at?: string;
         };

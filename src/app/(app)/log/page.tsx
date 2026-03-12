@@ -398,10 +398,11 @@ export default function LogPage() {
 
       workoutId = workout.id;
 
-      // Batch insert all exercises
+      // Batch insert all exercises (include equipment for PR tracking)
       const exerciseInserts = validExercises.map((ex) => ({
         workout_id: workout.id,
         name: ex.name,
+        equipment: ex.equipment || 'barbell',
         order_index: ex.orderIndex,
       }));
 

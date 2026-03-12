@@ -65,10 +65,9 @@ const categorizeExercise = (name: string): string => {
   return "Other";
 };
 
-// Normalize exercise name for merging duplicates
-const normalizeExerciseName = (name: string): string => {
-  // Remove parenthetical tags like "(bodyweight)", "(dumbbell)"
-  return name.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase();
+// Create composite key for grouping by name+equipment
+const getExerciseKey = (name: string, equipment: string): string => {
+  return `${name.toLowerCase()}::${equipment.toLowerCase()}`;
 };
 
 // Exercise with PR data
@@ -76,7 +75,6 @@ interface ExerciseWithPR {
   id: string;
   name: string;
   equipment: string;
-  normalizedName: string;
   prWeight: number;
   prReps: number;
   est1RM: number;
@@ -192,7 +190,7 @@ export default function StatsPage() {
   // Load history when exercise is selected
   useEffect(() => {
     if (selectedExercise) {
-      loadExerciseHistory(selectedExercise.name);
+      loadExerciseHistory(selectedExercise.name, selectedExercise.equipment);
     }
   }, [selectedExercise]);
 
@@ -213,14 +211,18 @@ export default function StatsPage() {
     }
 
     // Get all exercises with sets to calculate PRs
+    // Include equipment, variant, and measure_type for proper filtering
     const { data: exercises } = await supabase
       .from("exercises")
       .select(`
         id,
         name,
+        equipment,
         sets (
           weight,
-          reps
+          reps,
+          variant,
+          measure_type
         ),
         workouts!inner (
           user_id
@@ -228,38 +230,42 @@ export default function StatsPage() {
       `)
       .eq("workouts.user_id", user!.id);
 
-    // Build PR map by normalized exercise name
+    // Build PR map by name+equipment (separate PRs for different equipment)
     const prMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
 
     (exercises || []).forEach((exercise) => {
-      const sets = exercise.sets as { weight: number; reps: number }[];
-      const normalizedName = normalizeExerciseName(exercise.name);
+      const sets = exercise.sets as { weight: number; reps: number; variant: string; measure_type: string }[];
+      const key = getExerciseKey(exercise.name, exercise.equipment || 'barbell');
 
-      sets.forEach((set) => {
+      // Filter out warmup sets and time-based sets (they don't count for weight PRs)
+      const workingSets = sets.filter(
+        (s) => s.variant !== 'warmup' && s.measure_type !== 'secs'
+      );
+
+      workingSets.forEach((set) => {
         if (set.weight > 0 && set.reps > 0) {
           const est1RM = calculateEst1RM(set.weight, set.reps);
-          const current = prMap.get(normalizedName);
+          const current = prMap.get(key);
           if (!current || est1RM > current.est1RM) {
-            prMap.set(normalizedName, { weight: set.weight, reps: set.reps, est1RM });
+            prMap.set(key, { weight: set.weight, reps: set.reps, est1RM });
           }
         }
       });
     });
 
-    // Merge templates by normalized name and add PR data
-    const mergedMap = new Map<string, ExerciseWithPR>();
+    // Group templates by name+equipment (each equipment variant gets its own entry)
+    const exerciseMap = new Map<string, ExerciseWithPR>();
 
     templates.forEach((template) => {
-      const normalizedName = normalizeExerciseName(template.name);
-      const pr = prMap.get(normalizedName);
+      const key = getExerciseKey(template.name, template.equipment);
+      const pr = prMap.get(key);
 
-      // Only add if not already in map (first occurrence wins for display name)
-      if (!mergedMap.has(normalizedName)) {
-        mergedMap.set(normalizedName, {
+      // Each name+equipment combo gets its own entry
+      if (!exerciseMap.has(key)) {
+        exerciseMap.set(key, {
           id: template.id,
           name: template.name,
           equipment: template.equipment,
-          normalizedName,
           prWeight: pr?.weight || 0,
           prReps: pr?.reps || 0,
           est1RM: pr?.est1RM || 0,
@@ -267,7 +273,7 @@ export default function StatsPage() {
       }
     });
 
-    setExercisesWithPR(Array.from(mergedMap.values()));
+    setExercisesWithPR(Array.from(exerciseMap.values()));
     setLoadingExercises(false);
   };
 
@@ -283,22 +289,22 @@ export default function StatsPage() {
     });
   };
 
-  const loadExerciseHistory = async (exerciseName: string) => {
+  const loadExerciseHistory = async (exerciseName: string, exerciseEquipment: string) => {
     setLoadingHistory(true);
 
-    // Normalize the search name to merge duplicates
-    const normalizedSearch = normalizeExerciseName(exerciseName);
-
-    // Query all exercises for this user
+    // Query all exercises for this user with equipment, variant, and measure_type
     const { data: allExercises } = await supabase
       .from("exercises")
       .select(`
         id,
         name,
+        equipment,
         workout_id,
         sets (
           weight,
-          reps
+          reps,
+          variant,
+          measure_type
         ),
         workouts!inner (
           id,
@@ -308,9 +314,11 @@ export default function StatsPage() {
       `)
       .eq("workouts.user_id", user!.id);
 
-    // Filter to exercises matching the normalized name (merges duplicates)
+    // Filter to exercises matching both name AND equipment
     const exercises = (allExercises || []).filter(
-      (ex) => normalizeExerciseName(ex.name) === normalizedSearch
+      (ex) =>
+        ex.name.toLowerCase() === exerciseName.toLowerCase() &&
+        (ex.equipment || 'barbell').toLowerCase() === exerciseEquipment.toLowerCase()
     );
 
     if (!exercises || exercises.length === 0) {
@@ -324,12 +332,17 @@ export default function StatsPage() {
 
     exercises.forEach((exercise) => {
       const workout = exercise.workouts as { id: string; date: string; user_id: string };
-      const sets = exercise.sets as { weight: number; reps: number }[];
+      const sets = exercise.sets as { weight: number; reps: number; variant: string; measure_type: string }[];
+
+      // Filter out warmup sets and time-based sets
+      const workingSets = sets.filter(
+        (s) => s.variant !== 'warmup' && s.measure_type !== 'secs'
+      );
 
       // Find the "Champion Set" - highest Est. 1RM for this day
       let bestSet = { weight: 0, reps: 0, est1RM: 0 };
 
-      sets.forEach((set) => {
+      workingSets.forEach((set) => {
         if (set.weight > 0 && set.reps > 0) {
           const est1RM = calculateEst1RM(set.weight, set.reps);
           if (est1RM > bestSet.est1RM) {

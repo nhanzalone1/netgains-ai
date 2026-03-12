@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface PR {
   exercise: string;
+  equipment: string;
   weight: number;
   reps: number;
   previousBest: { weight: number; reps: number } | null;
@@ -9,8 +10,14 @@ export interface PR {
 
 export interface WorkoutExercise {
   name: string;
+  equipment: string;
   sets: { weight: number; reps: number; variant?: string }[];
 }
+
+// Create a composite key for grouping PRs by name+equipment
+const getPRKey = (name: string, equipment: string): string => {
+  return `${name.toLowerCase()}::${equipment.toLowerCase()}`;
+};
 
 /**
  * Detect PRs from a workout by comparing to historical data.
@@ -59,6 +66,7 @@ export async function detectPRs(
       if (best) {
         prs.push({
           exercise: exercise.name,
+          equipment: exercise.equipment,
           weight: best.weight,
           reps: best.reps,
           previousBest: null,
@@ -70,9 +78,10 @@ export async function detectPRs(
 
   const historicalWorkoutIds = historicalWorkouts.map(w => w.id);
 
+  // Query historical exercises with equipment for proper grouping
   const { data: historicalExercises } = await supabase
     .from('exercises')
-    .select('id, workout_id, name')
+    .select('id, workout_id, name, equipment')
     .in('workout_id', historicalWorkoutIds)
     .in('name', exerciseNames);
 
@@ -83,6 +92,7 @@ export async function detectPRs(
       if (best) {
         prs.push({
           exercise: exercise.name,
+          equipment: exercise.equipment,
           weight: best.weight,
           reps: best.reps,
           previousBest: null,
@@ -99,32 +109,39 @@ export async function detectPRs(
     .select('exercise_id, weight, reps, variant')
     .in('exercise_id', historicalExerciseIds);
 
-  // Build historical bests per exercise (excluding warmup sets)
+  // Build historical bests per exercise+equipment (excluding warmup sets)
+  // Key format: "name::equipment" for proper separation
   const historicalBests: Record<string, { weight: number; reps: number }> = {};
 
   for (const exercise of historicalExercises) {
     const exerciseSets = (historicalSets || [])
       .filter(s => s.exercise_id === exercise.id && s.variant !== 'warmup');
+
+    // Use composite key: name + equipment
+    const key = getPRKey(exercise.name, exercise.equipment || 'barbell');
+
     for (const set of exerciseSets) {
-      const current = historicalBests[exercise.name];
+      const current = historicalBests[key];
       // Compare by weight first, then by reps at same weight
       if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
-        historicalBests[exercise.name] = { weight: set.weight, reps: set.reps };
+        historicalBests[key] = { weight: set.weight, reps: set.reps };
       }
     }
   }
 
-  // Check each exercise for PRs
+  // Check each exercise for PRs (using composite key for lookup)
   for (const exercise of exercises) {
     const best = getBestSet(exercise);
 
     if (best) {
-      const historical = historicalBests[exercise.name];
+      const key = getPRKey(exercise.name, exercise.equipment);
+      const historical = historicalBests[key];
       // It's a PR if no historical data OR current beat historical
       if (!historical || best.weight > historical.weight ||
           (best.weight === historical.weight && best.reps > historical.reps)) {
         prs.push({
           exercise: exercise.name,
+          equipment: exercise.equipment,
           weight: best.weight,
           reps: best.reps,
           previousBest: historical || null,
