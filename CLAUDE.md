@@ -144,7 +144,10 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Waitlist & beta invite emails via Resend
 - Scroll-to-bottom button in coach chat
 
-### Recent Updates (Mar 11)
+### Recent Updates (Mar 12)
+- **Visual polish pass** — Added micro-interactions and glow effects: active nav item glow, primary button gradient with hover glow (`.btn-primary`), input focus glow (`.input-glow`), notification badge pulse animation, text gradient on "AI" branding, skeleton shimmer animation (`.skeleton-shimmer`), glowing loading dots in coach, glowing calorie ring on nutrition page.
+
+### Previous Updates (Mar 11)
 - **Premium glassmorphism UI** — Overhauled dark theme inspired by Linear, Vercel, and Cal.ai. Deep near-black background (`#09090b`), radial gradient with subtle cyan glow, noise texture overlay, and glass utility classes (`.glass`, `.glass-elevated`, `.glass-subtle`). Cards and surfaces now feel like they float with backdrop blur (20-32px), semi-transparent backgrounds, visible borders, and layered shadows. Includes `prefers-reduced-motion` fallback. Updated: `globals.css`, bottom-nav, modals, folder cards, daily brief, coach bubbles.
 - **Resend email integration** — Waitlist confirmation emails sent automatically on signup. Beta invite emails via `/api/admin/invite-beta`. Templates in `src/lib/email.ts`.
 - **Scroll-to-bottom button** — Appears in coach chat when user scrolls up. Fixed bug where scroll listener wasn't attached due to conditional rendering.
