@@ -13,6 +13,23 @@ function getSupabaseAdmin() {
   );
 }
 
+// Normalize goal values to handle variations (cut → cutting, bulk → bulking, etc.)
+function normalizeGoal(goal: string | null | undefined): string | null {
+  if (!goal) return null;
+  const normalized = goal.toLowerCase().trim();
+  if (normalized === 'cut' || normalized === 'cutting') return 'cutting';
+  if (normalized === 'bulk' || normalized === 'bulking') return 'bulking';
+  if (normalized === 'maintain' || normalized === 'maintaining' || normalized === 'maintenance') return 'maintaining';
+  return goal; // Return original if not recognized
+}
+
+// Check if goal is a valid value for the profile
+function isValidGoal(goal: string | null | undefined): boolean {
+  if (!goal) return false;
+  const normalized = normalizeGoal(goal);
+  return normalized === 'cutting' || normalized === 'bulking' || normalized === 'maintaining';
+}
+
 export const maxDuration = 60;
 
 // Dynamic system prompt - includes profile collection guidance when profile is incomplete
@@ -898,14 +915,15 @@ export async function POST(req: Request) {
     console.log('[Coach] Today (effective):', todayStr);
     console.log('[Coach] Yesterday (looking for data):', yesterdayStr);
 
-    // Gather context for personalized opening
-    const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult] = await Promise.all([
+    // Gather context for personalized opening (including latest weigh-in for sync)
+    const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult, latestWeighInResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', yesterdayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
     ]);
 
     // Log any query errors (don't fail, use defaults)
@@ -915,15 +933,38 @@ export async function POST(req: Request) {
     if (todayMealsResult.error) console.error('[Coach] Today meals query error:', todayMealsResult.error);
     if (yesterdayMealsResult.error) console.error('[Coach] Yesterday meals query error:', yesterdayMealsResult.error);
 
-    const profile = profileResult.data;
+    let profile = profileResult.data;
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
     const todayMeals = todayMealsResult.data || [];
     const yesterdayMeals = yesterdayMealsResult.data || [];
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
+    const latestWeighIn = latestWeighInResult.data?.[0];
+
+    // Auto-sync profile weight from latest weigh-in if different
+    if (profile && latestWeighIn && latestWeighIn.weight_lbs !== profile.weight_lbs) {
+      console.log('[Coach] Syncing profile weight from weigh-in:', latestWeighIn.weight_lbs, '(was:', profile.weight_lbs, ')');
+      const adminClient = getSupabaseAdmin();
+      await adminClient.from('profiles').update({ weight_lbs: latestWeighIn.weight_lbs }).eq('id', user.id);
+      // Update local profile object for this request
+      profile = { ...profile, weight_lbs: latestWeighIn.weight_lbs };
+    }
 
     // Check if profile is complete (has height, weight, and goal)
-    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    // Log individual field values to diagnose false negatives
+    console.log('[Coach] Profile fields - height_inches:', profile?.height_inches, '(type:', typeof profile?.height_inches, '), weight_lbs:', profile?.weight_lbs, '(type:', typeof profile?.weight_lbs, '), goal:', profile?.goal);
+
+    // Auto-fix goal variations in database (cut → cutting, etc.)
+    if (profile?.goal && normalizeGoal(profile.goal) !== profile.goal) {
+      const normalizedGoal = normalizeGoal(profile.goal);
+      console.log('[Coach] Auto-fixing goal in database:', profile.goal, '→', normalizedGoal);
+      const adminClient = getSupabaseAdmin();
+      await adminClient.from('profiles').update({ goal: normalizedGoal }).eq('id', user.id);
+      profile = { ...profile, goal: normalizedGoal };
+    }
+
+    // Use isValidGoal to accept variations like "cut" for "cutting"
+    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && isValidGoal(profile?.goal));
     dynamicSystemPrompt = getSystemPrompt(profileComplete);
 
     console.log('[Coach] Profile complete:', profileComplete);
@@ -1214,7 +1255,8 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
 
     // Build context for opening generation - compact format to save tokens
     // IMPORTANT: Use profileComplete (calculated from actual data) not the database onboarding_complete field
-    const profileSummary = profile ? `profile_complete:${profileComplete}, goal:${profile.goal || 'unset'}, mode:${profile.coaching_mode || 'unset'}, intensity:${profile.coaching_intensity || 'moderate'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
+    // Normalize goal for display (cut → cutting, etc.)
+    const profileSummary = profile ? `profile_complete:${profileComplete}, goal:${normalizeGoal(profile.goal) || 'unset'}, mode:${profile.coaching_mode || 'unset'}, intensity:${profile.coaching_intensity || 'moderate'}, h:${profile.height_inches || '?'}in, w:${profile.weight_lbs || '?'}lbs` : 'No profile';
 
     const contextPrompt = `[DAILY OPENING - Generate a personalized greeting]
 
@@ -1319,8 +1361,8 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     console.log('[Coach] Using todayStr:', todayStr);
     console.log('[Coach] Server date:', formatLocalDate(new Date()));
 
-    // Fetch profile, today's nutrition data, conversation summary, message count, key memories, and recent workouts
-    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult] = await Promise.all([
+    // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and latest weigh-in
+    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, latestWeighInResult] = await Promise.all([
       supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown').eq('id', user.id).single(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
@@ -1328,11 +1370,36 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes']),
       supabase.from('workouts').select('date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(3),
+      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
     ]);
 
     // Check if profile is complete
-    const profile = profileResult.data;
-    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+    let profile = profileResult.data;
+    const latestWeighIn = latestWeighInResult.data?.[0];
+
+    // Auto-sync profile weight from latest weigh-in if different
+    if (profile && latestWeighIn && latestWeighIn.weight_lbs !== profile.weight_lbs) {
+      console.log('[Coach] Syncing profile weight from weigh-in:', latestWeighIn.weight_lbs, '(was:', profile.weight_lbs, ')');
+      const adminClient = getSupabaseAdmin();
+      await adminClient.from('profiles').update({ weight_lbs: latestWeighIn.weight_lbs }).eq('id', user.id);
+      // Update local profile object for this request
+      profile = { ...profile, weight_lbs: latestWeighIn.weight_lbs };
+    }
+
+    // Log individual field values to diagnose false negatives
+    console.log('[Coach] Profile fields (normal flow) - height_inches:', profile?.height_inches, '(type:', typeof profile?.height_inches, '), weight_lbs:', profile?.weight_lbs, '(type:', typeof profile?.weight_lbs, '), goal:', profile?.goal);
+
+    // Auto-fix goal variations in database (cut → cutting, etc.)
+    if (profile?.goal && normalizeGoal(profile.goal) !== profile.goal) {
+      const normalizedGoal = normalizeGoal(profile.goal);
+      console.log('[Coach] Auto-fixing goal in database:', profile.goal, '→', normalizedGoal);
+      const adminClient = getSupabaseAdmin();
+      await adminClient.from('profiles').update({ goal: normalizedGoal }).eq('id', user.id);
+      profile = { ...profile, goal: normalizedGoal };
+    }
+
+    // Use isValidGoal to accept variations like "cut" for "cutting"
+    profileComplete = !!(profile?.height_inches && profile?.weight_lbs && isValidGoal(profile?.goal));
     dynamicSystemPrompt = getSystemPrompt(profileComplete);
     console.log('[Coach] Profile complete (normal flow):', profileComplete);
 
@@ -1474,8 +1541,9 @@ Briefly acknowledge this change in your response: "got it — updated your rotat
     }
 
     // Build user profile context string with key settings
+    // Normalize goal for display (cut → cutting, etc.)
     const userProfileContext = `[USER PROFILE]
-Goal: ${profile?.goal || 'not set'}
+Goal: ${normalizeGoal(profile?.goal) || 'not set'}
 Intensity: ${profile?.coaching_intensity || 'moderate'} (${profile?.coaching_intensity === 'light' ? '~300 cal deficit/surplus' : profile?.coaching_intensity === 'aggressive' ? '~750+ cal deficit/surplus' : '~500 cal deficit/surplus'})
 Height: ${profile?.height_inches ? `${Math.floor(profile.height_inches / 12)}'${profile.height_inches % 12}"` : 'not set'}
 Weight: ${profile?.weight_lbs ? `${profile.weight_lbs} lbs` : 'not set'}

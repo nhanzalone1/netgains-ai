@@ -16,6 +16,13 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Check if goal is a valid value (accepts variations like "cut" for "cutting")
+function isValidGoal(goal: string | null | undefined): boolean {
+  if (!goal) return false;
+  const normalized = goal.toLowerCase().trim();
+  return ['cut', 'cutting', 'bulk', 'bulking', 'maintain', 'maintaining', 'maintenance'].includes(normalized);
+}
+
 // Motivational line templates (no AI needed)
 const PR_LINES = [
   "That {exercise} PR is going to pay off.",
@@ -130,7 +137,8 @@ export async function POST(request: Request) {
     );
 
   // Check if profile is complete (has basic info)
-  const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && profile?.goal);
+  // Use isValidGoal to accept variations like "cut" for "cutting"
+  const profileComplete = !!(profile?.height_inches && profile?.weight_lbs && isValidGoal(profile?.goal));
   if (!profileComplete) {
     return Response.json({
       status: 'not_onboarded',
