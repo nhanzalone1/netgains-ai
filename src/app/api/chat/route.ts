@@ -917,12 +917,12 @@ export async function POST(req: Request) {
 
     // Gather context for personalized opening (including latest weigh-in for sync)
     const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult, latestWeighInResult] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', yesterdayStr).eq('consumed', true),
-      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
     ]);
 
@@ -1363,11 +1363,11 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
 
     // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and latest weigh-in
     const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, latestWeighInResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown').eq('id', user.id).single(),
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown').eq('id', user.id).maybeSingle(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
-      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
-      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').single(),
-      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').single(),
+      supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
+      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').maybeSingle(),
+      supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes']),
       supabase.from('workouts').select('date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(3),
       supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
