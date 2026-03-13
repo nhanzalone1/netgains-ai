@@ -282,7 +282,13 @@ export default function StatsPage() {
 
     templates.forEach((template) => {
       const key = getExerciseKey(template.name, template.equipment);
-      const pr = prMap.get(key);
+      // Also try key without equipment suffix (e.g., "Chest press machine" -> "Chest press")
+      const nameWithoutEquipment = normalizeString(template.name)
+        .replace(new RegExp(`\\s*${normalizeString(template.equipment)}$`), '')
+        .trim();
+      const altKey = `${nameWithoutEquipment}::${normalizeString(template.equipment)}`;
+      // Try both keys to find PR
+      const pr = prMap.get(key) || prMap.get(altKey);
 
       // Each name+equipment combo gets its own entry
       if (!exerciseMap.has(key)) {
@@ -349,11 +355,21 @@ export default function StatsPage() {
     const targetName = normalizeString(exerciseName);
     const targetEquipment = normalizeString(exerciseEquipment);
 
-    // Filter to exercises matching both name AND equipment
+    // Also try matching without equipment suffix (e.g., "Chest press machine" -> "Chest press")
+    // This handles cases where template name includes equipment but DB stores them separately
+    const targetNameWithoutEquipment = targetName.replace(new RegExp(`\\s*${targetEquipment}$`), '').trim();
+
+    // Filter to exercises matching name AND equipment
+    // Try both exact name match and name-without-equipment-suffix match
     const exercises = (allExercises || []).filter((ex) => {
       const exName = normalizeString(ex.name);
       const exEquipment = normalizeString(ex.equipment || 'barbell');
-      return exName === targetName && exEquipment === targetEquipment;
+
+      // Equipment must match
+      if (exEquipment !== targetEquipment) return false;
+
+      // Name can match exactly OR match the name without equipment suffix
+      return exName === targetName || exName === targetNameWithoutEquipment;
     });
 
     console.log('[Stats] Matching exercises after filter:', exercises.length);
@@ -361,7 +377,7 @@ export default function StatsPage() {
       // Debug: show what names exist to help diagnose mismatches
       const uniqueNames = [...new Set(allExercises.map(e => e.name))].slice(0, 10);
       console.log('[Stats] Sample exercise names in DB:', uniqueNames);
-      console.log('[Stats] Looking for:', targetName, '| equipment:', targetEquipment);
+      console.log('[Stats] Looking for:', targetName, '(or:', targetNameWithoutEquipment, ') | equipment:', targetEquipment);
     }
 
     if (!exercises || exercises.length === 0) {
