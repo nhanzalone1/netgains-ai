@@ -65,9 +65,12 @@ const categorizeExercise = (name: string): string => {
   return "Other";
 };
 
+// Normalize strings for consistent comparison (trim, lowercase, collapse whitespace)
+const normalizeString = (s: string): string => s.toLowerCase().trim().replace(/\s+/g, ' ');
+
 // Create composite key for grouping by name+equipment
 const getExerciseKey = (name: string, equipment: string): string => {
-  return `${name.toLowerCase()}::${equipment.toLowerCase()}`;
+  return `${normalizeString(name)}::${normalizeString(equipment)}`;
 };
 
 // Exercise with PR data
@@ -342,14 +345,24 @@ export default function StatsPage() {
       console.log('[Stats] All exercises loaded for history:', allExercises?.length || 0);
     }
 
+    // Use normalized strings for comparison
+    const targetName = normalizeString(exerciseName);
+    const targetEquipment = normalizeString(exerciseEquipment);
+
     // Filter to exercises matching both name AND equipment
-    const exercises = (allExercises || []).filter(
-      (ex) =>
-        ex.name.toLowerCase() === exerciseName.toLowerCase() &&
-        (ex.equipment || 'barbell').toLowerCase() === exerciseEquipment.toLowerCase()
-    );
+    const exercises = (allExercises || []).filter((ex) => {
+      const exName = normalizeString(ex.name);
+      const exEquipment = normalizeString(ex.equipment || 'barbell');
+      return exName === targetName && exEquipment === targetEquipment;
+    });
 
     console.log('[Stats] Matching exercises after filter:', exercises.length);
+    if (exercises.length === 0 && allExercises && allExercises.length > 0) {
+      // Debug: show what names exist to help diagnose mismatches
+      const uniqueNames = [...new Set(allExercises.map(e => e.name))].slice(0, 10);
+      console.log('[Stats] Sample exercise names in DB:', uniqueNames);
+      console.log('[Stats] Looking for:', targetName, '| equipment:', targetEquipment);
+    }
 
     if (!exercises || exercises.length === 0) {
       console.log('[Stats] No matching exercises found for:', exerciseName, exerciseEquipment);
