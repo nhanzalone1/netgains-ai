@@ -840,10 +840,6 @@ export default function CoachPage() {
     const allMessages = [...messages, userMessage];
     setMessages(allMessages);
     setInputValue("");
-    // Reset textarea height
-    if (inputRef.current) {
-      (inputRef.current as HTMLTextAreaElement).style.height = "auto";
-    }
     setIsLoading(true);
     isLoadingRef.current = true;
 
@@ -1147,32 +1143,19 @@ export default function CoachPage() {
         }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
-          <textarea
-            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+          <input
+            ref={inputRef as React.RefObject<HTMLInputElement>}
+            type="text"
             value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              // Auto-expand textarea
-              e.target.style.height = "auto";
-              e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
-            }}
+            onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => {
-              // Scroll to bottom when input is focused (keyboard opening)
               if (focusScrollTimeoutRef.current) {
                 clearTimeout(focusScrollTimeoutRef.current);
               }
               focusScrollTimeoutRef.current = setTimeout(() => scrollToBottom(true), 100);
             }}
-            onKeyDown={(e) => {
-              // Submit on Enter (without Shift)
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
             placeholder="Message your coach..."
-            rows={1}
-            className="flex-1 rounded-xl px-4 py-3 text-sm min-h-[48px] max-h-[150px] resize-none overflow-y-auto bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none transition-colors"
+            className="flex-1 rounded-xl px-4 py-3 text-sm h-12 bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
           />
           <motion.button
             whileTap={{ scale: 0.95 }}
