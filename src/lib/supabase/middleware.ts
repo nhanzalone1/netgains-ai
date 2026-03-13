@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest) {
       .from("allowed_testers")
       .select("id")
       .eq("email", user.email?.toLowerCase() || "")
-      .single();
+      .maybeSingle();
 
     isAllowedTester = !error && !!allowedTester;
   } catch {

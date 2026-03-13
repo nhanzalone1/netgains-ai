@@ -177,7 +177,7 @@ export function ExercisePickerModal({
         .from("profiles")
         .select("muscle_group_mode")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
       if (data?.muscle_group_mode && isMountedRef.current) {
         setMuscleGroupMode(data.muscle_group_mode as MuscleGroupMode);
@@ -186,7 +186,8 @@ export function ExercisePickerModal({
     };
 
     loadModePreference();
-  }, [userId, modeLoaded, supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, modeLoaded]); // supabase client is stable
 
   // Save muscle group mode preference when changed
   const handleModeChange = async (mode: MuscleGroupMode) => {
@@ -222,7 +223,7 @@ export function ExercisePickerModal({
       .select("value")
       .eq("user_id", userId)
       .eq("key", "split_rotation")
-      .single();
+      .maybeSingle();
 
     if (!splitData?.value) {
       // No split defined, use folder name for context

@@ -41,7 +41,7 @@ export function UserMenu() {
         .from("profiles")
         .select("coaching_intensity")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
       if (profileData?.coaching_intensity) {
         setIntensityState(profileData.coaching_intensity as IntensityId);
       }
@@ -52,7 +52,7 @@ export function UserMenu() {
         .select("value")
         .eq("user_id", user.id)
         .eq("key", "split_rotation")
-        .single();
+        .maybeSingle();
       if (splitData?.value) {
         try {
           const parsed = JSON.parse(splitData.value);
@@ -65,7 +65,8 @@ export function UserMenu() {
       }
     };
     loadUserData();
-  }, [user?.id, supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // supabase client is stable, don't include in deps
 
   const setIntensity = async (newIntensity: IntensityId) => {
     const oldIntensity = intensity;
@@ -125,7 +126,7 @@ export function UserMenu() {
         .select("id")
         .eq("user_id", user.id)
         .eq("key", "split_rotation")
-        .single();
+        .maybeSingle();
 
       if (existing) {
         await supabase
@@ -178,7 +179,7 @@ export function UserMenu() {
         .select("id")
         .eq("user_id", user.id)
         .eq("key", "split_rotation")
-        .single();
+        .maybeSingle();
 
       if (existing) {
         await supabase
@@ -206,7 +207,7 @@ export function UserMenu() {
         .select("id")
         .eq("user_id", user.id)
         .eq("key", "split_rotation")
-        .single();
+        .maybeSingle();
 
       if (existing) {
         await supabase

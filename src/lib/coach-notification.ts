@@ -30,7 +30,7 @@ export async function hasUnreadCoachMessages(userId: string): Promise<boolean> {
       .select('value')
       .eq('user_id', userId)
       .eq('key', 'coach_last_viewed_at')
-      .single();
+      .maybeSingle();
 
     const lastViewedAt = lastViewedData?.value || '1970-01-01T00:00:00Z';
 
@@ -66,7 +66,7 @@ export async function markCoachAsViewed(userId: string): Promise<void> {
       .select('id')
       .eq('user_id', userId)
       .eq('key', 'coach_last_viewed_at')
-      .single();
+      .maybeSingle();
 
     if (existing) {
       await supabase
