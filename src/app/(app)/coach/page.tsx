@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -241,7 +241,6 @@ function shouldGenerateOpening(messages: Message[], userId: string | undefined):
 
 export default function CoachPage() {
   const { user } = useAuth();
-  const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [messagesLoaded, setMessagesLoaded] = useState(false);
@@ -829,17 +828,18 @@ export default function CoachPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+    const inputEl = inputRef.current;
+    if (!inputEl || !inputEl.value.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: getMessageTimestamp().toString(),
       role: "user",
-      content: inputValue.trim(),
+      content: inputEl.value.trim(),
     };
 
     const allMessages = [...messages, userMessage];
     setMessages(allMessages);
-    setInputValue("");
+    inputEl.value = "";
     setIsLoading(true);
     isLoadingRef.current = true;
 
@@ -899,7 +899,7 @@ export default function CoachPage() {
 
     // Reset local state
     setMessages([]);
-    setInputValue("");
+    if (inputRef.current) inputRef.current.value = "";
     hasGeneratedOpeningRef.current = false;
     lastGeneratedDateRef.current = null;
     lastCheckedDateRef.current = null;
@@ -936,7 +936,7 @@ export default function CoachPage() {
     }
     // Reset local state and regenerate opening
     setMessages([]);
-    setInputValue("");
+    if (inputRef.current) inputRef.current.value = "";
     hasGeneratedOpeningRef.current = false;
     lastGeneratedDateRef.current = null;
     lastCheckedDateRef.current = null;
@@ -949,29 +949,34 @@ export default function CoachPage() {
     }, 100);
   };
 
-  // Filter out hidden messages and empty assistant messages for display
-  const visibleMessages = messages.filter(
-    (m) => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX) && (m.role !== "assistant" || m.content.trim() !== "")
-  );
+  // Memoize message processing to avoid recomputation on unrelated re-renders
+  const { visibleMessages, todayMessageCount, messagesWithDividers } = useMemo(() => {
+    // Filter out hidden messages and empty assistant messages for display
+    const visible = messages.filter(
+      (m) => !m.hidden && !m.content.startsWith(TRIGGER_PREFIX) && (m.role !== "assistant" || m.content.trim() !== "")
+    );
 
-  // Count user messages sent today for the daily counter
-  const todayString = getTodayString();
-  const todayMessageCount = visibleMessages.filter(
-    (m) => m.role === "user" && getMessageDate(m) === todayString
-  ).length;
+    // Count user messages sent today for the daily counter
+    const todayStr = getTodayString();
+    const todayCount = visible.filter(
+      (m) => m.role === "user" && getMessageDate(m) === todayStr
+    ).length;
 
-  // Group messages by date for rendering with dividers
-  const messagesWithDividers: Array<{ type: 'divider'; date: string } | { type: 'message'; message: Message }> = [];
-  let lastDate: string | null = null;
+    // Group messages by date for rendering with dividers
+    const withDividers: Array<{ type: 'divider'; date: string } | { type: 'message'; message: Message }> = [];
+    let lastDate: string | null = null;
 
-  for (const message of visibleMessages) {
-    const messageDate = getMessageDate(message);
-    if (messageDate && messageDate !== lastDate) {
-      messagesWithDividers.push({ type: 'divider', date: messageDate });
-      lastDate = messageDate;
+    for (const message of visible) {
+      const messageDate = getMessageDate(message);
+      if (messageDate && messageDate !== lastDate) {
+        withDividers.push({ type: 'divider', date: messageDate });
+        lastDate = messageDate;
+      }
+      withDividers.push({ type: 'message', message });
     }
-    messagesWithDividers.push({ type: 'message', message });
-  }
+
+    return { visibleMessages: visible, todayMessageCount: todayCount, messagesWithDividers: withDividers };
+  }, [messages]);
 
   // Show loading state while loading messages
   if (!messagesLoaded) {
@@ -1144,10 +1149,8 @@ export default function CoachPage() {
       >
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-lg mx-auto items-end">
           <input
-            ref={inputRef as React.RefObject<HTMLInputElement>}
+            ref={inputRef}
             type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => {
               if (focusScrollTimeoutRef.current) {
                 clearTimeout(focusScrollTimeoutRef.current);
@@ -1160,7 +1163,7 @@ export default function CoachPage() {
           <motion.button
             whileTap={{ scale: 0.95 }}
             type="submit"
-            disabled={!inputValue.trim() || isLoading}
+            disabled={isLoading}
             className="w-12 h-12 rounded-xl flex items-center justify-center btn-primary disabled:cursor-not-allowed flex-shrink-0"
           >
             <Send className="w-5 h-5" />
