@@ -161,7 +161,13 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 ### Recent Updates (Mar 13)
 - **Fixed false onboarding triggers** — Existing users were incorrectly treated as new users due to goal stored as "cut" instead of "cutting". Added `normalizeGoal()` helper that accepts variations (cut→cutting, bulk→bulking, maintain→maintaining). System now auto-fixes goal values in database when variations detected.
 - **Profile weight auto-sync** — Profile `weight_lbs` now automatically syncs from latest `weigh_ins` entry. When coach API runs, it checks if latest weigh-in differs from profile and updates accordingly. Ensures coach always sees current weight.
-- **Better profile debugging** — Added detailed logging of profile field values and types to diagnose future profileComplete false negatives.
+- **Stats page exercise matching overhaul** — Fixed multiple issues preventing stats from showing:
+  - Added `normalizeString()` helper (trims whitespace, lowercases, collapses spaces)
+  - Handles template names with equipment suffix ("Chest press machine" matches "Chest press")
+  - Handles legacy exercises without equipment (logged before equipment tracking, defaulted to "barbell", now matches any template equipment)
+  - Applied to both exercise history filter and PR calculation
+- **Fixed 406 errors flooding console** — Changed `.single()` to `.maybeSingle()` in all client components (user-menu, exercise-picker-modal, coach-notification, middleware). `.single()` throws 406 when no row exists; `.maybeSingle()` returns null gracefully.
+- **Fixed infinite request loop** — `useEffect` in `user-menu.tsx` had `supabase` in dependency array. Since `createClient()` returns new reference each render, it triggered 353+ repeated requests. Removed `supabase` from deps.
 
 ### Previous Updates (Mar 12)
 - **Coach chat performance overhaul** — Fixed typing lag on mobile with multiple optimizations: (1) Reduced backdrop-filter blur on mobile (8px vs 20px desktop), (2) Removed glass effects from input and message bubbles (solid bg-white/5 instead), (3) Switched to uncontrolled input to eliminate React re-renders on keystroke, (4) Memoized message list computation with useMemo.
