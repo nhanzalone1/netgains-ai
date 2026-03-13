@@ -287,8 +287,11 @@ export default function StatsPage() {
         .replace(new RegExp(`\\s*${normalizeString(template.equipment)}$`), '')
         .trim();
       const altKey = `${nameWithoutEquipment}::${normalizeString(template.equipment)}`;
-      // Try both keys to find PR
-      const pr = prMap.get(key) || prMap.get(altKey);
+      // Also try legacy key with "barbell" default (for exercises logged before equipment tracking)
+      const legacyKey = `${normalizeString(template.name)}::barbell`;
+      const legacyAltKey = `${nameWithoutEquipment}::barbell`;
+      // Try all keys to find PR (exact match, alt name, or legacy barbell default)
+      const pr = prMap.get(key) || prMap.get(altKey) || prMap.get(legacyKey) || prMap.get(legacyAltKey);
 
       // Each name+equipment combo gets its own entry
       if (!exerciseMap.has(key)) {
@@ -360,16 +363,19 @@ export default function StatsPage() {
     const targetNameWithoutEquipment = targetName.replace(new RegExp(`\\s*${targetEquipment}$`), '').trim();
 
     // Filter to exercises matching name AND equipment
-    // Try both exact name match and name-without-equipment-suffix match
+    // Handle legacy data where equipment was not tracked (defaults to "barbell")
     const exercises = (allExercises || []).filter((ex) => {
       const exName = normalizeString(ex.name);
       const exEquipment = normalizeString(ex.equipment || 'barbell');
+      const isLegacyData = !ex.equipment || ex.equipment === 'barbell';
 
-      // Equipment must match
-      if (exEquipment !== targetEquipment) return false;
+      // Name must match (exactly or without equipment suffix)
+      const nameMatches = exName === targetName || exName === targetNameWithoutEquipment;
+      if (!nameMatches) return false;
 
-      // Name can match exactly OR match the name without equipment suffix
-      return exName === targetName || exName === targetNameWithoutEquipment;
+      // Equipment matches OR this is legacy data (no equipment specified, defaulted to barbell)
+      // Legacy data matches any template equipment since it was logged before equipment tracking
+      return exEquipment === targetEquipment || isLegacyData;
     });
 
     console.log('[Stats] Matching exercises after filter:', exercises.length);
