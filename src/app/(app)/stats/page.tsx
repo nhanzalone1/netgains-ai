@@ -141,12 +141,19 @@ export default function StatsPage() {
 
   const loadWeighIns = async () => {
     setLoadingWeighIns(true);
-    const { data } = await supabase
+    console.log('[Stats] Loading weigh-ins for user:', user!.id);
+    const { data, error } = await supabase
       .from("weigh_ins")
       .select("date, weight_lbs")
       .eq("user_id", user!.id)
       .order("date", { ascending: true })
       .limit(90); // Last ~3 months
+
+    if (error) {
+      console.error('[Stats] Weigh-ins query error:', error);
+    } else {
+      console.log('[Stats] Weigh-ins loaded:', data?.length || 0);
+    }
 
     setWeighIns(
       (data || []).map((w) => ({
@@ -196,15 +203,23 @@ export default function StatsPage() {
 
   const loadExercisesWithPRs = async () => {
     setLoadingExercises(true);
+    console.log('[Stats] Loading exercises with PRs for user:', user!.id);
 
     // Get all exercise templates
-    const { data: templates } = await supabase
+    const { data: templates, error: templatesError } = await supabase
       .from("exercise_templates")
       .select("*")
       .eq("user_id", user!.id)
       .order("name", { ascending: true });
 
+    if (templatesError) {
+      console.error('[Stats] Exercise templates query error:', templatesError);
+    } else {
+      console.log('[Stats] Exercise templates loaded:', templates?.length || 0);
+    }
+
     if (!templates || templates.length === 0) {
+      console.log('[Stats] No exercise templates found - user may not have logged workouts yet');
       setExercisesWithPR([]);
       setLoadingExercises(false);
       return;
@@ -212,7 +227,7 @@ export default function StatsPage() {
 
     // Get all exercises with sets to calculate PRs
     // Include equipment, variant, and measure_type for proper filtering
-    const { data: exercises } = await supabase
+    const { data: exercises, error: exercisesError } = await supabase
       .from("exercises")
       .select(`
         id,
@@ -229,6 +244,12 @@ export default function StatsPage() {
         )
       `)
       .eq("workouts.user_id", user!.id);
+
+    if (exercisesError) {
+      console.error('[Stats] Exercises query error:', exercisesError);
+    } else {
+      console.log('[Stats] Exercises loaded:', exercises?.length || 0);
+    }
 
     // Build PR map by name+equipment (separate PRs for different equipment)
     const prMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
@@ -291,9 +312,10 @@ export default function StatsPage() {
 
   const loadExerciseHistory = async (exerciseName: string, exerciseEquipment: string) => {
     setLoadingHistory(true);
+    console.log('[Stats] Loading history for:', exerciseName, exerciseEquipment);
 
     // Query all exercises for this user with equipment, variant, and measure_type
-    const { data: allExercises } = await supabase
+    const { data: allExercises, error } = await supabase
       .from("exercises")
       .select(`
         id,
@@ -314,6 +336,12 @@ export default function StatsPage() {
       `)
       .eq("workouts.user_id", user!.id);
 
+    if (error) {
+      console.error('[Stats] Exercise history query error:', error);
+    } else {
+      console.log('[Stats] All exercises loaded for history:', allExercises?.length || 0);
+    }
+
     // Filter to exercises matching both name AND equipment
     const exercises = (allExercises || []).filter(
       (ex) =>
@@ -321,7 +349,10 @@ export default function StatsPage() {
         (ex.equipment || 'barbell').toLowerCase() === exerciseEquipment.toLowerCase()
     );
 
+    console.log('[Stats] Matching exercises after filter:', exercises.length);
+
     if (!exercises || exercises.length === 0) {
+      console.log('[Stats] No matching exercises found for:', exerciseName, exerciseEquipment);
       setSessionHistory([]);
       setLoadingHistory(false);
       return;
