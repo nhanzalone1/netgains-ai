@@ -54,6 +54,7 @@ src/
 - **coach_memory** — persistent state (split_rotation, food_staples, pending_workout, pending_changes)
 - **chat_messages** — persisted chat for cross-device sync
 - **exercise_templates** — user's exercises (name, equipment, muscle_group[], default_measure_type)
+- **weigh_ins** — daily weight tracking (user_id, date, weight_lbs) — syncs to profiles.weight_lbs
 
 ## Architecture Decisions
 
@@ -93,9 +94,9 @@ After meal/workout save, `/api/coach-trigger` (Haiku) generates directive, saves
 Client sends `localDate` with every message. Never rely on server time.
 
 ## Profile Fields
-- `goal` — cutting, bulking, maintaining
+- `goal` — cutting, bulking, maintaining (also accepts: cut, bulk, maintain — auto-normalized)
 - `coaching_intensity` — light (~300 cal), moderate (~500), aggressive (~750+)
-- `height_inches`, `weight_lbs`
+- `height_inches`, `weight_lbs` (weight auto-syncs from latest weigh_ins entry)
 - `muscle_group_mode` — simple (6 groups) or advanced (17 groups)
 
 ## Coach Memory Keys
@@ -142,7 +143,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - `addToTesters: true` — adds to `allowed_testers` table AND sends email
 - `addToTesters: false` — just sends email (if already added manually)
 
-## Current State (Mar 12)
+## Current State (Mar 13)
 
 ### What's Working
 - Workout logging with set variants and time-based sets
@@ -157,7 +158,12 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Scroll-to-bottom button in coach chat
 - Interactive app tour after onboarding (replayable from settings)
 
-### Recent Updates (Mar 12)
+### Recent Updates (Mar 13)
+- **Fixed false onboarding triggers** — Existing users were incorrectly treated as new users due to goal stored as "cut" instead of "cutting". Added `normalizeGoal()` helper that accepts variations (cut→cutting, bulk→bulking, maintain→maintaining). System now auto-fixes goal values in database when variations detected.
+- **Profile weight auto-sync** — Profile `weight_lbs` now automatically syncs from latest `weigh_ins` entry. When coach API runs, it checks if latest weigh-in differs from profile and updates accordingly. Ensures coach always sees current weight.
+- **Better profile debugging** — Added detailed logging of profile field values and types to diagnose future profileComplete false negatives.
+
+### Previous Updates (Mar 12)
 - **Coach chat performance overhaul** — Fixed typing lag on mobile with multiple optimizations: (1) Reduced backdrop-filter blur on mobile (8px vs 20px desktop), (2) Removed glass effects from input and message bubbles (solid bg-white/5 instead), (3) Switched to uncontrolled input to eliminate React re-renders on keystroke, (4) Memoized message list computation with useMemo.
 - **Interactive App Tour** — Spotlight-style onboarding tour after profile setup. Coach says "let me show you around" then visual tour highlights each nav tab with coach-voice tooltips. Uses clip-path spotlight overlay with cyan glow, glassmorphism tooltip cards, and Framer Motion animations. Ends with CTA to log first workout. Replayable from settings. Components: `app-tour.tsx`, `use-app-tour.ts`.
 - **Equipment-based PR tracking** — PRs now separated by equipment type. Dumbbell lateral raise and machine lateral raise have independent PR tracking. Added `equipment` column to `exercises` table. Stats page filters out warmup sets and time-based sets from PR calculations. Migration: `supabase/migrations/add_exercise_equipment.sql`.
