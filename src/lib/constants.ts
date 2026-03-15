@@ -58,3 +58,25 @@ export const CONVERSIONS = {
   LBS_TO_KG: 0.453592,
   INCHES_TO_CM: 2.54,
 } as const;
+
+// === PINECONE MEMORY CONFIGURATION ===
+export const PINECONE_CONFIG = {
+  INDEX_NAME: 'netgains-memory',
+  RETRIEVAL_TOP_K: 7,
+  SIMILARITY_THRESHOLD: 0.7,
+  DEDUP_SIMILARITY_THRESHOLD: 0.92,
+  EXTRACTION_MODEL: 'claude-3-haiku-20240307',
+  EXTRACTION_MAX_TOKENS: 1024,
+  SESSION_DEBOUNCE_MS: 5000,
+} as const;
+
+export const MEMORY_CATEGORIES = [
+  'training',
+  'nutrition',
+  'injuries',
+  'preferences',
+  'biometrics',
+  'history',
+] as const;
+
+export type MemoryCategory = typeof MEMORY_CATEGORIES[number];

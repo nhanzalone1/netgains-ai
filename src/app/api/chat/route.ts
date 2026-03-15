@@ -4,6 +4,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
 import { formatLocalDate } from '@/lib/date-utils';
 import { AI_MODELS, AI_TOKEN_LIMITS, RATE_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
+import { retrieveRelevantMemories, RetrievedMemory } from '@/lib/memory-retrieval';
 
 // Helper to get service role client for bypassing RLS (used for profile updates)
 function getSupabaseAdmin() {
@@ -1377,6 +1378,22 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
     ]);
 
+    // Retrieve relevant long-term memories from Pinecone
+    // Get the last user message to use as the query
+    const lastUserMessage = messages.filter((m: { role: string }) => m.role === 'user').pop();
+    const userMessageContent = lastUserMessage?.content || '';
+    let relevantMemories: RetrievedMemory[] = [];
+
+    if (userMessageContent) {
+      try {
+        relevantMemories = await retrieveRelevantMemories(user.id, userMessageContent);
+        console.log('[Coach] Retrieved', relevantMemories.length, 'relevant memories');
+      } catch (error) {
+        console.error('[Coach] Memory retrieval failed:', error);
+        // Continue without memories - graceful degradation
+      }
+    }
+
     // Check if profile is complete
     let profile = profileResult.data;
     const latestWeighIn = latestWeighInResult.data?.[0];
@@ -1447,8 +1464,18 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
+    // Build long-term memory context from Pinecone
+    const memoryContext = relevantMemories.length > 0
+      ? `[LONG-TERM MEMORIES]
+These are facts you remember about this user from past conversations. Reference these naturally when relevant:
+${relevantMemories.map(m => `- ${m.fact}`).join('\n')}
+[END MEMORIES]
+
+`
+      : '';
+
     // Build nutrition context string with meal timestamps
-    const nutritionContext = `[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
+    const nutritionContext = `${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
 This data is pulled from the database right now. ALWAYS use these numbers, NEVER use calorie totals from earlier messages in the conversation.
 ${todayMeals.length > 0
   ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat

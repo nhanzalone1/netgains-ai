@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
 import { useTheme, themes } from "./theme-provider";
 import { IconButton } from "./ui/icon-button";
+import { CoachMemoriesSheet } from "./coach-memories-sheet";
 
 const intensityOptions = [
   { id: "light", name: "Light", description: "~300 cal deficit/surplus" },
@@ -24,6 +25,7 @@ export function UserMenu() {
   const [showThemes, setShowThemes] = useState(false);
   const [showIntensity, setShowIntensity] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
+  const [showMemories, setShowMemories] = useState(false);
   const [intensity, setIntensityState] = useState<IntensityId>("moderate");
   const [splitRotation, setSplitRotation] = useState<string[]>([]);
   const [editingSplitIndex, setEditingSplitIndex] = useState<number | null>(null);
@@ -481,6 +483,21 @@ export function UserMenu() {
                 </div>
               )}
 
+              {/* What Coach Remembers */}
+              <div className="border-b border-white/5">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setOpen(false);
+                    setShowMemories(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                >
+                  <Brain className="w-4 h-4 text-primary" />
+                  <span className="font-medium">What Coach Remembers</span>
+                </motion.button>
+              </div>
+
               {/* Replay App Tour */}
               <div className="border-b border-white/5">
                 <motion.button
@@ -509,6 +526,12 @@ export function UserMenu() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Coach Memories Sheet */}
+      <CoachMemoriesSheet
+        isOpen={showMemories}
+        onClose={() => setShowMemories(false)}
+      />
     </div>
   );
 }

@@ -750,7 +750,62 @@ export default function CoachPage() {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
 
+  // Memory extraction refs
+  const extractionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Trigger memory extraction when user leaves the page
+  const triggerMemoryExtraction = useCallback(async (userId: string | undefined, msgs: Message[]) => {
+    if (!userId) return;
+
+    // Filter to non-hidden, non-empty messages
+    const validMessages = msgs.filter(m => !m.hidden && m.content.trim());
+    if (validMessages.length < 3) {
+      console.log('[Memory] Not enough messages for extraction:', validMessages.length);
+      return;
+    }
+
+    // Check when we last extracted
+    const lastExtractionKey = `netgains-last-extraction-${userId}`;
+    const lastExtracted = localStorage.getItem(lastExtractionKey);
+
+    // Filter to messages since last extraction
+    const newMessages = lastExtracted
+      ? validMessages.filter(m => m.created_at && new Date(m.created_at) > new Date(lastExtracted))
+      : validMessages;
+
+    if (newMessages.length < 3) {
+      console.log('[Memory] Not enough new messages since last extraction:', newMessages.length);
+      return;
+    }
+
+    console.log('[Memory] Triggering extraction for', newMessages.length, 'messages');
+
+    try {
+      const response = await fetch('/api/memory/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: newMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Memory] Extraction complete:', result);
+        localStorage.setItem(lastExtractionKey, new Date().toISOString());
+      } else {
+        console.error('[Memory] Extraction failed:', response.status);
+      }
+    } catch (error) {
+      console.error('[Memory] Extraction error:', error);
+    }
+  }, []);
+
   // Reload messages when page becomes visible (for cross-device sync)
+  // Trigger memory extraction when page becomes hidden
   useEffect(() => {
     const reloadMessages = async () => {
       if (!user?.id) return;
@@ -777,13 +832,36 @@ export default function CoachPage() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        // User came back - cancel any pending extraction and reload
+        if (extractionTimeoutRef.current) {
+          clearTimeout(extractionTimeoutRef.current);
+          extractionTimeoutRef.current = null;
+        }
         reloadMessages();
+      } else if (document.visibilityState === "hidden") {
+        // User is leaving - debounce and trigger extraction
+        // Clear any existing timeout
+        if (extractionTimeoutRef.current) {
+          clearTimeout(extractionTimeoutRef.current);
+        }
+
+        // Debounce by 5 seconds - user might quickly switch back
+        extractionTimeoutRef.current = setTimeout(() => {
+          if (document.visibilityState === "hidden") {
+            triggerMemoryExtraction(user?.id, messages);
+          }
+        }, 5000);
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [user?.id]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (extractionTimeoutRef.current) {
+        clearTimeout(extractionTimeoutRef.current);
+      }
+    };
+  }, [user?.id, messages, triggerMemoryExtraction]);
 
   // Track messages that need to be saved to DB
   const pendingSaveRef = useRef<Set<string>>(new Set());

@@ -11,6 +11,7 @@ NetGains AI is a vertical AI fitness coaching app. It provides personalized work
 - **Frontend:** Next.js 14 (App Router), React, TypeScript, Tailwind CSS
 - **Backend:** Next.js API routes (serverless on Vercel)
 - **Database:** Supabase (PostgreSQL + Auth + RLS)
+- **Vector DB:** Pinecone (long-term AI memory with semantic search)
 - **AI:** Anthropic Claude API (Sonnet for coaching, Haiku for triggers/categorization)
 - **Hosting:** Vercel
 - **Email:** Resend (transactional emails)
@@ -28,6 +29,7 @@ src/
 │   │   ├── workout/pending/   # Pending workout from coach generator
 │   │   ├── exercise/          # categorize, parse-split, recategorize-all
 │   │   ├── nutrition/         # estimate, recalculate
+│   │   ├── memory/            # extract (session-end), list (UI display)
 │   │   ├── waitlist/join/     # Waitlist signup + confirmation email
 │   │   └── admin/invite-beta/ # Send beta invite emails
 │   ├── login/ & signup/
@@ -38,6 +40,8 @@ src/
 │   └── ...
 ├── lib/
 │   ├── supabase/        # DB client + types
+│   ├── pinecone.ts      # Pinecone client + types
+│   ├── memory-retrieval.ts  # Long-term memory query helper
 │   ├── email.ts         # Resend email templates
 │   ├── pr-detection.ts
 │   └── date-utils.ts
@@ -62,8 +66,28 @@ src/
 - **Sonnet for coaching**, Haiku for fast tasks (triggers, categorization, summarization)
 - **tool_use for actions** — Coach uses tools like `updateUserProfile`, `saveMemory`, `logMeal`, `generateWorkout`
 - **Conversation memory:** After 10 messages, summarize to bullet points in coach_memory
+- **Long-term memory:** Pinecone vector DB for semantic memory across sessions
 - **Token limit:** 2048 for coach responses
 - **15 message daily limit** per user
+
+### Pinecone Long-Term Memory
+Coach remembers facts across conversations using Pinecone vector search.
+
+**Extraction (session-end):**
+- When user leaves Coach tab (visibility change), extract atomic facts via Haiku
+- Facts are deduplicated against existing memories (similarity > 0.92)
+- Stored in Pinecone with user_id metadata filter
+
+**Retrieval (per-message):**
+- Query Pinecone with user's message to find top 7 relevant memories
+- Inject memories into system prompt context before nutrition data
+- Graceful degradation if Pinecone unavailable
+
+**Memory categories:** training, nutrition, injuries, preferences, biometrics, history
+
+**UI:** User Menu → "What Coach Remembers" shows read-only memory list
+
+**Config:** `PINECONE_CONFIG` in `constants.ts`, env vars `PINECONE_API_KEY`, `PINECONE_INDEX_NAME=netgains-memory`
 
 ### Models (check `constants.ts`)
 - `claude-sonnet-4-20250514` — Coaching
@@ -148,7 +172,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 ### What's Working
 - Workout logging with set variants and time-based sets
 - Nutrition logging with calorie ring
-- AI coach chat with persistent memory
+- AI coach chat with persistent memory and long-term Pinecone memory
 - Coach Workout Generator — ask for a workout, loads into Log pre-populated
 - Dynamic Daily Brief
 - PR detection (excludes warmup, separates by equipment)
@@ -159,6 +183,13 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Interactive app tour after onboarding (replayable from settings)
 
 ### Recent Updates (Mar 15)
+- **Pinecone long-term memory integration** — Coach now remembers facts across sessions using semantic vector search:
+  - Extracts atomic facts (injuries, PRs, preferences, patterns) at session end via Haiku
+  - Retrieves top 7 relevant memories per message from Pinecone
+  - Deduplicates memories with 0.92 similarity threshold
+  - "What Coach Remembers" view in User Menu (Settings)
+  - Files: `lib/pinecone.ts`, `lib/memory-retrieval.ts`, `api/memory/extract`, `api/memory/list`, `coach-memories-sheet.tsx`
+  - Graceful degradation if Pinecone unavailable
 - **Comprehensive .maybeSingle() migration** — Converted all remaining `.single()` calls to `.maybeSingle()` across API routes and chat tools to prevent 406 errors when optional data doesn't exist. Fixed 22 instances across 8 files:
   - `api/chat/route.ts` (12 instances) — getUserProfile, getMaxes, getNutritionGoals, saveMemory, save_food_staples, generateWorkout, loadWorkoutToFolder, message count, conversation summary
   - `api/waitlist/join/route.ts`, `api/coach-trigger/route.ts`, `api/daily-brief/route.ts`, `api/nutrition/recalculate/route.ts`, `api/nutrition-onboarding/route.ts`, `api/workout/pending/route.ts`, `(app)/program/page.tsx`
@@ -245,6 +276,8 @@ npm run lint         # Lint check
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, RLS)
 - `SUPABASE_SERVICE_ROLE_KEY` — Service role key (server-side, bypasses RLS)
+- `PINECONE_API_KEY` — Pinecone API key for vector memory
+- `PINECONE_INDEX_NAME` — Pinecone index name (default: `netgains-memory`)
 - `RESEND_API_KEY` — Resend API key for transactional emails
 - `ADMIN_API_SECRET` — Secret for admin API endpoints (beta invites)
 
