@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -125,15 +125,21 @@ export function WorkoutSession({
   // All user's historical exercises for autocomplete
   const [allUserExercises, setAllUserExercises] = useState<{ name: string; equipment: string }[]>([]);
 
-  // Active workout state — restore from localStorage if navigating back
-  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>(() => {
-    if (typeof window === "undefined") return [];
+  // Active workout state — restore from localStorage after mount to avoid hydration mismatch
+  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
+  const hasRestoredFromStorage = useRef(false);
+
+  // Restore workout from localStorage on mount (client-side only)
+  useEffect(() => {
+    if (hasRestoredFromStorage.current) return;
+    hasRestoredFromStorage.current = true;
+
     try {
       const stored = localStorage.getItem("netgains-current-workout");
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.exercises && Array.isArray(parsed.exercises)) {
-          return parsed.exercises.map(
+          const restoredExercises = parsed.exercises.map(
             (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string }[] }) => ({
               id: Math.random().toString(36).substring(2, 9),
               name: ex.name,
@@ -154,11 +160,11 @@ export function WorkoutSession({
                   : [{ id: Math.random().toString(36).substring(2, 9), weight: "", reps: "", variant: "normal" as SetVariant, measureType: "reps" as MeasureType }],
             })
           );
+          setActiveExercises(restoredExercises);
         }
       }
     } catch { /* ignore parse errors */ }
-    return [];
-  });
+  }, []);
   const [saving, setSaving] = useState(false);
 
   // New exercise modal
@@ -255,8 +261,14 @@ export function WorkoutSession({
 
   // Fetch best set for a given exercise template (using Epley formula for 1RM)
   // Matches by exercise NAME (case-insensitive) since exercises table doesn't have template_id
+  // Cache is limited to 100 entries to prevent unbounded memory growth
+  const BEST_SETS_CACHE_LIMIT = 100;
+
   const fetchBestSet = async (templateId: string, exerciseName: string) => {
     if (!templateId || !exerciseName || bestSets[templateId] !== undefined) return;
+
+    // Skip if cache is full (prevents unbounded growth)
+    if (Object.keys(bestSets).length >= BEST_SETS_CACHE_LIMIT) return;
 
     // Mark as loading (null means we're fetching)
     setBestSets((prev) => ({ ...prev, [templateId]: null }));

@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult, todayWorkoutResult] = await Promise.all([
       supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
-      supabase.from('meals').select('food_name, calories, protein, carbs, fat, created_at').eq('user_id', user.id).eq('date', today).eq('consumed', true),
+      supabase.from('meals').select('food_name, calories, protein, carbs, fat, created_at').eq('user_id', user.id).eq('date', today).eq('consumed', true).limit(50),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       // Fetch last 3 assistant messages for conversation context
       supabase.from('chat_messages').select('content, role').eq('user_id', user.id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(3),

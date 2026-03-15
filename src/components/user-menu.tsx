@@ -394,7 +394,7 @@ export function UserMenu() {
                   >
                     <Calendar className="w-4 h-4 text-primary" />
                     <span className="font-medium flex-1">Training Split</span>
-                    <span className="text-xs text-muted-foreground">{splitRotation.filter(d => d !== "Rest").length} days</span>
+                    <span className="text-xs text-muted-foreground">{(splitRotation || []).filter(d => typeof d === 'string' && d !== "Rest").length} days</span>
                   </motion.button>
 
                   <AnimatePresence>

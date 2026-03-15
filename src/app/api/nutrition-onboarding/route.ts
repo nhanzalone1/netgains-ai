@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       .from('coach_memory')
       .select('key, value')
       .eq('user_id', user.id)
-      .in('key', ['age', 'days_per_week']),
+      .in('key', ['age', 'days_per_week', 'sex']),
   ]);
 
   if (profileResult.error || !profileResult.data) {
@@ -59,20 +59,24 @@ export async function POST(request: Request) {
   const daysPerWeek = parseInt(memoryMap.days_per_week) || 4;
   const goal = profile.goal || 'maintaining';
   const intensity = profile.coaching_intensity || 'moderate';
+  // Sex for BMR calculation: 'male', 'female', or undefined
+  const sex = memoryMap.sex?.toLowerCase();
 
   // Convert to metric for Mifflin-St Jeor
   const weightKg = weightLbs * 0.453592;
   const heightCm = heightInches * 2.54;
 
   console.log('[Nutrition Calc] Input values:', {
-    weightLbs, heightInches, age, daysPerWeek, goal,
+    weightLbs, heightInches, age, daysPerWeek, goal, sex,
     weightKg: weightKg.toFixed(1), heightCm: heightCm.toFixed(1)
   });
 
-  // Mifflin-St Jeor equation (for men - using +5, women would be -161)
-  // BMR = (10 × weight in kg) + (6.25 × height in cm) - (5 × age) + 5
-  const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5;
-  console.log('[Nutrition Calc] BMR:', Math.round(bmr));
+  // Mifflin-St Jeor equation
+  // Male: BMR = (10 × weight in kg) + (6.25 × height in cm) - (5 × age) + 5
+  // Female: BMR = (10 × weight in kg) + (6.25 × height in cm) - (5 × age) - 161
+  const sexAdjustment = sex === 'female' ? -161 : 5; // Default to male formula if not specified
+  const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + sexAdjustment;
+  console.log('[Nutrition Calc] BMR:', Math.round(bmr), '(sex adjustment:', sexAdjustment, ')');
 
   // Activity factor based on training days
   let activityFactor: number;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Dumbbell, X, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,32 +43,41 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
   const [isDismissing, setIsDismissing] = useState(false);
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(false);
 
-  const fetchPendingWorkout = useCallback(async () => {
+  useEffect(() => {
     if (!user?.id) return;
 
-    try {
-      const response = await fetch("/api/workout/pending");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+    const abortController = new AbortController();
 
-      const data = await response.json();
-      if (data.pending_workout && data.pending_workout.readyToLoad) {
-        setPendingWorkout(data.pending_workout);
-      } else {
+    const fetchPendingWorkout = async () => {
+      try {
+        const response = await fetch("/api/workout/pending", {
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.pending_workout && data.pending_workout.readyToLoad) {
+          setPendingWorkout(data.pending_workout);
+        } else {
+          setPendingWorkout(null);
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return; // Ignore abort errors
+        console.error("Failed to fetch pending workout:", err);
         setPendingWorkout(null);
       }
-    } catch (err) {
-      console.error("Failed to fetch pending workout:", err);
-      setPendingWorkout(null);
-    }
 
-    setIsLoading(false);
-  }, [user?.id]);
+      setIsLoading(false);
+    };
 
-  useEffect(() => {
     fetchPendingWorkout();
-  }, [fetchPendingWorkout]);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [user?.id]);
 
   const handleDismiss = async () => {
     setIsDismissing(true);
@@ -86,19 +95,21 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
 
     setIsLoadingWorkout(true);
 
+    const workoutExercises = pendingWorkout.exercises || [];
+
     // Convert to localStorage format
     const localStorageWorkout = {
       folderName: pendingWorkout.folderName || "Coach Workout",
       folderId: pendingWorkout.folderId,
       startedAt: new Date().toISOString(),
       fromCoach: true,
-      exercises: pendingWorkout.exercises.map(ex => ({
+      exercises: workoutExercises.map(ex => ({
         name: ex.name,
         equipment: ex.equipment,
         templateId: ex.templateId,
         defaultMeasureType: ex.defaultMeasureType,
         notes: ex.notes,
-        sets: ex.sets.map(set => ({
+        sets: (ex.sets || []).map(set => ({
           weight: set.weight,
           reps: set.reps,
           targetReps: set.targetReps,
@@ -128,7 +139,8 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
     return null;
   }
 
-  const totalSets = pendingWorkout.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  const exercises = pendingWorkout.exercises || [];
+  const totalSets = exercises.reduce((sum, ex) => sum + (ex.sets?.length || 0), 0);
 
   return (
     <AnimatePresence>
@@ -154,7 +166,7 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
                   {pendingWorkout.workoutName}
                 </h3>
                 <p className="text-sm text-gray-400 mt-0.5">
-                  {pendingWorkout.exercises.length} exercises, {totalSets} sets
+                  {exercises.length} exercises, {totalSets} sets
                   {pendingWorkout.durationMinutes && ` \u2022 ~${pendingWorkout.durationMinutes} min`}
                 </p>
                 {pendingWorkout.folderName && (
