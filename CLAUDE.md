@@ -100,7 +100,7 @@ Client sends `localDate` with every message. Never rely on server time.
 - `muscle_group_mode` — simple (6 groups) or advanced (17 groups)
 
 ## Coach Memory Keys
-- `name`, `age`, `training_split`, `split_rotation`, `injuries`
+- `name`, `age`, `sex`, `training_split`, `split_rotation`, `injuries`
 - `food_staples` — JSON array of foods user keeps stocked
 - `pending_workout` — Generated workout waiting to load
 - `pending_changes` — Settings changes to acknowledge
@@ -176,6 +176,13 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
   - `nutrition/page.tsx`: `(meals || []).filter()` for getMealLabel
   - `nutrition/page.tsx`: `meal?.consumed && meal?.date` checks in week data loop
 - **Rate limit TODO** — Added comment in `constants.ts`: `// TODO: Set to 15 before public launch`. Currently set to 9999 for testing.
+- **Sex-aware BMR calculation** — Fixed Mifflin-St Jeor formula that was hardcoded to male (+5). Now reads `sex` from coach_memory and uses -161 for female. Coach system prompt updated to collect sex during onboarding. Prevents ~166 calorie error for women.
+- **Null safety: splitRotation.filter** — Added defensive check in `user-menu.tsx:397` to handle non-string array items: `(splitRotation || []).filter(d => typeof d === 'string' && d !== "Rest")`.
+- **Null safety: pending workout exercises** — Added fallbacks in `pending-workout-banner.tsx` for missing `exercises` array and nested `sets` arrays.
+- **Hydration mismatch fix** — Moved localStorage read in `workout-session.tsx` from useState initializer to useEffect with `hasRestoredFromStorage` ref guard. Prevents server/client mismatch.
+- **bestSets cache limit** — Added `BEST_SETS_CACHE_LIMIT = 100` in `workout-session.tsx` to prevent unbounded memory growth when adding exercises.
+- **Meals query pagination** — Added `.limit(50)` to meals query in `coach-trigger/route.ts` to prevent large payloads.
+- **AbortController cleanup** — Refactored `pending-workout-banner.tsx` fetch to use AbortController with proper cleanup on unmount, preventing state updates after unmount.
 
 ### Previous Updates (Mar 13)
 - **Fixed false onboarding triggers** — Existing users were incorrectly treated as new users due to goal stored as "cut" instead of "cutting". Added `normalizeGoal()` helper that accepts variations (cut→cutting, bulk→bulking, maintain→maintaining). System now auto-fixes goal values in database when variations detected.
