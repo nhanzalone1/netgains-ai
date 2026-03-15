@@ -801,12 +801,13 @@ export async function POST(req: Request) {
   console.log('[Coach] ========== CHAT API CALLED ==========');
 
   // Parse request body with error handling
-  let messages, currentWorkout, localDate;
+  let messages, currentWorkout, localDate, localTime;
   try {
     const body = await req.json();
     messages = body.messages;
     currentWorkout = body.currentWorkout;
     localDate = body.localDate; // Client's local date (YYYY-MM-DD) for timezone-aware queries
+    localTime = body.localTime; // Client's local time (e.g., "9:15 PM") for time-aware advice
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
       status: 400,
@@ -1464,6 +1465,14 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
+    // Build current time context
+    const timeContext = localTime
+      ? `[CURRENT TIME: ${localTime}]
+Use this for time-appropriate advice (meal timing, workout scheduling, sleep recommendations).
+
+`
+      : '';
+
     // Build long-term memory context from Pinecone
     const memoryContext = relevantMemories.length > 0
       ? `[LONG-TERM MEMORIES]
@@ -1475,7 +1484,7 @@ ${relevantMemories.map(m => `- ${m.fact}`).join('\n')}
       : '';
 
     // Build nutrition context string with meal timestamps
-    const nutritionContext = `${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
+    const nutritionContext = `${timeContext}${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
 This data is pulled from the database right now. ALWAYS use these numbers, NEVER use calorie totals from earlier messages in the conversation.
 ${todayMeals.length > 0
   ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat

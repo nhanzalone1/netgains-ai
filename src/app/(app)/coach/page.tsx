@@ -449,6 +449,7 @@ export default function CoachPage() {
           }
         })(),
         localDate: formatLocalDate(new Date()), // Client's local date for timezone-aware queries
+        localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }), // Client's local time (e.g., "9:15 PM")
       }),
       signal,
     });
