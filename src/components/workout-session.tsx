@@ -108,6 +108,9 @@ const formatEquipment = (equipment: string): string => {
   return equipment.charAt(0).toUpperCase() + equipment.slice(1);
 };
 
+// Cache limit for best sets to prevent unbounded memory growth
+const BEST_SETS_CACHE_LIMIT = 100;
+
 export function WorkoutSession({
   userId,
   folderId,
@@ -140,14 +143,14 @@ export function WorkoutSession({
         const parsed = JSON.parse(stored);
         if (parsed.exercises && Array.isArray(parsed.exercises)) {
           const restoredExercises = parsed.exercises.map(
-            (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string }[] }) => ({
+            (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets?: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string }[] }) => ({
               id: Math.random().toString(36).substring(2, 9),
               name: ex.name,
               equipment: ex.equipment,
               templateId: ex.templateId || null,
               defaultMeasureType: (ex.defaultMeasureType || "reps") as MeasureType,
               sets:
-                ex.sets.length > 0
+                ex.sets && ex.sets.length > 0
                   ? ex.sets.map((s) => ({
                       id: Math.random().toString(36).substring(2, 9),
                       weight: s.weight || "",
@@ -261,9 +264,6 @@ export function WorkoutSession({
 
   // Fetch best set for a given exercise template (using Epley formula for 1RM)
   // Matches by exercise NAME (case-insensitive) since exercises table doesn't have template_id
-  // Cache is limited to 100 entries to prevent unbounded memory growth
-  const BEST_SETS_CACHE_LIMIT = 100;
-
   const fetchBestSet = async (templateId: string, exerciseName: string) => {
     if (!templateId || !exerciseName || bestSets[templateId] !== undefined) return;
 
