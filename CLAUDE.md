@@ -143,7 +143,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - `addToTesters: true` — adds to `allowed_testers` table AND sends email
 - `addToTesters: false` — just sends email (if already added manually)
 
-## Current State (Mar 13)
+## Current State (Mar 15)
 
 ### What's Working
 - Workout logging with set variants and time-based sets
@@ -152,13 +152,32 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Coach Workout Generator — ask for a workout, loads into Log pre-populated
 - Dynamic Daily Brief
 - PR detection (excludes warmup, separates by equipment)
-- 15 message daily limit
+- 15 message daily limit (currently disabled for testing — see `constants.ts`)
 - Exercise categorization with split-based tabs
 - Waitlist & beta invite emails via Resend
 - Scroll-to-bottom button in coach chat
 - Interactive app tour after onboarding (replayable from settings)
 
-### Recent Updates (Mar 13)
+### Recent Updates (Mar 15)
+- **Comprehensive .maybeSingle() migration** — Converted all remaining `.single()` calls to `.maybeSingle()` across API routes and chat tools to prevent 406 errors when optional data doesn't exist. Fixed 22 instances across 8 files:
+  - `api/chat/route.ts` (12 instances) — getUserProfile, getMaxes, getNutritionGoals, saveMemory, save_food_staples, generateWorkout, loadWorkoutToFolder, message count, conversation summary
+  - `api/waitlist/join/route.ts`, `api/coach-trigger/route.ts`, `api/daily-brief/route.ts`, `api/nutrition/recalculate/route.ts`, `api/nutrition-onboarding/route.ts`, `api/workout/pending/route.ts`, `(app)/program/page.tsx`
+- **Duplicate food prevention** — Fixed bug where rapid clicks on "Add Food" or copy button could create duplicate meals:
+  - Added client-side duplicate detection in `handleSaveFood` (checks same name + calories)
+  - Added `savingFood` guard to prevent re-entry during save
+  - Added `copyingMealId` state with 1-second debounce on copy button
+  - Copy button now shows loading spinner when copying
+- **Button loading state** — Added `loading` prop to Button component that disables the button and shows a spinner. Prevents double-submits across the app.
+- **Infinite recategorization guard** — Added `recategorizationAttemptedRef` to `exercise-picker-modal.tsx` to prevent infinite loop when API fails to categorize all exercises. Only attempts recategorization once per modal open.
+- **Null safety fixes** — Added defensive checks to prevent crashes with missing data:
+  - `daily-brief-card.tsx`: PR properties use optional chaining with fallbacks (`pr?.exercise || 'Exercise'`)
+  - `daily-brief-card.tsx`: `nutrition.display` wrapped in conditional render
+  - `nutrition/page.tsx`: `goals?.calories ?? DEFAULT_GOALS.calories` for week data
+  - `nutrition/page.tsx`: `(meals || []).filter()` for getMealLabel
+  - `nutrition/page.tsx`: `meal?.consumed && meal?.date` checks in week data loop
+- **Rate limit TODO** — Added comment in `constants.ts`: `// TODO: Set to 15 before public launch`. Currently set to 9999 for testing.
+
+### Previous Updates (Mar 13)
 - **Fixed false onboarding triggers** — Existing users were incorrectly treated as new users due to goal stored as "cut" instead of "cutting". Added `normalizeGoal()` helper that accepts variations (cut→cutting, bulk→bulking, maintain→maintaining). System now auto-fixes goal values in database when variations detected.
 - **Profile weight auto-sync** — Profile `weight_lbs` now automatically syncs from latest `weigh_ins` entry. When coach API runs, it checks if latest weigh-in differs from profile and updates accordingly. Ensures coach always sees current weight.
 - **Stats page exercise matching overhaul** — Fixed multiple issues preventing stats from showing:
