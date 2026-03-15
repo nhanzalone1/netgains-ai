@@ -31,9 +31,10 @@ export async function retrieveRelevantMemories(
       { inputType: 'query' }
     );
 
-    const queryEmbedding = embeddingResponse.data[0]?.values;
-    if (!queryEmbedding) {
-      console.error('[Memory] Failed to generate query embedding');
+    // Validate embedding response
+    const queryEmbedding = embeddingResponse?.data?.[0]?.values;
+    if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+      console.error('[Memory] Failed to generate query embedding, response:', JSON.stringify(embeddingResponse).substring(0, 200));
       return [];
     }
 

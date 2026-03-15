@@ -88,12 +88,25 @@ export async function POST(req: Request) {
       { inputType: 'passage' }
     );
 
+    // Validate embedding response
+    if (!embeddingResponse?.data || !Array.isArray(embeddingResponse.data)) {
+      console.error('[Memory Test] Invalid embedding response:', JSON.stringify(embeddingResponse).substring(0, 200));
+      return Response.json({
+        success: false,
+        error: 'Failed to generate embeddings',
+        debug: { responseKeys: Object.keys(embeddingResponse || {}) }
+      }, { status: 500 });
+    }
+
+    console.log('[Memory Test] Got', embeddingResponse.data.length, 'embeddings');
+
     const vectors = extractedMemories.map((memory, i) => {
       const vectorId = `test-${user.id}-${Date.now()}-${i}`;
-      const embedding = embeddingResponse.data[i]?.values;
+      const embeddingData = embeddingResponse.data[i];
+      const embedding = embeddingData?.values;
 
-      if (!embedding) {
-        console.error('[Memory Test] Missing embedding for index', i);
+      if (!embedding || !Array.isArray(embedding)) {
+        console.error('[Memory Test] Missing or invalid embedding for index', i, '- got:', typeof embeddingData);
         return null;
       }
 

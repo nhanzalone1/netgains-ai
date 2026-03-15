@@ -77,19 +77,34 @@ export async function POST(req: Request) {
 
     // Generate embeddings for all new memories
     const factsToEmbed = newMemories.map(m => m.fact);
+    console.log('[Memory Extract] Generating embeddings for', factsToEmbed.length, 'facts');
+
     const embeddingResponse = await pc.inference.embed(
       'llama-text-embed-v2',
       factsToEmbed,
       { inputType: 'passage' }
     );
 
+    // Validate embedding response
+    if (!embeddingResponse?.data || !Array.isArray(embeddingResponse.data)) {
+      console.error('[Memory Extract] Invalid embedding response:', JSON.stringify(embeddingResponse).substring(0, 200));
+      return Response.json({
+        success: false,
+        error: 'Failed to generate embeddings',
+        debug: { responseKeys: Object.keys(embeddingResponse || {}) }
+      }, { status: 500 });
+    }
+
+    console.log('[Memory Extract] Got', embeddingResponse.data.length, 'embeddings');
+
     // Build vectors with metadata
     const vectors = newMemories.map((memory, i) => {
       const vectorId = `${user.id}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`;
-      const embedding = embeddingResponse.data[i]?.values;
+      const embeddingData = embeddingResponse.data[i];
+      const embedding = embeddingData?.values;
 
-      if (!embedding) {
-        console.error('[Memory Extract] Missing embedding for index', i);
+      if (!embedding || !Array.isArray(embedding)) {
+        console.error('[Memory Extract] Missing or invalid embedding for index', i, '- got:', typeof embeddingData);
         return null;
       }
 
@@ -242,8 +257,10 @@ async function deduplicateMemories(
         { inputType: 'query' }
       );
 
-      const queryEmbedding = embeddingResponse.data[0]?.values;
-      if (!queryEmbedding) {
+      // Validate embedding response
+      const queryEmbedding = embeddingResponse?.data?.[0]?.values;
+      if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+        console.log('[Memory Extract] Dedup: No embedding generated, including memory anyway');
         // Can't check for duplicates, include it anyway
         newMemories.push(memory);
         continue;

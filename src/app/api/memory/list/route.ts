@@ -47,9 +47,10 @@ export async function GET(req: Request) {
       { inputType: 'query' }
     );
 
-    const queryEmbedding = embeddingResponse.data[0]?.values;
-    if (!queryEmbedding) {
-      console.error('[Memory List] Failed to generate query embedding');
+    // Validate embedding response
+    const queryEmbedding = embeddingResponse?.data?.[0]?.values;
+    if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+      console.error('[Memory List] Failed to generate query embedding, response:', JSON.stringify(embeddingResponse).substring(0, 200));
       return Response.json({ memories: [], total: 0, categories: {} });
     }
 
