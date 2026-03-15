@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
+import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { hapticLight } from "@/lib/haptics"
@@ -47,20 +48,26 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  loading = false,
+  disabled,
   onClick,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    loading?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
+  const isDisabled = disabled || loading
 
   const handleClick = React.useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (loading) return
       hapticLight()
       onClick?.(e)
     },
-    [onClick]
+    [onClick, loading]
   )
 
   return (
@@ -70,8 +77,12 @@ function Button({
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       onClick={asChild ? onClick : handleClick}
+      disabled={isDisabled}
       {...props}
-    />
+    >
+      {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+      {children}
+    </Comp>
   )
 }
 

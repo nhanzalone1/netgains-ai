@@ -118,7 +118,7 @@ export default function ProgramPage() {
         .from("program_settings")
         .select("*")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       const savedSettings = settings as ProgramSettings | null;
 

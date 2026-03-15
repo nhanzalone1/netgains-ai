@@ -842,7 +842,7 @@ export async function POST(req: Request) {
       .select('value')
       .eq('user_id', user.id)
       .eq('key', countKey)
-      .single();
+      .maybeSingle();
 
     const currentCount = countData ? parseInt(countData.value) : 0;
 
@@ -1616,7 +1616,7 @@ ${pendingChangesSection}
               .select('id')
               .eq('user_id', user.id)
               .eq('key', 'conversation_summary')
-              .single();
+              .maybeSingle();
 
             if (existing) {
               await supabase.from('coach_memory').update({ value: newSummary }).eq('id', existing.id);
@@ -1630,7 +1630,7 @@ ${pendingChangesSection}
               .select('id')
               .eq('user_id', user.id)
               .eq('key', 'summary_message_count')
-              .single();
+              .maybeSingle();
 
             if (countExisting) {
               await supabase.from('coach_memory').update({ value: String(totalMessageCount) }).eq('id', countExisting.id);
@@ -1654,9 +1654,9 @@ ${pendingChangesSection}
           .from('profiles')
           .select('height_inches, weight_lbs, goal, coaching_mode, coaching_intensity, onboarding_complete, app_tour_shown, beta_welcome_shown, created_at')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify(data);
+        return JSON.stringify(data || {});
       }
       case 'updateUserProfile': {
         console.log('[Coach] updateUserProfile called with input:', JSON.stringify(input));
@@ -1700,9 +1700,9 @@ ${pendingChangesSection}
           .from('maxes')
           .select('squat, bench, deadlift, overhead, updated_at')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
         if (error) return JSON.stringify({ error: error.message });
-        return JSON.stringify(data);
+        return JSON.stringify(data || {});
       }
       case 'getRecentLifts': {
         const limit = (input.limit as number) ?? 5;
@@ -1795,7 +1795,7 @@ ${pendingChangesSection}
           .select('id')
           .eq('user_id', user.id)
           .eq('key', key)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           const { error } = await supabase
@@ -1832,8 +1832,8 @@ ${pendingChangesSection}
           .from('nutrition_goals')
           .select('*')
           .eq('user_id', user.id)
-          .single();
-        if (error) {
+          .maybeSingle();
+        if (error || !data) {
           // Return defaults if no goals set
           return JSON.stringify(DEFAULT_NUTRITION_GOALS);
         }
@@ -1999,7 +1999,7 @@ ${pendingChangesSection}
           .from('nutrition_goals')
           .select('id')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           const { error } = await supabase
@@ -2025,7 +2025,7 @@ ${pendingChangesSection}
           .select('id, value')
           .eq('user_id', user.id)
           .eq('key', 'food_staples')
-          .single();
+          .maybeSingle();
 
         let currentStaples: string[] = [];
         if (existingRow?.value) {
@@ -2111,7 +2111,7 @@ ${pendingChangesSection}
           .select('id')
           .eq('user_id', user.id)
           .eq('key', 'pending_workout')
-          .single();
+          .maybeSingle();
 
         const workoutJson = JSON.stringify(pendingWorkout);
 
@@ -2249,7 +2249,7 @@ ${pendingChangesSection}
             .select('id, name')
             .eq('user_id', user.id)
             .eq('name', 'Coach Workouts')
-            .single();
+            .maybeSingle();
 
           if (existingFolder) {
             targetFolderId = existingFolder.id;
@@ -2286,7 +2286,7 @@ ${pendingChangesSection}
           .select('id, value')
           .eq('user_id', user.id)
           .eq('key', 'pending_workout')
-          .single();
+          .maybeSingle();
 
         if (pendingError || !pendingData) {
           return JSON.stringify({ error: 'No pending workout found. Generate a workout first.' });

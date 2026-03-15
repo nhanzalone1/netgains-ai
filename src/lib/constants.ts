@@ -20,6 +20,7 @@ export const AI_TOKEN_LIMITS = {
 
 // === RATE LIMITING ===
 export const RATE_LIMITS = {
+  // TODO: Set to 15 before public launch
   DAILY_MESSAGE_LIMIT: 9999, // Temporarily disabled (was 15)
   MAX_TOOL_ROUNDS: 10,
   SUMMARY_TRIGGER_INTERVAL: 10,

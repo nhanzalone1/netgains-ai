@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       .from('waitlist_emails')
       .select('id')
       .eq('email', normalizedEmail)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       // Already on waitlist - still return success (don't reveal if email exists)

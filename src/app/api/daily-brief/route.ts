@@ -99,10 +99,10 @@ export async function POST(request: Request) {
 
   // Fetch all required data in parallel (added meals query)
   const [profileResult, memoriesResult, workoutsResult, nutritionGoalsResult, mealsResult] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
     supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
     supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
-    supabase.from('nutrition_goals').select('*').eq('user_id', user.id).single(),
+    supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
     supabase.from('meals').select('calories, protein, carbs, fat, consumed').eq('user_id', user.id).eq('date', todayStr),
   ]);
 

@@ -125,6 +125,7 @@ export function ExercisePickerModal({
   const supabase = createClient();
   const tabsRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
+  const recategorizationAttemptedRef = useRef(false);
 
   // State
   const [exercises, setExercises] = useState<ExerciseWithMuscleGroup[]>([]);
@@ -264,6 +265,8 @@ export function ExercisePickerModal({
   // Load exercises on mount
   useEffect(() => {
     if (open) {
+      // Reset recategorization guard on modal open
+      recategorizationAttemptedRef.current = false;
       loadExercises();
       loadRecentExercises();
       setActiveTab("Recent");
@@ -291,10 +294,11 @@ export function ExercisePickerModal({
     setExercises(exerciseList);
     setLoading(false);
 
-    // Auto-recategorize if any exercises have null muscle_group
+    // Auto-recategorize if any exercises have null muscle_group (only attempt once per modal open)
     const needsRecategorization = exerciseList.some(ex => !ex.muscle_group);
-    if (needsRecategorization && exerciseList.length > 0) {
+    if (needsRecategorization && exerciseList.length > 0 && !recategorizationAttemptedRef.current) {
       console.log("[ExercisePicker] Detected exercises without muscle_group, triggering recategorization...");
+      recategorizationAttemptedRef.current = true;
       triggerRecategorization();
     }
   };

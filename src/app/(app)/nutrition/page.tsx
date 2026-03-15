@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -238,6 +238,9 @@ export default function NutritionPage() {
   const [editMealServing, setEditMealServing] = useState("");
   const [savingMealEdit, setSavingMealEdit] = useState(false);
 
+  // Copy meal debounce
+  const [copyingMealId, setCopyingMealId] = useState<string | null>(null);
+
 
   // Always start on today's date when page loads
   useEffect(() => {
@@ -335,16 +338,16 @@ export default function NutritionPage() {
 
     const weekDataMap = new Map<string, number>();
     (weekMeals || []).forEach((meal: { date: string; calories: number; consumed: boolean }) => {
-      if (meal.consumed) {
+      if (meal?.consumed && meal?.date) {
         const current = weekDataMap.get(meal.date) || 0;
-        weekDataMap.set(meal.date, current + meal.calories);
+        weekDataMap.set(meal.date, current + (meal.calories || 0));
       }
     });
 
     setWeekData(weekDates.map((date) => ({
       date,
       calories: weekDataMap.get(formatDate(date)) || 0,
-      goal: goals.calories,
+      goal: goals?.calories ?? DEFAULT_GOALS.calories,
     })));
   };
 
@@ -427,7 +430,7 @@ export default function NutritionPage() {
 
   // Get meal/snack labels with numbers
   const getMealLabel = (meal: Meal, index: number): string => {
-    const sameTypeMeals = meals.filter((m) => m.meal_type === meal.meal_type);
+    const sameTypeMeals = (meals || []).filter((m) => m.meal_type === meal.meal_type);
     const mealIndex = sameTypeMeals.findIndex((m) => m.id === meal.id) + 1;
     return meal.meal_type === "meal" ? `Meal ${mealIndex}` : `Snack ${mealIndex}`;
   };
@@ -478,7 +481,31 @@ export default function NutritionPage() {
   };
 
   const handleSaveFood = async () => {
-    if (!user || !foodName.trim()) return;
+    if (!user || !foodName.trim() || savingFood) return;
+
+    const trimmedName = foodName.trim().toLowerCase();
+    const newCalories = parseFloat(foodCalories) || 0;
+
+    // Client-side duplicate check: same name AND same calories logged today
+    const isDuplicate = meals.some(
+      (m) =>
+        m.food_name.toLowerCase() === trimmedName &&
+        m.calories === newCalories &&
+        m.consumed
+    );
+
+    if (isDuplicate) {
+      // Silently skip - meal already logged
+      setShowAddFood(false);
+      setFoodName("");
+      setFoodCalories("");
+      setFoodProtein("");
+      setFoodCarbs("");
+      setFoodFat("");
+      setFoodServing("");
+      setIsAiEstimate(false);
+      return;
+    }
 
     setSavingFood(true);
 
@@ -487,7 +514,7 @@ export default function NutritionPage() {
       date: formatDate(selectedDate),
       meal_type: addFoodType,
       food_name: foodName.trim(),
-      calories: parseFloat(foodCalories) || 0,
+      calories: newCalories,
       protein: parseFloat(foodProtein) || 0,
       carbs: parseFloat(foodCarbs) || 0,
       fat: parseFloat(foodFat) || 0,
@@ -513,7 +540,7 @@ export default function NutritionPage() {
     // Trigger coach "next up" directive with time context
     triggerCoachResponse(user.id, 'meal_logged', {
       mealName: foodName.trim(),
-      calories: parseFloat(foodCalories) || 0,
+      calories: newCalories,
       protein: parseFloat(foodProtein) || 0,
       carbs: parseFloat(foodCarbs) || 0,
       fat: parseFloat(foodFat) || 0,
@@ -557,46 +584,55 @@ export default function NutritionPage() {
   const copyMeal = async (meal: Meal) => {
     if (!user) return;
 
+    // Debounce: prevent rapid clicks on the same meal
+    if (copyingMealId === meal.id) return;
+    setCopyingMealId(meal.id);
+
     const today = new Date();
     const todayStr = formatDate(today);
     const isViewingToday = formatDate(selectedDate) === todayStr;
 
-    const { data } = await supabase
-      .from("meals")
-      .insert({
-        user_id: user.id,
-        date: todayStr, // Always copy to today
-        meal_type: meal.meal_type,
-        food_name: meal.food_name,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fat: meal.fat,
-        serving_size: meal.serving_size,
-        ai_generated: false,
-        consumed: true,
-      })
-      .select()
-      .single();
+    try {
+      const { data } = await supabase
+        .from("meals")
+        .insert({
+          user_id: user.id,
+          date: todayStr, // Always copy to today
+          meal_type: meal.meal_type,
+          food_name: meal.food_name,
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat,
+          serving_size: meal.serving_size,
+          ai_generated: false,
+          consumed: true,
+        })
+        .select()
+        .single();
 
-    if (data) {
-      // Only add to local state if viewing today
-      if (isViewingToday) {
-        setMeals((prev) => [...prev, data as Meal]);
+      if (data) {
+        // Only add to local state if viewing today
+        if (isViewingToday) {
+          setMeals((prev) => [...prev, data as Meal]);
+        }
+        loadWeekData();
+        invalidateDailyBriefCache(user.id);
+        // Trigger coach "next up" directive with time context
+        triggerCoachResponse(user.id, 'meal_logged', {
+          mealName: meal.food_name,
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat,
+          localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+          localHour: new Date().getHours(),
+          localDate: formatDate(new Date()),
+        });
       }
-      loadWeekData();
-      invalidateDailyBriefCache(user.id);
-      // Trigger coach "next up" directive with time context
-      triggerCoachResponse(user.id, 'meal_logged', {
-        mealName: meal.food_name,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fat: meal.fat,
-        localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-        localHour: new Date().getHours(),
-        localDate: formatDate(new Date()),
-      });
+    } finally {
+      // Reset after a short delay to prevent rapid re-clicks
+      setTimeout(() => setCopyingMealId(null), 1000);
     }
   };
 
@@ -896,9 +932,14 @@ export default function NutritionPage() {
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => copyMeal(meal)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary"
+                      disabled={copyingMealId === meal.id}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary ${copyingMealId === meal.id ? 'opacity-50' : ''}`}
                     >
-                      <Copy className="w-3.5 h-3.5" />
+                      {copyingMealId === meal.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
                     </motion.button>
                     <motion.button
                       whileTap={{ scale: 0.9 }}

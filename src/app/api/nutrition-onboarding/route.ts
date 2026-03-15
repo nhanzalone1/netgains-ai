@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       .from('profiles')
       .select('weight_lbs, height_inches, goal, coaching_intensity')
       .eq('id', user.id)
-      .single(),
+      .maybeSingle(),
     supabase
       .from('coach_memory')
       .select('key, value')

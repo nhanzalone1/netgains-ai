@@ -16,7 +16,7 @@ export async function GET() {
       .select('value')
       .eq('user_id', user.id)
       .eq('key', 'pending_workout')
-      .single();
+      .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows returned (not an error for us)

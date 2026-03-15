@@ -209,7 +209,7 @@ export function DailyBriefCard() {
                 }}
               >
                 <Trophy className="w-3 h-3" />
-                {pr.exercise} {pr.weight}x{pr.reps}
+                {pr?.exercise || 'Exercise'} {pr?.weight ?? '?'}x{pr?.reps ?? '?'}
               </span>
             ))}
           </div>
@@ -230,9 +230,11 @@ export function DailyBriefCard() {
         )}
 
         {/* Nutrition line */}
-        <p className="text-xs text-muted-foreground mt-2">
-          {nutrition.display}
-        </p>
+        {nutrition?.display && (
+          <p className="text-xs text-muted-foreground mt-2">
+            {nutrition.display}
+          </p>
+        )}
       </div>
     );
   }
