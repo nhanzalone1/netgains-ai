@@ -114,8 +114,8 @@ After meal/workout save, `/api/coach-trigger` (Haiku) generates directive, saves
 ### Set Variants
 `normal`, `warmup`, `drop`, `failure`, `assisted-parent/child`, `left/right`. Warmup excluded from PRs.
 
-### Timezone
-Client sends `localDate` with every message. Never rely on server time.
+### Timezone & Time Context
+Client sends `localDate` (YYYY-MM-DD) and `localTime` (e.g., "9:15 PM") with every message. Never rely on server time. Coach uses current time for time-appropriate advice (meal timing, late-night warnings, workout scheduling).
 
 ## Profile Fields
 - `goal` — cutting, bulking, maintaining (also accepts: cut, bulk, maintain — auto-normalized)
@@ -183,6 +183,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - Interactive app tour after onboarding (replayable from settings)
 
 ### Recent Updates (Mar 15)
+- **Time-aware coaching** — Client sends `localTime` (e.g., "9:15 PM") on every message. Coach uses this for time-appropriate advice like "it's late, skip the heavy meal" or "morning workout? perfect for fasted cardio."
 - **Pinecone long-term memory integration** — Coach now remembers facts across sessions using semantic vector search:
   - Extracts atomic facts (injuries, PRs, preferences, patterns) at session end via Haiku
   - Retrieves top 7 relevant memories per message from Pinecone
