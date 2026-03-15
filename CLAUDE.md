@@ -183,6 +183,7 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
 - **bestSets cache limit** — Added `BEST_SETS_CACHE_LIMIT = 100` in `workout-session.tsx` to prevent unbounded memory growth when adding exercises.
 - **Meals query pagination** — Added `.limit(50)` to meals query in `coach-trigger/route.ts` to prevent large payloads.
 - **AbortController cleanup** — Refactored `pending-workout-banner.tsx` fetch to use AbortController with proper cleanup on unmount, preventing state updates after unmount.
+- **Null safety: localStorage restore** — Added null check for `ex.sets` in `workout-session.tsx` localStorage restore to prevent crash if stored data is malformed.
 
 ### Previous Updates (Mar 13)
 - **Fixed false onboarding triggers** — Existing users were incorrectly treated as new users due to goal stored as "cut" instead of "cutting". Added `normalizeGoal()` helper that accepts variations (cut→cutting, bulk→bulking, maintain→maintaining). System now auto-fixes goal values in database when variations detected.
