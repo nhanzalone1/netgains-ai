@@ -182,11 +182,19 @@ import { apiFetch } from "@/lib/capacitor";
 // apiFetch("/api/chat", {...}) → "https://netgainsai.com/api/chat" on iOS
 ```
 
-### Future: Phase 2 (Static Export)
-For faster load times, can switch to bundled static assets. Requires:
-- Remove `server.url` from capacitor.config.ts
-- Configure static export in next.config.ts
-- Exclude API routes and middleware from export
+### Splash Screen
+Two-stage splash for native iOS:
+1. **iOS LaunchScreen** (`ios/App/App/Base.lproj/LaunchScreen.storyboard`) — solid dark background, shows instantly
+2. **Animated splash** (`src/components/animated-splash.tsx`) — Framer Motion SVG draws cyan chart line going up
+3. **SplashWrapper** (`src/components/splash-wrapper.tsx`) — shows animation once per session on native, skips on web
+
+The animated splash uses the same gradient as `globals.css` body::before for seamless transition.
+
+### Phase 2: Native Features (Future)
+- **Push Notifications** — APNs setup, notification server for Coach alerts
+- **Haptic Feedback** — vibrations on set completion, PRs, button interactions
+- **HealthKit** — sync with Apple Health (weight, workouts)
+- **Widgets** — home screen widgets for quick logging
 
 ## Environment Variables
 
