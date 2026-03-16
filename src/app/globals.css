@@ -55,6 +55,16 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Delayed gradient fade-in to prevent flash during native app splash */
+@keyframes gradient-fade-in {
+  0%, 80% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* Rich gradient background with depth */
 body::before {
   content: "";
@@ -77,6 +87,18 @@ body::before {
       var(--background-elevated) 0%,
       var(--background) 70%
     );
+  /* Delay gradient appearance to prevent flash during native splash */
+  animation: gradient-fade-in 2.5s ease-out forwards;
+}
+
+/* Delayed noise fade-in to prevent flash during native app splash */
+@keyframes noise-fade-in {
+  0%, 80% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.035;
+  }
 }
 
 /* Subtle noise texture overlay */
@@ -85,11 +107,13 @@ body::after {
   position: fixed;
   inset: 0;
   z-index: -1;
-  opacity: 0.035;
+  opacity: 0;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
+  /* Delay noise appearance to prevent flash during native splash */
+  animation: noise-fade-in 2.5s ease-out forwards;
 }
 
 /* Glass effect utility classes - premium floating feel */
