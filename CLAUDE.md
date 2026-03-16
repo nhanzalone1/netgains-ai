@@ -86,6 +86,28 @@ index.upsert({ records: vectors })
 ### Auto-Triggers
 After meal/workout save, Haiku generates proactive message → badge on Coach tab.
 
+### Meal Type Classification
+AI classifies food logs as meal vs snack based on food content, not just time:
+
+**Snack** — small items eaten between meals:
+- Protein bars (RX bars, Quest bars, KIND bars)
+- Protein shakes, smoothies, pre-workout drinks
+- Rice cakes, crackers, nuts, single fruits
+- Yogurt cups, cheese sticks, grab-and-go items
+
+**Breakfast/Lunch/Dinner** — main meals at typical times
+
+**Meal** — substantial food outside standard times:
+- Bulker's 4th, 5th, or 6th meal of the day
+- Mid-morning or mid-afternoon full meals
+- Late night substantial meals
+
+**Rule of thumb:** If you'd eat it standing up in 2 minutes, it's a snack. If you'd sit down with a plate, it's a meal.
+
+**Database:** `meals.meal_type` accepts: `breakfast`, `lunch`, `dinner`, `snack`, `meal`
+
+**UI:** Edit Food modal has Meal/Snack toggle. Display groups all non-snack types as "Meal X".
+
 ## Key Patterns
 
 ### Client → Server Context
