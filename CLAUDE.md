@@ -191,6 +191,11 @@ curl -X POST https://netgainsai.com/api/admin/invite-beta \
   - "What Coach Remembers" view in User Menu (Settings)
   - Files: `lib/pinecone.ts`, `lib/memory-retrieval.ts`, `api/memory/extract`, `api/memory/list`, `coach-memories-sheet.tsx`
   - Graceful degradation if Pinecone unavailable
+- **Pinecone SDK v7 API fixes** — Fixed API calls to match Pinecone TypeScript SDK v7 object-based syntax:
+  - `pc.inference.embed()` changed from positional args to `{ model, inputs, parameters }` object
+  - `index.upsert()` changed from `upsert(vectors)` to `upsert({ records: vectors })`
+  - Added test endpoint `/api/memory/test-extract` with dummy conversation for verification
+  - Added detailed logging for debugging extraction and embedding flows
 - **Comprehensive .maybeSingle() migration** — Converted all remaining `.single()` calls to `.maybeSingle()` across API routes and chat tools to prevent 406 errors when optional data doesn't exist. Fixed 22 instances across 8 files:
   - `api/chat/route.ts` (12 instances) — getUserProfile, getMaxes, getNutritionGoals, saveMemory, save_food_staples, generateWorkout, loadWorkoutToFolder, message count, conversation summary
   - `api/waitlist/join/route.ts`, `api/coach-trigger/route.ts`, `api/daily-brief/route.ts`, `api/nutrition/recalculate/route.ts`, `api/nutrition-onboarding/route.ts`, `api/workout/pending/route.ts`, `(app)/program/page.tsx`

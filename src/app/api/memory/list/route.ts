@@ -41,11 +41,11 @@ export async function GET(req: Request) {
 
     // Generate a generic embedding to query all memories
     // Using a fitness-related phrase to get broad matches
-    const embeddingResponse = await pc.inference.embed(
-      'llama-text-embed-v2',
-      ['fitness training nutrition health wellness workout exercise'],
-      { inputType: 'query' }
-    );
+    const embeddingResponse = await pc.inference.embed({
+      model: 'llama-text-embed-v2',
+      inputs: ['fitness training nutrition health wellness workout exercise'],
+      parameters: { inputType: 'query' }
+    });
 
     // Validate embedding response
     const queryEmbedding = embeddingResponse?.data?.[0]?.values;

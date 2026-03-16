@@ -28,7 +28,9 @@ const DUMMY_MESSAGES = [
 ];
 
 export async function POST(req: Request) {
-  console.log('[Memory Test] Test extraction endpoint called');
+  console.log('[Memory Test] ========================================');
+  console.log('[Memory Test] TEST MODE - Bypassing all session tracking');
+  console.log('[Memory Test] ========================================');
 
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -37,18 +39,24 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Allow custom messages or use dummy ones
+  console.log('[Memory Test] Authenticated user:', user.id);
+
+  // Always use dummy messages by default - this is a TEST endpoint
+  // No session tracking, no localStorage checks, no minimum message requirements
   let messages = DUMMY_MESSAGES;
+  let usingCustomMessages = false;
+
   try {
     const body = await req.json();
     if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
       messages = body.messages;
+      usingCustomMessages = true;
     }
   } catch {
-    // Use default dummy messages
+    // No body provided - use default dummy messages (expected behavior)
   }
 
-  console.log('[Memory Test] Using', messages.length, 'messages for extraction');
+  console.log('[Memory Test] Using', usingCustomMessages ? 'CUSTOM' : 'DUMMY', 'messages:', messages.length, 'total');
 
   // Check Pinecone availability
   const pineconeAvailable = await isPineconeAvailable();
@@ -62,8 +70,19 @@ export async function POST(req: Request) {
 
   try {
     // Extract facts using Haiku
-    console.log('[Memory Test] Extracting facts...');
+    console.log('[Memory Test] Extracting facts from', messages.length, 'messages');
     const extractedMemories = await extractAtomicFacts(messages);
+
+    // Validate extractedMemories
+    if (!extractedMemories || !Array.isArray(extractedMemories)) {
+      console.error('[Memory Test] extractAtomicFacts returned invalid result:', typeof extractedMemories);
+      return Response.json({
+        success: false,
+        error: 'Fact extraction returned invalid result',
+        debug: { type: typeof extractedMemories, value: String(extractedMemories).substring(0, 100) }
+      }, { status: 500 });
+    }
+
     console.log('[Memory Test] Extracted', extractedMemories.length, 'facts');
 
     if (extractedMemories.length === 0) {
@@ -81,12 +100,25 @@ export async function POST(req: Request) {
 
     const factsToEmbed = extractedMemories.map(m => m.fact);
     console.log('[Memory Test] Generating embeddings for', factsToEmbed.length, 'facts');
+    console.log('[Memory Test] Facts to embed:', factsToEmbed);
 
-    const embeddingResponse = await pc.inference.embed(
-      'llama-text-embed-v2',
-      factsToEmbed,
-      { inputType: 'passage' }
-    );
+    // Check if inference API is available
+    if (!pc.inference || typeof pc.inference.embed !== 'function') {
+      console.error('[Memory Test] Pinecone inference API not available');
+      return Response.json({
+        success: false,
+        error: 'Pinecone inference API not available',
+        debug: { hasInference: !!pc.inference, embedType: typeof pc.inference?.embed }
+      }, { status: 500 });
+    }
+
+    console.log('[Memory Test] Calling pc.inference.embed...');
+    const embeddingResponse = await pc.inference.embed({
+      model: 'llama-text-embed-v2',
+      inputs: factsToEmbed,
+      parameters: { inputType: 'passage' }
+    });
+    console.log('[Memory Test] Embedding response received:', JSON.stringify(embeddingResponse).substring(0, 300));
 
     // Validate embedding response
     if (!embeddingResponse?.data || !Array.isArray(embeddingResponse.data)) {
@@ -126,10 +158,18 @@ export async function POST(req: Request) {
       };
     }).filter((v): v is NonNullable<typeof v> => v !== null);
 
-    if (vectors.length > 0) {
-      console.log('[Memory Test] Upserting', vectors.length, 'vectors to Pinecone');
-      await index.upsert(vectors);
+    if (vectors.length === 0) {
+      console.log('[Memory Test] No valid vectors created (embeddings may have failed)');
+      return Response.json({
+        success: false,
+        error: 'No valid vectors created',
+        extracted_count: extractedMemories.length,
+        message: 'Facts were extracted but embedding generation failed for all of them'
+      }, { status: 500 });
     }
+
+    console.log('[Memory Test] Upserting', vectors.length, 'vectors to Pinecone');
+    await index.upsert({ records: vectors });
 
     // Return detailed results for verification
     return Response.json({
@@ -145,9 +185,13 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error('[Memory Test] Error:', error);
+    const errorDetails = error instanceof Error
+      ? { message: error.message, stack: error.stack?.split('\n').slice(0, 5).join('\n') }
+      : { raw: String(error) };
     return Response.json({
       error: 'Extraction failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      debug: errorDetails
     }, { status: 500 });
   }
 }
@@ -187,16 +231,27 @@ ${conversationText}
 
 Return ONLY a valid JSON array. No other text, markdown, or explanation.`;
 
+  console.log('[Memory Test] ===== FULL PROMPT TO HAIKU =====');
+  console.log(prompt);
+  console.log('[Memory Test] ===== END PROMPT =====');
+  console.log('[Memory Test] Calling Haiku model:', PINECONE_CONFIG.EXTRACTION_MODEL);
   const response = await anthropic.messages.create({
     model: PINECONE_CONFIG.EXTRACTION_MODEL,
     max_tokens: PINECONE_CONFIG.EXTRACTION_MAX_TOKENS,
     messages: [{ role: 'user', content: prompt }],
   });
 
+  console.log('[Memory Test] Haiku response received, content blocks:', response.content.length);
+
   const textBlock = response.content.find(b => b.type === 'text');
   if (!textBlock || !('text' in textBlock)) {
+    console.error('[Memory Test] No text block in Haiku response');
     return [];
   }
+
+  console.log('[Memory Test] ===== RAW HAIKU RESPONSE =====');
+  console.log(textBlock.text);
+  console.log('[Memory Test] ===== END HAIKU RESPONSE =====');
 
   try {
     let jsonText = textBlock.text.trim();
@@ -205,23 +260,36 @@ Return ONLY a valid JSON array. No other text, markdown, or explanation.`;
     }
 
     const parsed = JSON.parse(jsonText);
+    console.log('[Memory Test] Parsed JSON, item count:', Array.isArray(parsed) ? parsed.length : 'not an array');
 
     if (!Array.isArray(parsed)) {
+      console.error('[Memory Test] Parsed result is not an array:', typeof parsed);
       return [];
     }
 
-    return parsed.filter((item): item is ExtractedMemory => {
-      return (
-        typeof item.fact === 'string' &&
-        item.fact.length > 0 &&
-        MEMORY_CATEGORIES.includes(item.category) &&
-        typeof item.importance === 'number' &&
-        item.importance >= 1 &&
-        item.importance <= 5 &&
-        typeof item.source_text === 'string'
-      );
+    const filtered = parsed.filter((item): item is ExtractedMemory => {
+      const checks = {
+        hasFact: typeof item.fact === 'string',
+        factNotEmpty: item.fact?.length > 0,
+        validCategory: MEMORY_CATEGORIES.includes(item.category),
+        hasImportance: typeof item.importance === 'number',
+        importanceInRange: item.importance >= 1 && item.importance <= 5,
+        hasSourceText: typeof item.source_text === 'string',
+      };
+      const isValid = Object.values(checks).every(Boolean);
+      if (!isValid) {
+        console.log('[Memory Test] Item failed validation:', checks);
+        console.log('[Memory Test] Item data:', JSON.stringify(item).substring(0, 200));
+        console.log('[Memory Test] Valid categories are:', MEMORY_CATEGORIES);
+      }
+      return isValid;
     });
-  } catch {
+
+    console.log('[Memory Test] After validation filter:', filtered.length, 'valid facts');
+    return filtered;
+  } catch (parseError) {
+    console.error('[Memory Test] JSON parse error:', parseError);
+    console.error('[Memory Test] Failed to parse text:', textBlock.text.substring(0, 200));
     return [];
   }
 }

@@ -25,11 +25,11 @@ export async function retrieveRelevantMemories(
     const index = getMemoryIndex();
 
     // Generate embedding using Pinecone's inference API
-    const embeddingResponse = await pc.inference.embed(
-      'llama-text-embed-v2',
-      [queryText],
-      { inputType: 'query' }
-    );
+    const embeddingResponse = await pc.inference.embed({
+      model: 'llama-text-embed-v2',
+      inputs: [queryText],
+      parameters: { inputType: 'query' }
+    });
 
     // Validate embedding response
     const queryEmbedding = embeddingResponse?.data?.[0]?.values;

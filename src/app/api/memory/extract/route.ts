@@ -79,11 +79,11 @@ export async function POST(req: Request) {
     const factsToEmbed = newMemories.map(m => m.fact);
     console.log('[Memory Extract] Generating embeddings for', factsToEmbed.length, 'facts');
 
-    const embeddingResponse = await pc.inference.embed(
-      'llama-text-embed-v2',
-      factsToEmbed,
-      { inputType: 'passage' }
-    );
+    const embeddingResponse = await pc.inference.embed({
+      model: 'llama-text-embed-v2',
+      inputs: factsToEmbed,
+      parameters: { inputType: 'passage' }
+    });
 
     // Validate embedding response
     if (!embeddingResponse?.data || !Array.isArray(embeddingResponse.data)) {
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
 
     // Upsert to Pinecone
     if (vectors.length > 0) {
-      await index.upsert(vectors);
+      await index.upsert({ records: vectors });
       console.log('[Memory Extract] Upserted', vectors.length, 'vectors to Pinecone');
     }
 
@@ -251,11 +251,11 @@ async function deduplicateMemories(
   for (const memory of memories) {
     try {
       // Generate embedding for the fact
-      const embeddingResponse = await pc.inference.embed(
-        'llama-text-embed-v2',
-        [memory.fact],
-        { inputType: 'query' }
-      );
+      const embeddingResponse = await pc.inference.embed({
+        model: 'llama-text-embed-v2',
+        inputs: [memory.fact],
+        parameters: { inputType: 'query' }
+      });
 
       // Validate embedding response
       const queryEmbedding = embeddingResponse?.data?.[0]?.values;
