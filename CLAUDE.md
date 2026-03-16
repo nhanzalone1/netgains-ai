@@ -120,7 +120,73 @@ Separated by equipment type. Excludes warmup and time-based sets.
 npm run dev      # Local dev
 npm run build    # Production build
 npm run lint     # Lint check
+npm run build:ios    # Build iOS app
+npm run cap:open:ios # Open in Xcode
 ```
+
+## iOS / App Store
+
+### Architecture
+Capacitor wraps the PWA for native iOS distribution. **Phase 1** uses live server mode—the app loads directly from `https://netgainsai.com` via WebView, with access to native Capacitor plugins.
+
+**Key files:**
+- `capacitor.config.ts` — Bundle ID: `ai.netgains.app`, server URL config
+- `src/lib/capacitor.ts` — `apiFetch()` wrapper for native API calls
+- `scripts/build-ios.sh` — Build script
+- `ios/` — Xcode project (generated)
+
+### Prerequisites
+
+1. **Xcode** from Mac App Store
+2. **CocoaPods:**
+   ```bash
+   # Install Homebrew if needed
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+   # Install CocoaPods
+   brew install cocoapods
+   ```
+3. **Apple Developer Program** ($99/year) for App Store submission
+
+### First-Time Setup
+
+```bash
+# Add iOS platform (one-time)
+npx cap add ios
+
+# Build and sync
+npm run build:ios
+
+# Open in Xcode
+npm run cap:open:ios
+```
+
+### In Xcode
+1. Select **Development Team** in Signing & Capabilities
+2. Set deployment target to **iOS 14.0+**
+3. Update app icon (requires 1024x1024 for App Store)
+4. Build → Run on simulator or device
+
+### App Store Submission Checklist
+- [ ] Apple Developer account active
+- [ ] App icon 1024x1024 (no transparency)
+- [ ] Screenshots for required device sizes
+- [ ] Privacy policy URL
+- [ ] App Store Connect listing complete
+- [ ] TestFlight build uploaded and tested
+
+### API Calls in Native Context
+All API calls use `apiFetch()` from `src/lib/capacitor.ts`. This automatically prefixes URLs with the production domain when running in native context:
+```typescript
+import { apiFetch } from "@/lib/capacitor";
+// apiFetch("/api/chat", {...}) → "https://netgainsai.com/api/chat" on iOS
+```
+
+### Future: Phase 2 (Static Export)
+For faster load times, can switch to bundled static assets. Requires:
+- Remove `server.url` from capacitor.config.ts
+- Configure static export in next.config.ts
+- Exclude API routes and middleware from export
 
 ## Environment Variables
 

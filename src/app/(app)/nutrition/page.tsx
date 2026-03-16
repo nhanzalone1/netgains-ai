@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 import { SkeletonNutrition, Skeleton } from "@/components/ui/skeleton";
+import { apiFetch } from "@/lib/capacitor";
 
 interface Meal {
   id: string;
@@ -452,7 +453,7 @@ export default function NutritionPage() {
     try {
       // If user provided a serving size, include it so AI calculates for that amount
       const userServingSize = foodServing.trim();
-      const response = await fetch("/api/nutrition/estimate", {
+      const response = await apiFetch("/api/nutrition/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

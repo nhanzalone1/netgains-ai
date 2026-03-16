@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, ArrowRight, Check, AlertTriangle } from "lucide-react";
+import { apiFetch } from "@/lib/capacitor";
 
 // Define these outside the component to prevent re-creation on every render
 function CoachBubble({ children }: { children: React.ReactNode }) {
@@ -149,7 +150,7 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
     setIsCalculating(true);
 
     try {
-      const response = await fetch("/api/nutrition-onboarding", {
+      const response = await apiFetch("/api/nutrition-onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -263,7 +264,7 @@ export function NutritionOnboarding({ onComplete }: NutritionOnboardingProps) {
     setSaveError(null);
 
     try {
-      const response = await fetch("/api/nutrition-onboarding/save", {
+      const response = await apiFetch("/api/nutrition-onboarding/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goals: finalGoals }),

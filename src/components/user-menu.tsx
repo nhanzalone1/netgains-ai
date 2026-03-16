@@ -9,6 +9,7 @@ import { useAuth } from "./auth-provider";
 import { useTheme, themes } from "./theme-provider";
 import { IconButton } from "./ui/icon-button";
 import { CoachMemoriesSheet } from "./coach-memories-sheet";
+import { apiFetch } from "@/lib/capacitor";
 
 const intensityOptions = [
   { id: "light", name: "Light", description: "~300 cal deficit/surplus" },
@@ -82,7 +83,7 @@ export function UserMenu() {
 
       // Recalculate nutrition goals based on new intensity
       try {
-        const response = await fetch("/api/nutrition/recalculate", { method: "POST" });
+        const response = await apiFetch("/api/nutrition/recalculate", { method: "POST" });
         const data = await response.json();
 
         // Save pending change for coach to acknowledge

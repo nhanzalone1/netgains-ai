@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { AlertTriangle, RefreshCw, Trash2, Play, Eye, EyeOff } from "lucide-react";
+import { apiFetch } from "@/lib/capacitor";
 
 // Only allow in development
 const IS_DEV = process.env.NODE_ENV === "development";
@@ -171,7 +172,7 @@ export default function DebugPage() {
     const triggerMessage = `[SYSTEM_TRIGGER] effectiveDate=${effectiveDate} User opened coach tab. Generate greeting.`;
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -723,7 +724,7 @@ export default function DebugPage() {
               if (!confirm("Full reset? This wipes onboarding, memories, and milestones.")) return;
               clearChatHistory();
               try {
-                await fetch("/api/coach-reset", { method: "POST" });
+                await apiFetch("/api/coach-reset", { method: "POST" });
                 showMessage("Full coach reset complete!");
               } catch (e) {
                 showMessage(`Reset error: ${e}`);
@@ -736,7 +737,7 @@ export default function DebugPage() {
               clearChatHistory();
               localStorage.removeItem(`netgains-daily-brief-${user?.id}`);
               try {
-                const res = await fetch("/api/coach-reset?full=true", { method: "POST" });
+                const res = await apiFetch("/api/coach-reset?full=true", { method: "POST" });
                 const data = await res.json();
                 if (data.success) {
                   showMessage("Nuclear reset complete! Refresh to start fresh.");

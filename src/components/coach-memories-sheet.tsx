@@ -5,6 +5,7 @@ import { Brain, Activity, Apple, AlertTriangle, Heart, History, Loader2, Dumbbel
 import { motion } from "framer-motion";
 import { Sheet } from "./ui/sheet";
 import { MEMORY_CATEGORIES, MemoryCategory } from "@/lib/constants";
+import { apiFetch } from "@/lib/capacitor";
 
 interface Memory {
   id: string;
@@ -52,7 +53,7 @@ export function CoachMemoriesSheet({ isOpen, onClose }: CoachMemoriesSheetProps)
   const loadMemories = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/memory/list');
+      const response = await apiFetch('/api/memory/list');
       if (response.ok) {
         const data = await response.json();
         setMemories(data.memories || []);

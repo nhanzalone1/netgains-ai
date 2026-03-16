@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Dumbbell, X, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiFetch } from "@/lib/capacitor";
 
 interface PendingWorkoutExercise {
   name: string;
@@ -50,7 +51,7 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
 
     const fetchPendingWorkout = async () => {
       try {
-        const response = await fetch("/api/workout/pending", {
+        const response = await apiFetch("/api/workout/pending", {
           signal: abortController.signal,
         });
         if (!response.ok) {
@@ -82,7 +83,7 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
   const handleDismiss = async () => {
     setIsDismissing(true);
     try {
-      await fetch("/api/workout/pending", { method: "DELETE" });
+      await apiFetch("/api/workout/pending", { method: "DELETE" });
       setPendingWorkout(null);
     } catch (err) {
       console.error("Failed to dismiss pending workout:", err);
@@ -124,7 +125,7 @@ export function PendingWorkoutBanner({ onLoadWorkout }: PendingWorkoutBannerProp
 
     // Clear from database
     try {
-      await fetch("/api/workout/pending", { method: "DELETE" });
+      await apiFetch("/api/workout/pending", { method: "DELETE" });
     } catch (err) {
       console.error("Failed to clear pending workout:", err);
     }

@@ -2,6 +2,7 @@
 // Uses database to track last viewed time and check for new messages
 
 import { createClient } from '@/lib/supabase/client';
+import { apiFetch } from '@/lib/capacitor';
 
 const supabase = createClient();
 
@@ -156,7 +157,7 @@ export async function triggerCoachResponse(
         console.log('[CoachTrigger] Sending batched trigger with', mealsToSend.length, 'meals');
 
         try {
-          const response = await fetch('/api/coach-trigger', {
+          const response = await apiFetch('/api/coach-trigger', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -190,7 +191,7 @@ export async function triggerCoachResponse(
 
   // For workout triggers, send immediately (no batching)
   try {
-    const response = await fetch('/api/coach-trigger', {
+    const response = await apiFetch('/api/coach-trigger', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

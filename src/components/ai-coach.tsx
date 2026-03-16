@@ -6,6 +6,7 @@ import { Sparkles, Send, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth-provider";
 import { useTheme } from "@/components/theme-provider";
+import { apiFetch } from "@/lib/capacitor";
 
 interface Message {
   id: string;
@@ -42,7 +43,7 @@ export function AICoach() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

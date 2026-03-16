@@ -9,6 +9,7 @@ import {
   DAILY_BRIEF_INVALIDATE_EVENT,
   type DailyBriefResponse,
 } from "@/lib/daily-brief-cache";
+import { apiFetch } from "@/lib/capacitor";
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -41,7 +42,7 @@ export function DailyBriefCard() {
     const effectiveDate = getDebugDate();
 
     try {
-      const response = await fetch("/api/daily-brief", {
+      const response = await apiFetch("/api/daily-brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ effectiveDate }),

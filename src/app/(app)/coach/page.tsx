@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { markCoachAsViewed } from "@/lib/coach-notification";
+import { apiFetch } from "@/lib/capacitor";
 
 // Hardcoded first message for new users with empty profiles
 const HARDCODED_FIRST_MESSAGE = "hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know.";
@@ -432,7 +433,7 @@ export default function CoachPage() {
 
   // Send a request to the chat API
   const sendRequest = useCallback(async (allMessages: Message[], signal?: AbortSignal): Promise<Response> => {
-    const response = await fetch("/api/chat", {
+    const response = await apiFetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -782,7 +783,7 @@ export default function CoachPage() {
     console.log('[Memory] Triggering extraction for', newMessages.length, 'messages');
 
     try {
-      const response = await fetch('/api/memory/extract', {
+      const response = await apiFetch('/api/memory/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1009,7 +1010,7 @@ export default function CoachPage() {
 
     // Reset onboarding and memories via API
     try {
-      await fetch("/api/coach-reset", { method: "POST" });
+      await apiFetch("/api/coach-reset", { method: "POST" });
     } catch (e) {
       console.error("Reset API error:", e);
     }

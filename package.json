@@ -6,13 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:ios": "./scripts/build-ios.sh",
+    "cap:sync": "npx cap sync",
+    "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.36",
     "@ai-sdk/google": "^3.0.20",
     "@ai-sdk/react": "^3.0.71",
     "@anthropic-ai/sdk": "^0.72.1",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
     "@pinecone-database/pinecone": "^7.1.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
@@ -35,6 +41,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -5,6 +5,7 @@ import { Search, Plus, X, Dumbbell, ChevronRight, ChevronDown, Trash2, Pencil } 
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
+import { apiFetch } from "@/lib/capacitor";
 
 // Equipment badge colors
 const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
@@ -243,7 +244,7 @@ export function ExercisePickerModal({
       }
 
       // Call API to parse split days into muscle groups
-      const response = await fetch("/api/exercise/parse-split", {
+      const response = await apiFetch("/api/exercise/parse-split", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ splitDays: trainingDays }),
@@ -306,7 +307,7 @@ export function ExercisePickerModal({
   // Trigger background recategorization
   const triggerRecategorization = async () => {
     try {
-      const response = await fetch("/api/exercise/recategorize-all", { method: "POST" });
+      const response = await apiFetch("/api/exercise/recategorize-all", { method: "POST" });
       if (response.ok) {
         const result = await response.json();
         console.log("[ExercisePicker] Recategorization complete:", result);
@@ -485,7 +486,7 @@ export function ExercisePickerModal({
     if (name.trim().length >= 3) {
       setCategorizingNew(true);
       try {
-        const response = await fetch("/api/exercise/categorize", {
+        const response = await apiFetch("/api/exercise/categorize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ exerciseName: name.trim() }),
