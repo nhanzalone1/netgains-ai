@@ -82,6 +82,7 @@ const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
   calves: "Calves",
   core: "Core",
   other: "Other",
+  uncategorized: "Uncategorized",
 };
 
 // Map simple groups to advanced groups for filtering
@@ -438,8 +439,9 @@ export function ExercisePickerModal({
     const muscleGroups: Record<string, ExerciseWithMuscleGroup[]> = {};
 
     // With array-based muscle groups, an exercise can appear in multiple groups
+    // Exercises without muscle_group go into "uncategorized" (shown at the end)
     filtered.forEach(ex => {
-      const groups = ex.muscle_group && ex.muscle_group.length > 0 ? ex.muscle_group : ["other"];
+      const groups = ex.muscle_group && ex.muscle_group.length > 0 ? ex.muscle_group : ["uncategorized"];
       groups.forEach(group => {
         if (!muscleGroups[group]) muscleGroups[group] = [];
         // Avoid duplicates if exercise is already in this group
@@ -449,13 +451,25 @@ export function ExercisePickerModal({
       });
     });
 
-    return ADVANCED_MUSCLE_GROUPS
+    // Build result with categorized groups first, then uncategorized at the end
+    const result = ADVANCED_MUSCLE_GROUPS
       .filter(group => muscleGroups[group]?.length > 0)
       .map(group => ({
         muscleGroup: group,
         displayName: MUSCLE_GROUP_DISPLAY[group],
         exercises: muscleGroups[group].sort((a, b) => a.name.localeCompare(b.name))
       }));
+
+    // Add uncategorized at the end if any exist
+    if (muscleGroups["uncategorized"]?.length > 0) {
+      result.push({
+        muscleGroup: "uncategorized",
+        displayName: MUSCLE_GROUP_DISPLAY["uncategorized"],
+        exercises: muscleGroups["uncategorized"].sort((a, b) => a.name.localeCompare(b.name))
+      });
+    }
+
+    return result;
   }, [exercises, searchQuery, activeTab]);
 
   // Toggle muscle group section collapse (for UI accordion)
@@ -494,12 +508,10 @@ export function ExercisePickerModal({
 
         if (response.ok) {
           const { muscleGroup } = await response.json();
-          if (isMountedRef.current) {
+          if (isMountedRef.current && muscleGroup) {
             setAiSuggestedGroup(muscleGroup);
-            // Auto-select if user hasn't manually chosen any
-            if (newMuscleGroups.length === 0) {
-              setNewMuscleGroups([muscleGroup]);
-            }
+            // Don't auto-select - let user explicitly choose
+            // This prevents exercises from being miscategorized as "other"
           }
         }
       } catch (error) {
@@ -516,12 +528,11 @@ export function ExercisePickerModal({
     if (!newName.trim()) return;
 
     setCreating(true);
-    // Use selected muscle groups, or AI suggestion if nothing selected
+    // Only use muscle groups that user explicitly selected
+    // Don't fall back to AI suggestion - require explicit user choice
     const muscleGroupsToSave = newMuscleGroups.length > 0
       ? newMuscleGroups
-      : aiSuggestedGroup
-        ? [aiSuggestedGroup]
-        : undefined;
+      : undefined;
 
     const result = await onCreateNew({
       name: newName.trim(),
@@ -572,29 +583,39 @@ export function ExercisePickerModal({
     setSavingEdit(true);
     try {
       const muscleGroupsToSave = editMuscleGroups.length > 0 ? editMuscleGroups : null;
+      const newName = editName.trim();
+      const newEquipment = editEquipment;
 
-      const { error } = await supabase
+      // Use .select() to verify the update succeeded and get the updated row
+      const { data, error } = await supabase
         .from("exercise_templates")
         .update({
-          name: editName.trim(),
-          equipment: editEquipment,
+          name: newName,
+          equipment: newEquipment,
           muscle_group: muscleGroupsToSave,
         })
-        .eq("id", editingExercise.id);
+        .eq("id", editingExercise.id)
+        .select()
+        .single();
 
-      if (!error) {
+      if (error) {
+        console.error("Failed to update exercise:", error);
+        // Keep modal open so user can retry
+        setSavingEdit(false);
+        return;
+      }
+
+      if (data) {
+        // Update local state with the confirmed database values
+        const updatedExercise = data as ExerciseWithMuscleGroup;
         setExercises((prev) =>
           prev.map((e) =>
-            e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: muscleGroupsToSave }
-              : e
+            e.id === editingExercise.id ? updatedExercise : e
           )
         );
         setRecentExercises((prev) =>
           prev.map((e) =>
-            e.id === editingExercise.id
-              ? { ...e, name: editName.trim(), equipment: editEquipment, muscle_group: muscleGroupsToSave }
-              : e
+            e.id === editingExercise.id ? updatedExercise : e
           )
         );
         setEditingExercise(null);

@@ -3,7 +3,7 @@ import { AI_MODELS } from '@/lib/constants';
 
 const anthropic = new Anthropic();
 
-// Valid muscle groups for categorization
+// Valid muscle groups for categorization (excluding "other" - we return null for uncertain)
 const VALID_MUSCLE_GROUPS = [
   'chest',
   'front_delt',
@@ -18,7 +18,6 @@ const VALID_MUSCLE_GROUPS = [
   'glutes',
   'calves',
   'core',
-  'other',
 ] as const;
 
 type MuscleGroup = typeof VALID_MUSCLE_GROUPS[number];
@@ -34,7 +33,8 @@ export async function POST(request: Request) {
 
     const muscleGroup = await categorizeExercise(exerciseName);
 
-    return Response.json({ muscleGroup });
+    // Return null if we couldn't categorize - UI will show no selection
+    return Response.json({ muscleGroup: muscleGroup || null });
   } catch (error) {
     console.error('[Exercise Categorize] Error:', error);
     return Response.json({ error: 'Failed to categorize exercise' }, { status: 500 });
@@ -42,37 +42,44 @@ export async function POST(request: Request) {
 }
 
 // Shared function for categorizing an exercise
-export async function categorizeExercise(exerciseName: string): Promise<MuscleGroup> {
-  const prompt = `Categorize this exercise into exactly ONE muscle group.
+// Returns null if unable to categorize with confidence
+export async function categorizeExercise(exerciseName: string): Promise<MuscleGroup | null> {
+  const prompt = `Categorize this exercise into exactly ONE primary muscle group.
 
 Exercise: "${exerciseName}"
 
 Valid categories (respond with ONLY one of these exact strings):
-- chest (bench press, chest fly, push-ups targeting chest)
-- front_delt (front raises, overhead press - front deltoid focus)
-- side_delt (lateral raises, upright rows - side deltoid focus)
-- rear_delt (reverse fly, face pulls, rear delt rows)
-- lats (lat pulldown, pull-ups, straight arm pulldown)
-- upper_back (rows, shrugs, back exercises not targeting lats specifically)
-- biceps (curls, hammer curls, preacher curls)
-- triceps (pushdowns, skull crushers, tricep dips, close grip bench)
-- quads (squats, leg press, leg extension, lunges)
-- hamstrings (leg curls, Romanian deadlifts, stiff leg deadlifts)
-- glutes (hip thrusts, glute bridges, kickbacks)
-- calves (calf raises, seated calf raises)
-- core (crunches, planks, leg raises, ab rollouts)
-- other (anything that doesn't fit above)
+- chest (bench press variations, chest fly, push-ups, dips with forward lean)
+- front_delt (overhead press, military press, front raises, arnold press)
+- side_delt (lateral raises, upright rows, face pulls with wide grip)
+- rear_delt (reverse fly, face pulls, rear delt rows, band pull-aparts)
+- lats (lat pulldown, pull-ups, chin-ups, straight arm pulldown, pullovers)
+- upper_back (rows, shrugs, deadlifts, t-bar rows, cable rows)
+- biceps (all curl variations, hammer curls, preacher curls, concentration curls)
+- triceps (pushdowns, skull crushers, tricep dips, close grip bench, overhead extensions)
+- quads (squats, leg press, leg extension, lunges, hack squats, sissy squats)
+- hamstrings (leg curls, Romanian deadlifts, stiff leg deadlifts, good mornings)
+- glutes (hip thrusts, glute bridges, kickbacks, Bulgarian split squats)
+- calves (standing calf raises, seated calf raises, donkey calf raises)
+- core (crunches, planks, leg raises, ab rollouts, Russian twists, dead bugs)
 
-Important:
-- Overhead press / military press = front_delt (primary mover is front delt)
-- Lateral raise = side_delt
-- Face pull / reverse fly = rear_delt
-- Deadlift / barbell row = upper_back (not lats)
-- Lat pulldown / pull-up = lats
-- Tricep pushdown / cable pushdown = triceps
-- Dips can be triceps or chest depending on form, default to triceps
+CRITICAL RULES:
+- "Press" alone or with direction (incline/decline/flat) = chest
+- "Overhead press" / "shoulder press" / "military press" = front_delt
+- "Pulldown" / "pull down" = lats
+- "Pushdown" / "push down" = triceps
+- "Curl" = biceps (unless "leg curl" = hamstrings)
+- "Row" = upper_back (unless "upright row" = side_delt)
+- "Raise" with "lateral" or "side" = side_delt
+- "Raise" with "front" = front_delt
+- "Raise" with "rear" = rear_delt
+- "Fly" / "Flye" = chest (unless "reverse fly" = rear_delt)
+- "Extension" with "leg" = quads, with "tricep/overhead" = triceps
+- "Squat" / "Lunge" = quads (glute involvement is secondary)
 
-Respond with ONLY the category name, nothing else.`;
+If you cannot determine the muscle group with high confidence, respond with exactly: UNKNOWN
+
+Respond with ONLY the category name or UNKNOWN, nothing else.`;
 
   try {
     const response = await anthropic.messages.create({
@@ -84,22 +91,28 @@ Respond with ONLY the category name, nothing else.`;
 
     const text = response.content[0].type === 'text'
       ? response.content[0].text.trim().toLowerCase()
-      : 'other';
+      : null;
+
+    if (!text || text === 'unknown') {
+      console.log(`[Exercise Categorize] AI returned unknown for "${exerciseName}"`);
+      return null;
+    }
 
     // Validate the response is a valid muscle group
     if (VALID_MUSCLE_GROUPS.includes(text as MuscleGroup)) {
       return text as MuscleGroup;
     }
 
-    console.warn(`[Exercise Categorize] Invalid response "${text}" for "${exerciseName}", defaulting to other`);
-    return 'other';
+    console.warn(`[Exercise Categorize] Invalid response "${text}" for "${exerciseName}"`);
+    return null;
   } catch (error) {
     console.error(`[Exercise Categorize] AI error for "${exerciseName}":`, error);
-    return 'other';
+    return null;
   }
 }
 
 // Batch categorize multiple exercises (for migration)
+// Returns only exercises that were successfully categorized (excludes null results)
 export async function categorizeExercises(exercises: { id: string; name: string }[]): Promise<{ id: string; muscleGroup: MuscleGroup }[]> {
   const results: { id: string; muscleGroup: MuscleGroup }[] = [];
 
@@ -108,12 +121,13 @@ export async function categorizeExercises(exercises: { id: string; name: string 
   for (let i = 0; i < exercises.length; i += batchSize) {
     const batch = exercises.slice(i, i + batchSize);
     const batchResults = await Promise.all(
-      batch.map(async (ex) => ({
-        id: ex.id,
-        muscleGroup: await categorizeExercise(ex.name),
-      }))
+      batch.map(async (ex) => {
+        const muscleGroup = await categorizeExercise(ex.name);
+        return muscleGroup ? { id: ex.id, muscleGroup } : null;
+      })
     );
-    results.push(...batchResults);
+    // Filter out null results (exercises that couldn't be categorized)
+    results.push(...batchResults.filter((r): r is { id: string; muscleGroup: MuscleGroup } => r !== null));
 
     // Small delay between batches to avoid rate limits
     if (i + batchSize < exercises.length) {

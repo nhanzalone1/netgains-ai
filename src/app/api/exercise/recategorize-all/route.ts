@@ -46,12 +46,13 @@ export async function POST() {
     });
   }
 
-  // Categorize using AI
+  // Categorize using AI (returns only successfully categorized exercises)
   const categorized = await categorizeExercises(
     needsCategorization.map(ex => ({ id: ex.id, name: ex.name }))
   );
 
-  console.log('[Recategorize] AI categorization complete, updating database...');
+  const skippedCount = needsCategorization.length - categorized.length;
+  console.log(`[Recategorize] AI categorization complete: ${categorized.length} categorized, ${skippedCount} could not be categorized`);
 
   // Update each exercise with its category
   let successCount = 0;
@@ -83,7 +84,9 @@ export async function POST() {
   return Response.json({
     message: 'Recategorization complete',
     total: exercises.length,
+    needsCategorization: needsCategorization.length,
     categorized: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     breakdown,
   });
