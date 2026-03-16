@@ -95,7 +95,20 @@ Every chat message includes `localDate` (YYYY-MM-DD) and `localTime` (e.g., "9:1
 Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. Auto-normalized via `normalizeGoal()`.
 
 ### Exercise Categorization
-14 muscle groups. Exercises can belong to multiple. AI categorizes via `/api/exercise/categorize`.
+13 muscle groups (no "other" - forces explicit user selection). Exercises can belong to multiple. AI categorizes via `/api/exercise/categorize`.
+
+**Muscle groups:** chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core
+
+**Key behaviors:**
+- AI returns `null` if it can't categorize with confidence (never defaults to "other")
+- No auto-selection of AI suggestions — user must explicitly tap to confirm
+- Uncategorized exercises appear in "Uncategorized" section in the All tab
+- Edit modal uses `.select().single()` to verify database updates succeed
+
+**Files:**
+- `src/app/api/exercise/categorize/route.ts` — AI categorization with detailed prompt rules
+- `src/app/api/exercise/recategorize-all/route.ts` — Batch recategorization (skips failures)
+- `src/components/exercise-picker-modal.tsx` — Exercise library UI with edit/create
 
 ### Set Variants
 `normal`, `warmup`, `drop`, `failure`, `assisted-parent/child`, `left/right`. Warmup excluded from PRs.
