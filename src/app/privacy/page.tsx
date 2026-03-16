@@ -143,8 +143,8 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold mb-3">Contact</h2>
             <p>
               For privacy questions or data requests, contact us at{" "}
-              <a href="mailto:support@netgainsai.com" className="text-primary hover:underline">
-                support@netgainsai.com
+              <a href="mailto:support.netgains@gmail.com" className="text-primary hover:underline">
+                support.netgains@gmail.com
               </a>
             </p>
           </section>
