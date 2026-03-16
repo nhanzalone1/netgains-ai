@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 
-const FROM_EMAIL = 'NetGains <coach@netgainsai.com>';
+const FROM_EMAIL = 'NetGains <support@netgainsai.com>';
 
 function getResendClient() {
   if (!process.env.RESEND_API_KEY) {
