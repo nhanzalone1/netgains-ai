@@ -18,11 +18,16 @@ const config: CapacitorConfig = {
     contentInset: "automatic",
     backgroundColor: "#0f0f13",
     preferredContentMode: "mobile",
+    // Prevent white/gradient flash while loading
+    allowsLinkPreview: false,
   },
   plugins: {
     // Splash screen configuration
+    // Static splash shows briefly, then web app shows animated splash
     SplashScreen: {
-      launchAutoHide: false, // We'll hide manually after app loads
+      launchAutoHide: true,
+      launchShowDuration: 500,
+      launchFadeOutDuration: 300,
       backgroundColor: "#0f0f13",
       showSpinner: false,
     },

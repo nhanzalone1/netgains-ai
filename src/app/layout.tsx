@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/toast";
+import { SplashWrapper } from "@/components/splash-wrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,7 +56,9 @@ export default function RootLayout({
         <ThemeProvider>
           <ToastProvider>
             <AuthProvider>
-              {children}
+              <SplashWrapper>
+                {children}
+              </SplashWrapper>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>
