@@ -165,8 +165,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold mb-3">Contact</h2>
             <p>
               For questions about these terms, contact us at{" "}
-              <a href="mailto:legal@netgainsai.com" className="text-primary hover:underline">
-                legal@netgainsai.com
+              <a href="mailto:support@netgainsai.com" className="text-primary hover:underline">
+                support@netgainsai.com
               </a>
             </p>
           </section>
