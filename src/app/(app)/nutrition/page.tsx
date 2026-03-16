@@ -28,7 +28,7 @@ import { apiFetch } from "@/lib/capacitor";
 interface Meal {
   id: string;
   date: string;
-  meal_type: "meal" | "snack";
+  meal_type: "breakfast" | "lunch" | "dinner" | "snack" | "meal";
   food_name: string;
   calories: number;
   protein: number;
@@ -237,6 +237,7 @@ export default function NutritionPage() {
   const [editMealCarbs, setEditMealCarbs] = useState("");
   const [editMealFat, setEditMealFat] = useState("");
   const [editMealServing, setEditMealServing] = useState("");
+  const [editMealType, setEditMealType] = useState<"meal" | "snack">("meal");
   const [savingMealEdit, setSavingMealEdit] = useState(false);
 
   // Copy meal debounce
@@ -430,10 +431,14 @@ export default function NutritionPage() {
     );
 
   // Get meal/snack labels with numbers
+  // breakfast, lunch, dinner, meal all count as "Meal", snack counts as "Snack"
   const getMealLabel = (meal: Meal, index: number): string => {
-    const sameTypeMeals = (meals || []).filter((m) => m.meal_type === meal.meal_type);
-    const mealIndex = sameTypeMeals.findIndex((m) => m.id === meal.id) + 1;
-    return meal.meal_type === "meal" ? `Meal ${mealIndex}` : `Snack ${mealIndex}`;
+    const isSnack = meal.meal_type === "snack";
+    const sameCategory = (meals || []).filter((m) =>
+      isSnack ? m.meal_type === "snack" : m.meal_type !== "snack"
+    );
+    const mealIndex = sameCategory.findIndex((m) => m.id === meal.id) + 1;
+    return isSnack ? `Snack ${mealIndex}` : `Meal ${mealIndex}`;
   };
 
   const openWithFood = (food: RecentFood) => {
@@ -653,6 +658,8 @@ export default function NutritionPage() {
     setEditMealCarbs(meal.carbs.toString());
     setEditMealFat(meal.fat.toString());
     setEditMealServing(meal.serving_size || "");
+    // Convert specific meal types (breakfast/lunch/dinner) to "meal" for the toggle
+    setEditMealType(meal.meal_type === "snack" ? "snack" : "meal");
   };
 
   const handleUpdateMeal = async () => {
@@ -667,6 +674,7 @@ export default function NutritionPage() {
       carbs: parseFloat(editMealCarbs) || 0,
       fat: parseFloat(editMealFat) || 0,
       serving_size: editMealServing.trim() || null,
+      meal_type: editMealType,
     };
 
     const { error } = await supabase
@@ -1171,6 +1179,35 @@ export default function NutritionPage() {
               className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               autoFocus
             />
+          </div>
+
+          {/* Meal or Snack Toggle */}
+          <div>
+            <label className="block text-[10px] text-muted-foreground uppercase mb-1">Type</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditMealType("meal")}
+                className={`flex-1 py-3 rounded-xl font-medium transition-colors min-h-[44px] ${
+                  editMealType === "meal"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background/50 text-muted-foreground"
+                }`}
+              >
+                Meal
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditMealType("snack")}
+                className={`flex-1 py-3 rounded-xl font-medium transition-colors min-h-[44px] ${
+                  editMealType === "snack"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background/50 text-muted-foreground"
+                }`}
+              >
+                Snack
+              </button>
+            </div>
           </div>
 
           {/* Macros Grid */}

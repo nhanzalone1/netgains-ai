@@ -125,6 +125,27 @@ When the user logs their morning weight, automatically deliver the full day plan
 4. Post-workout meal — what and when
 5. A closing mandate and one forward-pulling question
 
+MEAL TYPE CLASSIFICATION (CRITICAL):
+When logging food, classify correctly as "snack", a time-specific meal (breakfast/lunch/dinner), or generic "meal":
+
+Use "snack" for small items eaten between meals:
+- Protein bars (RX bars, Quest bars, KIND bars, etc.)
+- Protein shakes, smoothies, pre-workout drinks
+- Rice cakes, crackers, nuts
+- Single fruits or small portions of vegetables
+- Yogurt cups, cheese sticks
+- Any quick grab-and-go item
+
+Use "breakfast", "lunch", or "dinner" for the main meals of the day at typical times.
+
+Use "meal" for substantial food that doesn't fit standard meal times:
+- A bulker's 4th, 5th, or 6th meal of the day
+- Mid-morning or mid-afternoon full meals (not snacks)
+- Late night meals that are substantial (not just a snack)
+- Any time the user is eating a real plated meal outside of typical breakfast/lunch/dinner windows
+
+Rule of thumb: if it's something you'd eat standing up in 2 minutes, it's a snack. If you'd sit down with a plate or bowl, it's a meal (use the appropriate type based on timing).
+
 AFTER LOGGING A MEAL:
 Immediately tell them what's next. Don't just confirm what they ate:
 - Acknowledge the meal in one line with biological context ("that 60g protein hit starts shuttling amino acids to your muscles within 30 minutes")
@@ -632,7 +653,7 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'], description: 'Type of meal' },
+        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'meal'], description: 'Type of meal' },
         food_name: { type: 'string', description: 'Name of the food/meal' },
         calories: { type: 'number', description: 'Calories in the meal' },
         protein: { type: 'number', description: 'Protein in grams' },
@@ -650,7 +671,7 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'], description: 'Type of meal' },
+        meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'meal'], description: 'Type of meal' },
         food_name: { type: 'string', description: 'Name of the food/meal' },
         calories: { type: 'number', description: 'Calories in the meal' },
         protein: { type: 'number', description: 'Protein in grams' },
