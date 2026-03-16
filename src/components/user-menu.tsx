@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -512,6 +512,21 @@ export function UserMenu() {
                 >
                   <PlayCircle className="w-4 h-4 text-primary" />
                   <span className="font-medium">Replay App Tour</span>
+                </motion.button>
+              </div>
+
+              {/* Terms & Privacy */}
+              <div className="border-b border-white/5">
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/terms");
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                >
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span className="font-medium">Terms & Privacy</span>
                 </motion.button>
               </div>
 

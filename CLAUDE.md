@@ -138,6 +138,24 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 ### PR Detection
 Separated by equipment type. Excludes warmup and time-based sets.
 
+## Terms & Privacy Acceptance
+
+On first app open, users must accept Terms of Service and Privacy Policy before accessing the app.
+
+**Flow:**
+1. User opens app → `TermsGate` component checks `profiles.terms_accepted_at`
+2. If null → Full-screen `TermsAcceptance` component shown
+3. User taps "I Accept" → `terms_accepted_at` set to current timestamp
+4. App content becomes accessible
+
+**Files:**
+- `src/components/terms-gate.tsx` — Wrapper that checks acceptance status
+- `src/components/terms-acceptance.tsx` — Full-screen acceptance UI
+- `src/app/(app)/layout.tsx` — Includes TermsGate wrapper
+- `supabase/migrations/add_terms_accepted.sql` — Adds column to profiles
+
+**Access later:** User Menu → "Terms & Privacy" links to `/terms` (which links to `/privacy`)
+
 ## Onboarding
 
 1. Empty profile → Coach asks for intro

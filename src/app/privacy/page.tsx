@@ -1,22 +1,22 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
-export const metadata = {
-  title: "Privacy Policy | NetGains",
-  description: "Privacy policy for NetGains AI fitness coaching app",
-};
-
 export default function PrivacyPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
-        <Link
-          href="/"
+        <button
+          onClick={() => router.back()}
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
-        </Link>
+        </button>
 
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">Last updated: March 15, 2026</p>
