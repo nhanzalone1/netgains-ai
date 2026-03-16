@@ -28,7 +28,13 @@ export function AnimatedSplash({ onComplete, duration = 2000 }: AnimatedSplashPr
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
           className="fixed inset-0 z-[9999] flex items-center justify-center"
-          style={{ backgroundColor: "#0f0f13" }}
+          style={{
+            background: `
+              radial-gradient(ellipse 120% 80% at 50% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 50%),
+              radial-gradient(ellipse 80% 50% at 50% 100%, rgba(6, 182, 212, 0.04) 0%, transparent 40%),
+              radial-gradient(ellipse 60% 50% at 50% 50%, #18181b 0%, #09090b 70%)
+            `
+          }}
         >
           <svg
             width="200"
