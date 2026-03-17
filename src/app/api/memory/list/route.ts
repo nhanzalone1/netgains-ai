@@ -5,10 +5,37 @@ import { MEMORY_CATEGORIES, MemoryCategory } from '@/lib/constants';
 interface MemoryItem {
   id: string;
   fact: string;
-  category: MemoryCategory;
+  category: MemoryCategory | 'saved';
   importance: number;
   extracted_at: string;
 }
+
+interface SavedItem {
+  id: string;
+  key: string;
+  value: string;
+  label: string;
+  updated_at: string;
+}
+
+// Map coach_memory keys to user-friendly labels
+const SAVED_ITEM_LABELS: Record<string, string> = {
+  food_staples: 'Food Staples',
+  split_rotation: 'Training Split',
+  name: 'Name',
+  age: 'Age',
+  sex: 'Sex',
+  training_experience: 'Training Experience',
+  gym_equipment: 'Gym Equipment',
+};
+
+// Keys to exclude from display (internal/system keys)
+const EXCLUDED_KEYS = [
+  'last_memory_extraction',
+  'pending_changes',
+  'pending_workout',
+  'last_workout_date',
+];
 
 export async function GET(req: Request) {
   console.log('[Memory List] Request received');
@@ -21,12 +48,45 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const category = searchParams.get('category') as MemoryCategory | null;
+  const category = searchParams.get('category') as MemoryCategory | 'saved' | null;
   const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 100);
 
-  if (!await isPineconeAvailable()) {
-    console.log('[Memory List] Pinecone unavailable');
-    return Response.json({ memories: [], total: 0, categories: {} });
+  // Fetch coach_memory items (saved data like food_staples, split_rotation)
+  const { data: coachMemoryData } = await supabase
+    .from('coach_memory')
+    .select('id, key, value, updated_at')
+    .eq('user_id', user.id);
+
+  const savedItems: SavedItem[] = (coachMemoryData || [])
+    .filter(item => !EXCLUDED_KEYS.includes(item.key))
+    .map(item => ({
+      id: `saved-${item.id}`,
+      key: item.key,
+      value: item.value,
+      label: SAVED_ITEM_LABELS[item.key] || item.key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      updated_at: item.updated_at,
+    }));
+
+  // If only asking for saved items, return early
+  if (category === 'saved') {
+    return Response.json({
+      memories: [],
+      savedItems,
+      total: savedItems.length,
+      categories: { saved: savedItems.length },
+    });
+  }
+
+  // Check Pinecone availability
+  const pineconeAvailable = await isPineconeAvailable();
+  if (!pineconeAvailable) {
+    console.log('[Memory List] Pinecone unavailable, returning saved items only');
+    return Response.json({
+      memories: [],
+      savedItems,
+      total: savedItems.length,
+      categories: { saved: savedItems.length },
+    });
   }
 
   try {
@@ -35,7 +95,7 @@ export async function GET(req: Request) {
 
     // Build filter
     const filter: Record<string, unknown> = { user_id: { $eq: user.id } };
-    if (category && MEMORY_CATEGORIES.includes(category)) {
+    if (category && MEMORY_CATEGORIES.includes(category as MemoryCategory)) {
       filter.category = { $eq: category };
     }
 
@@ -51,7 +111,12 @@ export async function GET(req: Request) {
     const queryEmbedding = embeddingResponse?.data?.[0]?.values;
     if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
       console.error('[Memory List] Failed to generate query embedding, response:', JSON.stringify(embeddingResponse).substring(0, 200));
-      return Response.json({ memories: [], total: 0, categories: {} });
+      return Response.json({
+        memories: [],
+        savedItems,
+        total: savedItems.length,
+        categories: { saved: savedItems.length },
+      });
     }
 
     // Query with high topK to get all user memories
@@ -81,20 +146,26 @@ export async function GET(req: Request) {
       });
 
     // Count by category (from the filtered results)
-    const categoryCounts: Record<string, number> = {};
+    const categoryCounts: Record<string, number> = { saved: savedItems.length };
     for (const cat of MEMORY_CATEGORIES) {
       categoryCounts[cat] = memories.filter(m => m.category === cat).length;
     }
 
-    console.log('[Memory List] Found', memories.length, 'memories for user');
+    console.log('[Memory List] Found', memories.length, 'memories and', savedItems.length, 'saved items for user');
 
     return Response.json({
       memories,
-      total: memories.length,
+      savedItems,
+      total: memories.length + savedItems.length,
       categories: categoryCounts,
     });
   } catch (error) {
     console.error('[Memory List] Error:', error);
-    return Response.json({ error: 'Failed to list memories' }, { status: 500 });
+    return Response.json({
+      memories: [],
+      savedItems,
+      total: savedItems.length,
+      categories: { saved: savedItems.length },
+    });
   }
 }
