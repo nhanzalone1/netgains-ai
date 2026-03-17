@@ -6,6 +6,12 @@ Vertical AI fitness coaching app. Personalized workout tracking, nutrition loggi
 
 **Target:** Intermediate lifters (18-30) who want data-driven coaching without a human trainer.
 
+## Branding
+
+- **App Name:** NetGainsAI
+- **App Icon:** Teal dumbbell + fork on dark navy background (represents fitness + nutrition)
+- **Support Email:** support.netgainsai@gmail.com
+
 ## Tech Stack
 
 - **Frontend:** Next.js 16 (App Router), React, TypeScript, Tailwind CSS
@@ -226,12 +232,12 @@ npm run cap:open:ios
 ### In Xcode
 1. Select **Development Team** in Signing & Capabilities
 2. Set deployment target to **iOS 14.0+**
-3. Update app icon (requires 1024x1024 for App Store)
+3. App icon is set (dumbbell + fork, 1024x1024 in `Assets.xcassets`)
 4. Build → Run on simulator or device
 
 ### App Store Submission Checklist
 - [ ] Apple Developer account active ($99/year at developer.apple.com)
-- [ ] App icon 1024x1024 (no transparency, no alpha channel)
+- [x] App icon 1024x1024 (dumbbell + fork design)
 - [ ] Screenshots for required device sizes (6.7", 6.5", 5.5" iPhones)
 - [ ] Privacy policy URL: `https://netgainsai.com/privacy`
 - [ ] Terms of service URL: `https://netgainsai.com/terms`
