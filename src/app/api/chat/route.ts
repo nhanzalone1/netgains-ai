@@ -477,6 +477,15 @@ Call generateWorkout with:
 - target_muscles: Array of muscle groups (use detailed groups: chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core)
 - exercises: Full exercise array with sets, target reps, and variants
 - notes: Rest times, intensity guidance, technique cues
+- include_suggested_weights: Set to TRUE when user asks for weights to be loaded, wants weight suggestions, or says things like "load weights", "include weights", "with progressive overload", "tell me what weight to use"
+- progressive_overload_amount: Default 2.5 lbs. Increase to 5 for experienced lifters on compound movements.
+
+WEIGHT SUGGESTIONS (when include_suggested_weights is true):
+- Weights are calculated from user's historical 1RM (estimated from their best sets)
+- Progressive overload adds +2.5lbs (or specified amount) to push for gains
+- Warmup sets automatically get 50% of working weight
+- If user has no history for an exercise, that exercise won't have suggested weights — mention which exercises they'll need to estimate
+- Tell them: "weights are based on your PRs with +2.5lbs for progressive overload"
 
 Workout structure guidelines:
 - Include 1-2 warmup sets for compound lifts (bench, squat, deadlift, OHP)
@@ -504,7 +513,16 @@ You: [call getSuggestedFolder with target_muscles]
 You: "45 min chest blast locked in. 6 exercises, 20 sets: flat bench (2 warmup + 4 working), incline dumbbell press (4 sets), cable flyes (3 sets), machine chest press (3 sets), dips (3 sets), push-ups (1 burnout). rest 2 min between bench sets, 60-90 sec for accessories. this looks like a chest day — load it into your 'Chest/Front Delt' folder?"
 User: "yeah do it"
 You: [call loadWorkoutToFolder]
-You: "loaded — head to the Log tab to start."`;
+You: "loaded — head to the Log tab to start."
+
+EXAMPLE WITH WEIGHTS:
+User: "give me a chest workout and load the weights"
+You: [call generateWorkout with include_suggested_weights: true]
+You: [call getSuggestedFolder with target_muscles]
+You: "chest day locked and loaded with weights based on your PRs (+2.5lbs progressive overload). bench press: 185lbs working sets, incline db: 60lbs, cable flyes: 30lbs. [exercises without history] will need your estimate. load it into 'Chest' folder?"
+User: "yes"
+You: [call loadWorkoutToFolder]
+You: "done — weights are pre-filled. head to Log tab and crush it."`;
 }
 
 // System prompt is built dynamically based on onboarding status - see getSystemPrompt()
@@ -607,6 +625,166 @@ function validateExerciseMuscleMatch(
     warnings,
     mismatches,
   };
+}
+
+// === WEIGHT SUGGESTION SYSTEM ===
+// Calculate estimated 1RM using Epley formula
+function calculateEst1RM(weight: number, reps: number): number {
+  if (reps === 1) return weight;
+  if (reps > 12) reps = 12; // Formula less accurate above 12 reps
+  return weight * (1 + reps / 30);
+}
+
+// Rep-to-percentage mapping for calculating working weight from 1RM
+// Based on standard strength training percentages
+const REP_PERCENTAGE_MAP: Record<number, number> = {
+  1: 1.00,   // 100% for 1 rep
+  2: 0.97,   // 97% for 2 reps
+  3: 0.93,   // 93% for 3 reps
+  4: 0.90,   // 90% for 4 reps
+  5: 0.87,   // 87% for 5 reps
+  6: 0.85,   // 85% for 6 reps
+  7: 0.83,   // 83% for 7 reps
+  8: 0.80,   // 80% for 8 reps
+  9: 0.77,   // 77% for 9 reps
+  10: 0.75,  // 75% for 10 reps
+  11: 0.72,  // 72% for 11 reps
+  12: 0.70,  // 70% for 12 reps
+  15: 0.65,  // 65% for 15 reps
+  20: 0.60,  // 60% for 20 reps
+};
+
+// Get percentage of 1RM for a given rep count
+function getPercentageFor1RM(targetReps: number): number {
+  if (REP_PERCENTAGE_MAP[targetReps]) return REP_PERCENTAGE_MAP[targetReps];
+  // Interpolate for values not in map
+  const keys = Object.keys(REP_PERCENTAGE_MAP).map(Number).sort((a, b) => a - b);
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (targetReps > keys[i] && targetReps < keys[i + 1]) {
+      const lower = keys[i];
+      const upper = keys[i + 1];
+      const lowerPct = REP_PERCENTAGE_MAP[lower];
+      const upperPct = REP_PERCENTAGE_MAP[upper];
+      // Linear interpolation
+      return lowerPct - ((targetReps - lower) / (upper - lower)) * (lowerPct - upperPct);
+    }
+  }
+  return 0.60; // Default for very high reps
+}
+
+// Round weight to nearest 2.5 lbs (standard plate increment)
+function roundToNearest2_5(weight: number): number {
+  return Math.round(weight / 2.5) * 2.5;
+}
+
+// Calculate suggested weight for a target rep range
+// Returns the weight in lbs, rounded to nearest 2.5
+function calculateSuggestedWeight(
+  est1RM: number,
+  targetReps: number,
+  progressiveOverload: boolean = true,
+  overloadAmount: number = 2.5 // lbs to add for progressive overload
+): number {
+  const percentage = getPercentageFor1RM(targetReps);
+  let suggestedWeight = est1RM * percentage;
+
+  if (progressiveOverload) {
+    suggestedWeight += overloadAmount;
+  }
+
+  return roundToNearest2_5(suggestedWeight);
+}
+
+// Parse target reps string to get a number (handles ranges like "8-12")
+function parseTargetReps(targetRepsStr: string): number {
+  // Handle ranges like "8-12" - use the middle
+  if (targetRepsStr.includes('-')) {
+    const [low, high] = targetRepsStr.split('-').map(s => parseInt(s.trim()));
+    if (!isNaN(low) && !isNaN(high)) {
+      return Math.round((low + high) / 2);
+    }
+  }
+  // Handle single numbers
+  const num = parseInt(targetRepsStr);
+  if (!isNaN(num)) return num;
+  // Default for text like "to failure"
+  return 10;
+}
+
+// Fetch user's best sets for exercises (by name matching)
+// Returns a map of exercise name (lowercase) -> { weight, reps, est1RM }
+async function fetchUserBestSets(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  exerciseNames: string[]
+): Promise<Map<string, { weight: number; reps: number; est1RM: number }>> {
+  const bestSets = new Map<string, { weight: number; reps: number; est1RM: number }>();
+
+  if (exerciseNames.length === 0) return bestSets;
+
+  // Fetch all user's workouts with exercises and sets
+  const { data: workouts } = await supabase
+    .from('workouts')
+    .select(`
+      id,
+      exercises (
+        id,
+        name,
+        sets (
+          weight,
+          reps,
+          variant
+        )
+      )
+    `)
+    .eq('user_id', userId);
+
+  if (!workouts) return bestSets;
+
+  // Build a map of exercise name -> best set
+  const normalizedNames = exerciseNames.map(n => n.toLowerCase());
+
+  for (const workout of workouts) {
+    const exercises = (workout.exercises || []) as Array<{
+      id: string;
+      name: string;
+      sets: Array<{ weight: number; reps: number; variant?: string }>;
+    }>;
+
+    for (const exercise of exercises) {
+      const nameLower = exercise.name.toLowerCase();
+
+      // Check if this exercise matches any we're looking for
+      const matchIndex = normalizedNames.findIndex(n =>
+        n === nameLower ||
+        nameLower.includes(n) ||
+        n.includes(nameLower)
+      );
+
+      if (matchIndex === -1) continue;
+
+      const originalName = exerciseNames[matchIndex].toLowerCase();
+
+      for (const set of exercise.sets || []) {
+        // Skip warmup sets
+        if (set.variant === 'warmup') continue;
+        if (set.weight <= 0 || set.reps <= 0) continue;
+
+        const est1RM = calculateEst1RM(set.weight, set.reps);
+        const current = bestSets.get(originalName);
+
+        if (!current || est1RM > current.est1RM) {
+          bestSets.set(originalName, {
+            weight: set.weight,
+            reps: set.reps,
+            est1RM,
+          });
+        }
+      }
+    }
+  }
+
+  return bestSets;
 }
 
 // === CONVERSATION MEMORY SYSTEM ===
@@ -874,6 +1052,14 @@ const tools: Anthropic.Tool[] = [
           description: 'Array of exercises in the workout',
         },
         notes: { type: 'string', description: 'Overall workout notes (rest times, intensity guidance, etc.)' },
+        include_suggested_weights: {
+          type: 'boolean',
+          description: 'If true, calculate and include suggested weights based on user\'s historical 1RM data with progressive overload (+2.5lbs). Use this when user asks to "load weights" or wants weight suggestions.',
+        },
+        progressive_overload_amount: {
+          type: 'number',
+          description: 'Amount in lbs to add for progressive overload (default: 2.5). Only used if include_suggested_weights is true.',
+        },
       },
       required: ['workout_name', 'target_muscles', 'exercises'],
     },
@@ -2235,12 +2421,24 @@ ${pendingChangesSection}
           notes?: string;
         }>;
         const notes = input.notes as string | undefined;
+        const includeSuggestedWeights = input.include_suggested_weights as boolean | undefined;
+        const progressiveOverloadAmount = (input.progressive_overload_amount as number) ?? 2.5;
 
         // Validate that exercises match target muscles
         const validation = validateExerciseMuscleMatch(exercises, targetMuscles);
         if (!validation.valid) {
           console.warn('[Coach] Exercise-muscle mismatch detected:', validation.warnings);
           // Log mismatches for debugging but don't block - return warning in response
+        }
+
+        // Fetch user's best sets if weight suggestions are requested
+        let bestSetsMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
+        let weightSuggestions: Array<{ exercise: string; suggestedWeight: number; basedOn1RM: number; bestSet: { weight: number; reps: number } }> = [];
+
+        if (includeSuggestedWeights) {
+          const exerciseNames = exercises.map(ex => ex.name);
+          bestSetsMap = await fetchUserBestSets(supabase, user.id, exerciseNames);
+          console.log('[Coach] Fetched best sets for', bestSetsMap.size, 'exercises');
         }
 
         // Build the pending workout structure (matches localStorage format)
@@ -2253,20 +2451,58 @@ ${pendingChangesSection}
           readyToLoad: false, // Will be set to true when folder is confirmed
           folderId: null as string | null,
           folderName: null as string | null,
-          exercises: exercises.map(ex => ({
-            name: ex.name,
-            equipment: ex.equipment,
-            templateId: null, // Will be matched on load if exercise exists in user's library
-            sets: ex.sets.map(set => ({
-              weight: '',
-              reps: '',
-              targetReps: set.target_reps, // Keep for display
-              variant: set.variant || 'normal',
-              measureType: set.measure_type || 'reps',
-            })),
-            notes: ex.notes || null,
-            defaultMeasureType: ex.sets[0]?.measure_type || 'reps',
-          })),
+          includesSuggestedWeights: includeSuggestedWeights || false,
+          exercises: exercises.map(ex => {
+            // Look up user's best set for this exercise
+            const nameLower = ex.name.toLowerCase();
+            const bestSetData = bestSetsMap.get(nameLower);
+
+            return {
+              name: ex.name,
+              equipment: ex.equipment,
+              templateId: null, // Will be matched on load if exercise exists in user's library
+              sets: ex.sets.map(set => {
+                let suggestedWeight = '';
+
+                // Calculate suggested weight if we have historical data and weights are requested
+                if (includeSuggestedWeights && bestSetData && set.variant !== 'warmup') {
+                  const targetReps = parseTargetReps(set.target_reps);
+                  const weight = calculateSuggestedWeight(
+                    bestSetData.est1RM,
+                    targetReps,
+                    true, // progressive overload
+                    progressiveOverloadAmount
+                  );
+                  suggestedWeight = weight.toString();
+
+                  // Track for response summary
+                  if (!weightSuggestions.find(w => w.exercise === ex.name)) {
+                    weightSuggestions.push({
+                      exercise: ex.name,
+                      suggestedWeight: weight,
+                      basedOn1RM: Math.round(bestSetData.est1RM),
+                      bestSet: { weight: bestSetData.weight, reps: bestSetData.reps },
+                    });
+                  }
+                } else if (includeSuggestedWeights && set.variant === 'warmup' && bestSetData) {
+                  // Warmup sets: use 50-60% of working weight
+                  const targetReps = parseTargetReps(set.target_reps);
+                  const workingWeight = calculateSuggestedWeight(bestSetData.est1RM, targetReps, false, 0);
+                  suggestedWeight = roundToNearest2_5(workingWeight * 0.5).toString();
+                }
+
+                return {
+                  weight: suggestedWeight,
+                  reps: '',
+                  targetReps: set.target_reps, // Keep for display
+                  variant: set.variant || 'normal',
+                  measureType: set.measure_type || 'reps',
+                };
+              }),
+              notes: ex.notes || null,
+              defaultMeasureType: ex.sets[0]?.measure_type || 'reps',
+            };
+          }),
         };
 
         // Save to coach_memory as pending_workout (upsert)
@@ -2292,6 +2528,12 @@ ${pendingChangesSection}
           if (error) return JSON.stringify({ error: error.message });
         }
 
+        // Build response with weight suggestions info
+        const exercisesWithSuggestions = weightSuggestions.length;
+        const exercisesWithoutHistory = includeSuggestedWeights
+          ? exercises.filter(ex => !bestSetsMap.has(ex.name.toLowerCase())).map(ex => ex.name)
+          : [];
+
         return JSON.stringify({
           success: true,
           message: `Workout "${workoutName}" generated and saved`,
@@ -2299,6 +2541,14 @@ ${pendingChangesSection}
           target_muscles: targetMuscles,
           exercise_count: exercises.length,
           total_sets: exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
+          // Weight suggestions info
+          ...(includeSuggestedWeights && {
+            weights_included: true,
+            progressive_overload_amount: progressiveOverloadAmount,
+            exercises_with_suggested_weights: exercisesWithSuggestions,
+            weight_suggestions: weightSuggestions,
+            exercises_without_history: exercisesWithoutHistory.length > 0 ? exercisesWithoutHistory : undefined,
+          }),
           // Include validation warnings if exercises don't match target muscles
           ...(validation.warnings.length > 0 && {
             validation_warning: validation.warnings.join('; '),
