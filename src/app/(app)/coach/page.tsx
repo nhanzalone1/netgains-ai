@@ -867,6 +867,19 @@ export default function CoachPage() {
       if (extractionTimeoutRef.current) {
         clearTimeout(extractionTimeoutRef.current);
       }
+      // Trigger extraction on unmount (when navigating away within app)
+      // Use sendBeacon for reliability during page unload
+      if (user?.id && messages.length >= 3) {
+        const validMessages = messages.filter(m => !m.hidden && m.content.trim());
+        if (validMessages.length >= 3) {
+          const payload = JSON.stringify({
+            messages: validMessages.slice(-20).map(m => ({ role: m.role, content: m.content }))
+          });
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/api/memory/extract', blob);
+          console.log('[Memory] Triggered extraction on unmount via sendBeacon');
+        }
+      }
     };
   }, [user?.id, messages, triggerMemoryExtraction]);
 
