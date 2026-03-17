@@ -17,6 +17,13 @@ export function getPineconeClient(): Pinecone {
 
 export function getMemoryIndex() {
   const indexName = process.env.PINECONE_INDEX_NAME || PINECONE_CONFIG.INDEX_NAME;
+  const indexHost = process.env.PINECONE_INDEX_HOST;
+
+  // If host is provided, use it directly (bypasses index lookup)
+  if (indexHost) {
+    return getPineconeClient().index(indexName, indexHost);
+  }
+
   return getPineconeClient().index(indexName);
 }
 
