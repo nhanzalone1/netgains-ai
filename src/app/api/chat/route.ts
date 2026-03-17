@@ -407,6 +407,7 @@ ADAPTIVE COACHING:
 - The rotation is a PLAN, not a rigid rule
 - Life happens — be flexible
 - What matters is that the user trains consistently, not that they follow the exact order
+- IMPORTANT: When user requests a specific workout (e.g., "give me an upper body workout"), generate exercises for THAT request, NOT for their scheduled rotation
 
 === PROTEIN DISTRIBUTION ===
 Spreading protein across 3-5 meals with 30-50g per meal is more effective for muscle protein synthesis than one large meal. If all protein is in one meal, suggest spreading it out. "most of your protein is at dinner — try adding 30g at lunch for better absorption." This applies to all phases.
@@ -455,6 +456,15 @@ DON'T just say "logged" and go silent. The user is here for coaching, not just t
 
 === WORKOUT GENERATION ===
 When a user asks you to create a workout (e.g., "give me a chest workout", "45 min leg day", "quick arm pump", "build me a workout"), use the workout generation tools.
+
+CRITICAL - EXERCISE SELECTION RULES:
+- User's explicit request ALWAYS overrides their scheduled rotation. If they ask for "upper body" but their schedule says "Legs" — give them upper body.
+- ONLY include exercises that target the requested muscle groups. Never mix:
+  - Upper body exercises (chest, shoulders, back, arms) in a lower body workout
+  - Lower body exercises (squats, lunges, leg press, deadlifts, leg curls) in an upper body workout
+- Common upper body requests: "upper body", "push", "pull", "chest", "back", "shoulders", "arms"
+- Common lower body requests: "lower body", "legs", "leg day", "glutes"
+- If the response includes a validation_warning about mismatched exercises, regenerate with correct exercises.
 
 STEP 1 - GATHER INFO (if not already known):
 - What gym/equipment do they have access to? Check their location context or ask: "which gym are you at — main gym or home?"
@@ -511,6 +521,92 @@ function formatWorkoutCompact(exercises: { name: string; sets: { weight: number;
       return `${s.weight}x${s.reps}${tag}`;
     }).join(', ')}`
   ).join(' | ');
+}
+
+// === EXERCISE MUSCLE GROUP VALIDATION ===
+// Maps exercise name keywords to muscle groups for validation
+const EXERCISE_MUSCLE_KEYWORDS: Record<string, string[]> = {
+  // Chest exercises
+  chest: ['bench', 'chest', 'pec', 'fly', 'flye', 'push-up', 'pushup', 'dip'],
+  // Shoulder exercises
+  front_delt: ['overhead press', 'ohp', 'military press', 'shoulder press', 'front raise', 'arnold'],
+  side_delt: ['lateral raise', 'side raise', 'upright row'],
+  rear_delt: ['rear delt', 'face pull', 'reverse fly', 'reverse flye'],
+  // Back exercises
+  lats: ['lat', 'pulldown', 'pull-up', 'pullup', 'chin-up', 'chinup', 'row'],
+  upper_back: ['row', 'shrug', 'face pull', 'rear delt'],
+  // Arm exercises
+  biceps: ['bicep', 'curl', 'preacher', 'hammer'],
+  triceps: ['tricep', 'pushdown', 'skull crusher', 'close grip', 'dip', 'kickback', 'extension'],
+  // Leg exercises
+  quads: ['squat', 'leg press', 'leg extension', 'lunge', 'quad', 'front squat', 'hack squat'],
+  hamstrings: ['hamstring', 'leg curl', 'romanian deadlift', 'rdl', 'stiff leg', 'good morning'],
+  glutes: ['glute', 'hip thrust', 'deadlift', 'rdl', 'romanian', 'kickback', 'bridge'],
+  calves: ['calf', 'calves', 'calf raise'],
+  // Core exercises
+  core: ['ab', 'abs', 'crunch', 'plank', 'sit-up', 'situp', 'leg raise', 'oblique', 'core', 'russian twist'],
+};
+
+// Keywords that indicate lower body vs upper body
+const LOWER_BODY_KEYWORDS = ['squat', 'leg', 'lunge', 'deadlift', 'rdl', 'hamstring', 'quad', 'glute', 'calf', 'calves', 'hip thrust'];
+const UPPER_BODY_MUSCLES = ['chest', 'front_delt', 'side_delt', 'rear_delt', 'lats', 'upper_back', 'biceps', 'triceps'];
+const LOWER_BODY_MUSCLES = ['quads', 'hamstrings', 'glutes', 'calves'];
+
+// Validates that exercises match target muscles
+// Returns { valid: boolean, warnings: string[], mismatches: { exercise: string, likelyMuscle: string }[] }
+function validateExerciseMuscleMatch(
+  exercises: Array<{ name: string }>,
+  targetMuscles: string[]
+): { valid: boolean; warnings: string[]; mismatches: Array<{ exercise: string; likelyMuscle: string }> } {
+  const warnings: string[] = [];
+  const mismatches: Array<{ exercise: string; likelyMuscle: string }> = [];
+
+  // Determine if this is an upper body or lower body workout
+  const isUpperBodyWorkout = targetMuscles.some(m => UPPER_BODY_MUSCLES.includes(m));
+  const isLowerBodyWorkout = targetMuscles.some(m => LOWER_BODY_MUSCLES.includes(m));
+
+  for (const exercise of exercises) {
+    const nameLower = exercise.name.toLowerCase();
+
+    // Check if exercise is for lower body but target is upper body (or vice versa)
+    const isLowerBodyExercise = LOWER_BODY_KEYWORDS.some(keyword => nameLower.includes(keyword));
+
+    if (isUpperBodyWorkout && !isLowerBodyWorkout && isLowerBodyExercise) {
+      // Find which lower body muscle group this exercise likely targets
+      let likelyMuscle = 'lower body';
+      for (const [muscle, keywords] of Object.entries(EXERCISE_MUSCLE_KEYWORDS)) {
+        if (LOWER_BODY_MUSCLES.includes(muscle) && keywords.some(k => nameLower.includes(k))) {
+          likelyMuscle = muscle;
+          break;
+        }
+      }
+      mismatches.push({ exercise: exercise.name, likelyMuscle });
+    }
+
+    if (isLowerBodyWorkout && !isUpperBodyWorkout) {
+      // Check if this is an upper body exercise in a lower body workout
+      for (const muscle of UPPER_BODY_MUSCLES) {
+        const keywords = EXERCISE_MUSCLE_KEYWORDS[muscle] || [];
+        if (keywords.some(k => nameLower.includes(k)) && !isLowerBodyExercise) {
+          mismatches.push({ exercise: exercise.name, likelyMuscle: muscle });
+          break;
+        }
+      }
+    }
+  }
+
+  if (mismatches.length > 0) {
+    warnings.push(
+      `Warning: ${mismatches.length} exercise(s) may not match target muscles (${targetMuscles.join(', ')}): ` +
+      mismatches.map(m => `${m.exercise} → ${m.likelyMuscle}`).join(', ')
+    );
+  }
+
+  return {
+    valid: mismatches.length === 0,
+    warnings,
+    mismatches,
+  };
 }
 
 // === CONVERSATION MEMORY SYSTEM ===
@@ -2140,6 +2236,13 @@ ${pendingChangesSection}
         }>;
         const notes = input.notes as string | undefined;
 
+        // Validate that exercises match target muscles
+        const validation = validateExerciseMuscleMatch(exercises, targetMuscles);
+        if (!validation.valid) {
+          console.warn('[Coach] Exercise-muscle mismatch detected:', validation.warnings);
+          // Log mismatches for debugging but don't block - return warning in response
+        }
+
         // Build the pending workout structure (matches localStorage format)
         const pendingWorkout = {
           workoutName,
@@ -2196,6 +2299,11 @@ ${pendingChangesSection}
           target_muscles: targetMuscles,
           exercise_count: exercises.length,
           total_sets: exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
+          // Include validation warnings if exercises don't match target muscles
+          ...(validation.warnings.length > 0 && {
+            validation_warning: validation.warnings.join('; '),
+            mismatched_exercises: validation.mismatches,
+          }),
         });
       }
       case 'getSuggestedFolder': {
