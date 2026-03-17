@@ -164,7 +164,12 @@ async function extractAtomicFacts(messages: ConversationMessage[]): Promise<Extr
 1. Self-contained (makes sense without context)
 2. Specific (exact numbers, names, dates, details when available)
 3. Durable (likely to be relevant in future coaching sessions)
-4. Non-obvious (not basic profile info like height/weight that's stored elsewhere)
+
+NOTE: Height, weight, and goal are stored in the profile. DO extract other personal context like:
+- Age, occupation, lifestyle (college student, busy professional, etc.)
+- Living situation that affects diet (dining hall, meal prep, cooking skills)
+- Schedule constraints, travel, work hours
+- Training history, gym access, equipment available
 
 Categories to use: ${MEMORY_CATEGORIES.join(', ')}
 
@@ -184,12 +189,15 @@ Importance scale (1-5):
 5 = Critical health/safety info (injuries, allergies, medical conditions)
 
 Examples of good facts to extract:
-- "User's right shoulder has been bothering them since a 2022 injury - avoid behind-the-neck presses"
-- "User prefers training in the morning before 8am"
-- "User hit 315lb deadlift PR after running 5/3/1 for 3 months"
-- "User's girlfriend is vegetarian so dinners are often meatless"
-- "User tends to undereat on rest days"
-- "User found that 4-day Upper/Lower split works better than PPL for recovery"
+- "User is 19 years old and in college" (biometrics)
+- "User eats mostly dining hall food with limited cooking options" (nutrition)
+- "User's right shoulder has been bothering them since a 2022 injury - avoid behind-the-neck presses" (injuries)
+- "User prefers training in the morning before 8am" (preferences)
+- "User hit 315lb deadlift PR after running 5/3/1 for 3 months" (training)
+- "User's girlfriend is vegetarian so dinners are often meatless" (nutrition)
+- "User tends to undereat on rest days" (nutrition)
+- "User found that 4-day Upper/Lower split works better than PPL for recovery" (training)
+- "User has access to a full gym with squat racks and cables" (training)
 
 CONVERSATION:
 ${conversationText}
