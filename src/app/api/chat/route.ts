@@ -1236,13 +1236,29 @@ export async function POST(req: Request) {
     ]);
 
     // Log any query errors (don't fail, use defaults)
-    if (profileResult.error) console.error('[Coach] Profile query error:', profileResult.error);
     if (memoriesResult.error) console.error('[Coach] Memories query error:', memoriesResult.error);
     if (workoutsResult.error) console.error('[Coach] Workouts query error:', workoutsResult.error);
     if (todayMealsResult.error) console.error('[Coach] Today meals query error:', todayMealsResult.error);
     if (yesterdayMealsResult.error) console.error('[Coach] Yesterday meals query error:', yesterdayMealsResult.error);
 
+    // Handle profile query failure - retry with admin client to bypass RLS race conditions during token refresh
     let profile = profileResult.data;
+    if (profileResult.error || !profile) {
+      console.warn('[Coach] Profile query failed or empty, retrying with admin client:', profileResult.error?.message);
+      const adminClient = getSupabaseAdmin();
+      const { data: adminProfile, error: adminError } = await adminClient
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (adminError) {
+        console.error('[Coach] Admin profile query also failed:', adminError.message);
+      } else if (adminProfile) {
+        console.log('[Coach] Successfully retrieved profile via admin client');
+        profile = adminProfile;
+      }
+    }
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
     const todayMeals = todayMealsResult.data || [];
@@ -1699,7 +1715,25 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     }
 
     // Check if profile is complete
+    // Handle profile query failure - retry with admin client to bypass RLS race conditions during token refresh
     let profile = profileResult.data;
+    if (profileResult.error || !profile) {
+      console.warn('[Coach] Profile query failed or empty (normal flow), retrying with admin client:', profileResult.error?.message);
+      const adminClient = getSupabaseAdmin();
+      const { data: adminProfile, error: adminError } = await adminClient
+        .from('profiles')
+        .select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (adminError) {
+        console.error('[Coach] Admin profile query also failed:', adminError.message);
+      } else if (adminProfile) {
+        console.log('[Coach] Successfully retrieved profile via admin client (normal flow)');
+        profile = adminProfile;
+      }
+    }
+
     const latestWeighIn = latestWeighInResult.data?.[0];
 
     // Auto-sync profile weight from latest weigh-in if different
