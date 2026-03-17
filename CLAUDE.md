@@ -74,12 +74,19 @@ Check `constants.ts` for current model IDs. If 404 errors, check [model deprecat
 - Daily limit: 15 messages (disabled for testing via `constants.ts`)
 
 ### Long-Term Memory (Pinecone)
-- **Extraction:** On tab visibility change, Haiku extracts atomic facts from conversation
+- **Extraction triggers:**
+  1. Visibility change (user switches apps/tabs, waits 5s)
+  2. Component unmount (user navigates within app via bottom nav)
 - **Retrieval:** Top 7 memories injected into system prompt per message
 - **Dedup:** 0.92 similarity threshold
 - **Categories:** training, nutrition, injuries, preferences, biometrics, history
-- **UI:** User Menu → "What Coach Remembers"
+- **UI:** User Menu → "What Coach Remembers" shows both:
+  - Extracted memories from Pinecone (learned from conversations)
+  - Saved Data from coach_memory table (food_staples, split_rotation, etc.)
 - **Config:** `PINECONE_CONFIG` in `constants.ts`
+- **Debug endpoints:**
+  - `POST /api/memory/test-write` — Write test record directly to Pinecone
+  - `DELETE /api/memory/clear-test?all=true` — Clear all user memories
 
 **SDK v7 syntax:**
 ```typescript
@@ -88,6 +95,8 @@ pc.inference.embed({ model: 'llama-text-embed-v2', inputs: [...], parameters: { 
 // Upsert
 index.upsert({ records: vectors })
 ```
+
+**Data isolation:** All queries filter by `user_id` — users only see their own memories.
 
 ### Auto-Triggers
 After meal/workout save, Haiku generates proactive message → badge on Coach tab.
@@ -292,8 +301,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 PINECONE_API_KEY
 PINECONE_INDEX_NAME=netgains-memory
+PINECONE_INDEX_HOST=<your-index-host-url>
 RESEND_API_KEY
 ADMIN_API_SECRET
 ```
+
+**Pinecone Host:** Get from Pinecone dashboard → your index → copy the host URL (e.g., `https://netgains-memory-xxxxx.svc.xxx.pinecone.io`). This bypasses index lookup and is required for serverless indexes.
 
 **Vercel:** Use project `netgains-ai` (not `netgains-ai-8qeb`).
