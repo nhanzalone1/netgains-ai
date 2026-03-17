@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NetGains",
+  title: "NetGainsAI",
   description: "Track your strength gains with the Baechle Engine",
   manifest: "/manifest.json",
   icons: {
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "NetGains",
+    title: "NetGainsAI",
   },
 };
 

@@ -1,6 +1,6 @@
 {
-  "name": "NetGains",
-  "short_name": "NetGains",
+  "name": "NetGainsAI",
+  "short_name": "NetGainsAI",
   "description": "AI-powered fitness coaching for serious lifters",
   "start_url": "/",
   "display": "standalone",
