@@ -668,9 +668,14 @@ export default function CoachPage() {
   }, [messagesLoaded, scrollToBottom]);
 
   // Mark coach messages as viewed when page loads
+  // Delay slightly to ensure any pending message saves complete (prevents race condition)
   useEffect(() => {
     if (user?.id && messagesLoaded) {
-      markCoachAsViewed(user.id);
+      // Small delay to let any in-flight message saves complete
+      const timer = setTimeout(() => {
+        markCoachAsViewed(user.id);
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [user?.id, messagesLoaded]);
 
@@ -962,6 +967,11 @@ export default function CoachPage() {
 
     setIsLoading(false);
     isLoadingRef.current = false;
+
+    // Mark as viewed after streaming completes to ensure new messages don't show as unread
+    if (user?.id) {
+      setTimeout(() => markCoachAsViewed(user.id), 500);
+    }
   };
 
   // Soft reset: clears chat and triggers fresh daily greeting (keeps onboarding/memories)

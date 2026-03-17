@@ -1119,7 +1119,7 @@ export function ExercisePickerModal({
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full max-w-sm rounded-2xl p-6 border border-gray-800 max-h-[90vh] overflow-y-auto"
+                    className="w-full max-w-[calc(100vw-32px)] sm:max-w-sm rounded-2xl p-6 border border-gray-800 max-h-[90vh] overflow-y-auto"
                     style={{ background: "var(--card)" }}
                   >
                     <h2 className="text-lg font-bold text-white mb-4">Edit Exercise</h2>

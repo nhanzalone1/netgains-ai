@@ -24,6 +24,7 @@ import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 import { SkeletonNutrition, Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/capacitor";
+import { useToast } from "@/components/toast";
 
 interface Meal {
   id: string;
@@ -196,6 +197,7 @@ export default function NutritionPage() {
   const { user } = useAuth();
   const supabase = createClient();
   const router = useRouter();
+  const toast = useToast();
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -290,7 +292,9 @@ export default function NutritionPage() {
     }
 
     // Check if we need to show nutrition onboarding
-    // Show if: main onboarding complete, nutrition onboarding NOT complete, and no meals logged
+    // Show if: main onboarding complete AND nutrition onboarding NOT complete
+    // Note: We no longer check meal count - users who logged meals before completing
+    // main onboarding should still see nutrition goal setup when ready
     if (!hasCheckedOnboarding && profileResult.data) {
       const profile = profileResult.data;
       console.log("[Nutrition Onboarding] Profile check:", {
@@ -304,19 +308,9 @@ export default function NutritionPage() {
 
       console.log("[Nutrition Onboarding] Needs onboarding:", needsOnboarding);
 
-      // Also check if they have ANY meals ever (not just today)
       if (needsOnboarding) {
-        const { count } = await supabase
-          .from("meals")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id);
-
-        console.log("[Nutrition Onboarding] Meal count:", count);
-
-        if (count === 0) {
-          console.log("[Nutrition Onboarding] Showing onboarding!");
-          setShowOnboarding(true);
-        }
+        console.log("[Nutrition Onboarding] Showing onboarding!");
+        setShowOnboarding(true);
       }
       setHasCheckedOnboarding(true);
     }
@@ -501,7 +495,7 @@ export default function NutritionPage() {
     );
 
     if (isDuplicate) {
-      // Silently skip - meal already logged
+      toast.info("This meal was already logged today.");
       setShowAddFood(false);
       setFoodName("");
       setFoodCalories("");
@@ -515,7 +509,7 @@ export default function NutritionPage() {
 
     setSavingFood(true);
 
-    await supabase.from("meals").insert({
+    const { error } = await supabase.from("meals").insert({
       user_id: user.id,
       date: formatDate(selectedDate),
       meal_type: addFoodType,
@@ -528,6 +522,13 @@ export default function NutritionPage() {
       ai_generated: false,
       consumed: true,
     });
+
+    if (error) {
+      console.error("Failed to save meal:", error);
+      toast.error("Failed to save meal. Please try again.");
+      setSavingFood(false);
+      return;
+    }
 
     setSavingFood(false);
     setShowAddFood(false);
@@ -581,7 +582,12 @@ export default function NutritionPage() {
 
   const deleteMeal = async (mealId: string) => {
     if (!user) return;
-    await supabase.from("meals").delete().eq("id", mealId);
+    const { error } = await supabase.from("meals").delete().eq("id", mealId);
+    if (error) {
+      console.error("Failed to delete meal:", error);
+      toast.error("Failed to delete meal. Please try again.");
+      return;
+    }
     setMeals((prev) => prev.filter((m) => m.id !== mealId));
     loadWeekData();
     invalidateDailyBriefCache(user.id);
@@ -599,7 +605,7 @@ export default function NutritionPage() {
     const isViewingToday = formatDate(selectedDate) === todayStr;
 
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("meals")
         .insert({
           user_id: user.id,
@@ -617,7 +623,14 @@ export default function NutritionPage() {
         .select()
         .single();
 
+      if (error) {
+        console.error("Failed to copy meal:", error);
+        toast.error("Failed to copy meal. Please try again.");
+        return;
+      }
+
       if (data) {
+        toast.success(`${meal.food_name} copied to today`);
         // Only add to local state if viewing today
         if (isViewingToday) {
           setMeals((prev) => [...prev, data as Meal]);
@@ -682,20 +695,25 @@ export default function NutritionPage() {
       .update(updatedMeal)
       .eq("id", editingMeal.id);
 
-    if (!error) {
-      // Update local state immediately
-      setMeals((prev) =>
-        prev.map((m) =>
-          m.id === editingMeal.id ? { ...m, ...updatedMeal } : m
-        )
-      );
-      setEditingMeal(null);
-      loadWeekData();
-      loadRecentFoods();
-      // Invalidate daily brief cache so nutrition updates appear
-      if (user) {
-        invalidateDailyBriefCache(user.id);
-      }
+    if (error) {
+      console.error("Failed to update meal:", error);
+      toast.error("Failed to update meal. Please try again.");
+      setSavingMealEdit(false);
+      return;
+    }
+
+    // Update local state immediately
+    setMeals((prev) =>
+      prev.map((m) =>
+        m.id === editingMeal.id ? { ...m, ...updatedMeal } : m
+      )
+    );
+    setEditingMeal(null);
+    loadWeekData();
+    loadRecentFoods();
+    // Invalidate daily brief cache so nutrition updates appear
+    if (user) {
+      invalidateDailyBriefCache(user.id);
     }
 
     setSavingMealEdit(false);

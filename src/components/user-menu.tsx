@@ -227,6 +227,20 @@ export function UserMenu() {
   };
 
   const handleSignOut = async () => {
+    // Clear all user-specific localStorage data to prevent data leakage on shared devices
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('netgains-') ||
+        key.startsWith('coach-') ||
+        key.includes(user?.id || '')
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
     await supabase.auth.signOut();
     router.push("/auth/login");
     router.refresh();

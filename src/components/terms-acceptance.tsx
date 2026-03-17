@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Shield, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Shield, FileText, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
 import { Button } from "./ui/button";
@@ -16,25 +16,34 @@ export function TermsAcceptance({ onAccept }: TermsAcceptanceProps) {
   const [accepting, setAccepting] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
 
   const handleAccept = async () => {
     if (!user) return;
 
     setAccepting(true);
+    setError(null);
+
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from("profiles")
         .update({ terms_accepted_at: new Date().toISOString() })
         .eq("id", user.id);
 
-      if (!error) {
-        onAccept();
+      if (updateError) {
+        console.error("Failed to accept terms:", updateError);
+        setError("Failed to save. Please check your connection and try again.");
+        setAccepting(false);
+        return;
       }
-    } catch (error) {
-      console.error("Failed to accept terms:", error);
+
+      onAccept();
+    } catch (err) {
+      console.error("Failed to accept terms:", err);
+      setError("Something went wrong. Please try again.");
+      setAccepting(false);
     }
-    setAccepting(false);
   };
 
   return (
@@ -162,6 +171,12 @@ export function TermsAcceptance({ onAccept }: TermsAcceptanceProps) {
         <p className="text-xs text-muted-foreground text-center mb-4">
           By tapping "I Accept", you agree to our Terms of Service and Privacy Policy.
         </p>
+        {error && (
+          <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
         <Button
           onClick={handleAccept}
           loading={accepting}

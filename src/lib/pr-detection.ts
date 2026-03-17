@@ -19,6 +19,15 @@ const getPRKey = (name: string, equipment: string): string => {
   return `${name.toLowerCase()}::${equipment.toLowerCase()}`;
 };
 
+// Compare weights with tolerance to handle floating-point precision issues
+const weightsEqual = (a: number, b: number): boolean => {
+  return Math.abs(a - b) < 0.01;
+};
+
+const weightGreater = (a: number, b: number): boolean => {
+  return a > b + 0.01;
+};
+
 /**
  * Detect PRs from a workout by comparing to historical data.
  * Filters out warmup sets (variant === 'warmup') from PR consideration.
@@ -42,7 +51,7 @@ export async function detectPRs(
     const workingSets = exercise.sets.filter(s => s.variant !== 'warmup');
     return workingSets.reduce(
       (best, set) => {
-        if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) {
+        if (!best || weightGreater(set.weight, best.weight) || (weightsEqual(set.weight, best.weight) && set.reps > best.reps)) {
           return { weight: set.weight, reps: set.reps };
         }
         return best;
@@ -122,8 +131,8 @@ export async function detectPRs(
 
     for (const set of exerciseSets) {
       const current = historicalBests[key];
-      // Compare by weight first, then by reps at same weight
-      if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
+      // Compare by weight first, then by reps at same weight (with tolerance for floating-point)
+      if (!current || weightGreater(set.weight, current.weight) || (weightsEqual(set.weight, current.weight) && set.reps > current.reps)) {
         historicalBests[key] = { weight: set.weight, reps: set.reps };
       }
     }
@@ -136,9 +145,9 @@ export async function detectPRs(
     if (best) {
       const key = getPRKey(exercise.name, exercise.equipment);
       const historical = historicalBests[key];
-      // It's a PR if no historical data OR current beat historical
-      if (!historical || best.weight > historical.weight ||
-          (best.weight === historical.weight && best.reps > historical.reps)) {
+      // It's a PR if no historical data OR current beat historical (with tolerance for floating-point)
+      if (!historical || weightGreater(best.weight, historical.weight) ||
+          (weightsEqual(best.weight, historical.weight) && best.reps > historical.reps)) {
         prs.push({
           exercise: exercise.name,
           equipment: exercise.equipment,

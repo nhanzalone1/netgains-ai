@@ -352,6 +352,21 @@ export default function LogPage() {
     setSelectedFolder(folder);
   };
 
+  // Validate a set based on its type (reps vs time-based)
+  const isValidSet = (set: { weight: string; reps: string; measureType?: string }) => {
+    const weight = parseFloat(set.weight);
+    const reps = parseInt(set.reps, 10);
+    const isTimeBased = set.measureType === 'secs';
+
+    // For time-based exercises (planks, holds): weight can be 0 (bodyweight), but must have time > 0
+    if (isTimeBased) {
+      return !isNaN(reps) && reps > 0;
+    }
+
+    // For weight-based exercises: both weight and reps must be positive numbers
+    return !isNaN(weight) && !isNaN(reps) && weight > 0 && reps > 0;
+  };
+
   // Handle saving workout from session
   const handleSaveWorkout = async (exercises: {
     id: string;
@@ -367,7 +382,7 @@ export default function LogPage() {
       .map((ex, i) => ({
         ...ex,
         orderIndex: i,
-        validSets: ex.sets.filter((s) => s.weight && s.reps),
+        validSets: ex.sets.filter((s) => isValidSet(s)),
       }))
       .filter((ex) => ex.validSets.length > 0);
 

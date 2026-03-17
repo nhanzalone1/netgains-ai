@@ -142,6 +142,28 @@ export default function StatsPage() {
     }
   }, [user]);
 
+  // Format date in local timezone as YYYY-MM-DD
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Format date for chart display with year disambiguation
+  const formatChartDate = (dateStr: string): string => {
+    const date = new Date(dateStr + 'T12:00:00'); // Parse at noon to avoid timezone issues
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const dateYear = date.getFullYear();
+
+    // Include year if not current year to avoid duplicate labels
+    if (dateYear !== thisYear) {
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+    }
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
   const loadWeighIns = async () => {
     setLoadingWeighIns(true);
     console.log('[Stats] Loading weigh-ins for user:', user!.id);
@@ -160,7 +182,7 @@ export default function StatsPage() {
 
     setWeighIns(
       (data || []).map((w) => ({
-        date: new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        date: formatChartDate(w.date),
         weight: w.weight_lbs,
       }))
     );
@@ -178,7 +200,8 @@ export default function StatsPage() {
       return;
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    // Use local date instead of UTC to avoid timezone issues
+    const today = formatLocalDate(new Date());
 
     // Upsert weigh-in (one per day)
     const { error: weighInError } = await supabase.from("weigh_ins").upsert(
@@ -186,10 +209,14 @@ export default function StatsPage() {
       { onConflict: "user_id,date" }
     );
 
-    // Update profile weight
-    if (!weighInError) {
-      await supabase.from("profiles").update({ weight_lbs: weight }).eq("id", user.id);
+    if (weighInError) {
+      console.error('[Stats] Failed to save weigh-in:', weighInError);
+      setSavingWeighIn(false);
+      return;
     }
+
+    // Update profile weight
+    await supabase.from("profiles").update({ weight_lbs: weight }).eq("id", user.id);
 
     setSavingWeighIn(false);
     setShowWeighInModal(false);
