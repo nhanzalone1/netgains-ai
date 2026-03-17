@@ -1,7 +1,15 @@
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-// Delete today's chat messages to allow regeneration of morning greeting
-export async function POST() {
+function getSupabaseAdmin() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+// Delete the onboarding message and allow regeneration of morning greeting
+export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -10,31 +18,50 @@ export async function POST() {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    // Get today's date in YYYY-MM-DD format (UTC for database comparison)
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    // Get local date from client (to handle timezone correctly)
+    const body = await request.json().catch(() => ({}));
+    const localDate = body.localDate; // Expected format: YYYY-MM-DD
 
-    console.log('[clear-today] Clearing messages for user:', user.id, 'date:', todayStr);
+    console.log('[clear-today] User:', user.id, 'localDate:', localDate);
 
-    // Delete messages created today
-    const { error, count } = await supabase
+    // Use admin client to bypass RLS
+    const adminClient = getSupabaseAdmin();
+
+    // Strategy 1: Delete the specific onboarding message by content pattern
+    const { error: deleteOnboardingError, count: onboardingCount } = await adminClient
       .from('chat_messages')
       .delete()
       .eq('user_id', user.id)
-      .gte('created_at', `${todayStr}T00:00:00.000Z`)
-      .lt('created_at', `${todayStr}T23:59:59.999Z`);
+      .ilike('content', '%let\'s get you set up%what should i call you%');
 
-    if (error) {
-      console.error('[clear-today] Delete failed:', error);
-      return Response.json({ success: false, error: error.message }, { status: 500 });
+    if (deleteOnboardingError) {
+      console.error('[clear-today] Delete onboarding message failed:', deleteOnboardingError);
+    } else {
+      console.log('[clear-today] Deleted', onboardingCount, 'onboarding messages');
     }
 
-    console.log('[clear-today] Deleted', count, 'messages');
+    // Strategy 2: Also delete any hidden trigger messages from today
+    if (localDate) {
+      // Delete messages where created_at starts with the local date
+      // This handles timezone issues by matching the date portion
+      const { error: deleteTriggerError, count: triggerCount } = await adminClient
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('hidden', true)
+        .gte('created_at', `${localDate}T00:00:00`)
+        .lt('created_at', `${localDate}T23:59:59`);
+
+      if (deleteTriggerError) {
+        console.error('[clear-today] Delete triggers failed:', deleteTriggerError);
+      } else {
+        console.log('[clear-today] Deleted', triggerCount, 'hidden triggers');
+      }
+    }
 
     return Response.json({
       success: true,
-      deleted: count,
-      message: 'Today\'s messages cleared. Refresh the page to get a new morning greeting.'
+      message: 'Onboarding message cleared. Clear localStorage and refresh to get new greeting.'
     });
   } catch (error) {
     console.error('[clear-today] Unexpected error:', error);
