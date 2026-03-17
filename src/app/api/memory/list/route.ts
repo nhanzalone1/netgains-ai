@@ -29,12 +29,18 @@ const SAVED_ITEM_LABELS: Record<string, string> = {
   gym_equipment: 'Gym Equipment',
 };
 
-// Keys to exclude from display (internal/system keys)
-const EXCLUDED_KEYS = [
-  'last_memory_extraction',
-  'pending_changes',
-  'pending_workout',
-  'last_workout_date',
+// Only show these specific keys that are meaningful to users
+const ALLOWED_KEYS = [
+  'food_staples',
+  'split_rotation',
+  'name',
+  'age',
+  'sex',
+  'training_experience',
+  'gym_equipment',
+  'injuries',
+  'preferences',
+  'schedule',
 ];
 
 export async function GET(req: Request) {
@@ -58,7 +64,7 @@ export async function GET(req: Request) {
     .eq('user_id', user.id);
 
   const savedItems: SavedItem[] = (coachMemoryData || [])
-    .filter(item => !EXCLUDED_KEYS.includes(item.key))
+    .filter(item => ALLOWED_KEYS.includes(item.key))
     .map(item => ({
       id: `saved-${item.id}`,
       key: item.key,
