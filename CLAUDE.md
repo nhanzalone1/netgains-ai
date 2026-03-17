@@ -178,6 +178,18 @@ On first app open, users must accept Terms of Service and Privacy Policy before 
 3. After profile complete → interactive app tour (spotlight overlay)
 4. Profile "empty" if missing: height_inches, weight_lbs, or goal
 
+### Profile Query Resilience
+The profile query uses RLS (Row Level Security). During auth token refresh, the query can fail due to a race condition. To prevent existing users from seeing the onboarding message:
+- If profile query fails or returns empty, retry with admin client (bypasses RLS)
+- Only treat profile as incomplete if both queries fail
+- See `api/chat/route.ts` lines ~1239 and ~1717
+
+### Clear Today's Messages
+Endpoint to delete bad messages without wiping chat history:
+- `POST /api/chat/clear-today` with `{ localDate: "YYYY-MM-DD" }`
+- Deletes onboarding messages by content pattern
+- Deletes hidden trigger messages from the specified date
+
 ## Waitlist / Beta
 
 - Non-logged-in → `/waitlist`
