@@ -53,6 +53,8 @@ export async function GET(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  console.log('[Memory List] Querying for user_id:', user.id);
+
   const { searchParams } = new URL(req.url);
   const category = searchParams.get('category') as MemoryCategory | 'saved' | null;
   const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 100);
@@ -133,6 +135,11 @@ export async function GET(req: Request) {
       filter,
       includeMetadata: true,
     });
+
+    console.log('[Memory List] Pinecone returned', results.matches?.length || 0, 'matches');
+    if (results.matches && results.matches.length > 0) {
+      console.log('[Memory List] First match:', JSON.stringify(results.matches[0]).substring(0, 500));
+    }
 
     const memories: MemoryItem[] = (results.matches || [])
       .map(match => ({
