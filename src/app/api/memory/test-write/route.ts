@@ -53,8 +53,8 @@ export async function POST() {
       },
     };
 
-    // Upsert to Pinecone
-    await index.upsert([vector]);
+    // Upsert to Pinecone (SDK v7 syntax)
+    await index.upsert({ records: [vector] });
 
     console.log('[Memory Test] Successfully wrote test vector:', vectorId);
 
