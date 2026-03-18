@@ -58,7 +58,7 @@ export default function DebugPage() {
       supabase.from("coach_memory").select("key, value").eq("user_id", user.id),
     ]);
 
-    if (profileRes.data) setProfile(profileRes.data);
+    if (profileRes.data) setProfile(profileRes.data as Profile);
     if (memoriesRes.data) setMemories(memoriesRes.data);
     setLoading(false);
   };
@@ -269,18 +269,19 @@ export default function DebugPage() {
     }
 
     // Create sample sets for each exercise
+    const exerciseIds = exercises as { id: string }[];
     const setData = [
       // Bench Press - 3 sets
-      { exercise_id: exercises[0].id, weight: 225, reps: 5, order_index: 0 },
-      { exercise_id: exercises[0].id, weight: 225, reps: 5, order_index: 1 },
-      { exercise_id: exercises[0].id, weight: 235, reps: 3, order_index: 2 },
+      { exercise_id: exerciseIds[0].id, weight: 225, reps: 5, order_index: 0 },
+      { exercise_id: exerciseIds[0].id, weight: 225, reps: 5, order_index: 1 },
+      { exercise_id: exerciseIds[0].id, weight: 235, reps: 3, order_index: 2 },
       // Incline DB Press - 3 sets
-      { exercise_id: exercises[1].id, weight: 70, reps: 10, order_index: 0 },
-      { exercise_id: exercises[1].id, weight: 70, reps: 10, order_index: 1 },
-      { exercise_id: exercises[1].id, weight: 75, reps: 8, order_index: 2 },
+      { exercise_id: exerciseIds[1].id, weight: 70, reps: 10, order_index: 0 },
+      { exercise_id: exerciseIds[1].id, weight: 70, reps: 10, order_index: 1 },
+      { exercise_id: exerciseIds[1].id, weight: 75, reps: 8, order_index: 2 },
       // Cable Flyes - 2 sets
-      { exercise_id: exercises[2].id, weight: 30, reps: 12, order_index: 0 },
-      { exercise_id: exercises[2].id, weight: 30, reps: 12, order_index: 1 },
+      { exercise_id: exerciseIds[2].id, weight: 30, reps: 12, order_index: 0 },
+      { exercise_id: exerciseIds[2].id, weight: 30, reps: 12, order_index: 1 },
     ];
 
     const { error: setError } = await supabase.from("sets").insert(setData);
@@ -566,7 +567,8 @@ export default function DebugPage() {
 
     // Add a simple exercise to each workout
     if (insertedWorkouts) {
-      const exercises = insertedWorkouts.map((w) => ({
+      const workoutIds = insertedWorkouts as { id: string }[];
+      const exercises = workoutIds.map((w) => ({
         workout_id: w.id,
         name: "Bench Press",
         order_index: 0,
@@ -579,7 +581,8 @@ export default function DebugPage() {
 
       // Add sets to each exercise
       if (insertedExercises) {
-        const sets = insertedExercises.map((e) => ({
+        const exerciseIds = insertedExercises as { id: string }[];
+        const sets = exerciseIds.map((e) => ({
           exercise_id: e.id,
           weight: 135,
           reps: 10,
@@ -612,15 +615,17 @@ export default function DebugPage() {
     }
 
     // Add exercise and set
+    const workoutData = workout as { id: string };
     const { data: exercise } = await supabase
       .from("exercises")
-      .insert({ workout_id: workout.id, name: "Squat", order_index: 0 })
+      .insert({ workout_id: workoutData.id, name: "Squat", order_index: 0 })
       .select()
       .single();
 
     if (exercise) {
+      const exerciseData = exercise as { id: string };
       await supabase.from("sets").insert({
-        exercise_id: exercise.id,
+        exercise_id: exerciseData.id,
         weight: 225,
         reps: 5,
         order_index: 0,

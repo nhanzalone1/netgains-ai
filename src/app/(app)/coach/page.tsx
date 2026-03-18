@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
+import { useSubscription } from "@/components/subscription-provider";
+import { UpgradeBanner, Paywall } from "@/components/paywall";
 import { createClient } from "@/lib/supabase/client";
 import { markCoachAsViewed } from "@/lib/coach-notification";
 import { apiFetch } from "@/lib/capacitor";
@@ -242,6 +244,7 @@ function shouldGenerateOpening(messages: Message[], userId: string | undefined):
 
 export default function CoachPage() {
   const { user } = useAuth();
+  const { showPaywall, setShowPaywall, refreshMessageCount } = useSubscription();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [messagesLoaded, setMessagesLoaded] = useState(false);
@@ -981,6 +984,33 @@ export default function CoachPage() {
     setIsLoading(false);
     isLoadingRef.current = false;
 
+    // Refresh message count after sending
+    refreshMessageCount();
+
+    // Check if the response indicates hitting the message limit
+    // Get the final assistant message content
+    setMessages((prev) => {
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg?.role === "assistant" && lastMsg.content) {
+        // Check for limit message patterns
+        const limitPatterns = [
+          "reached your daily",
+          "out of messages",
+          "message limit",
+          "daily limit",
+          "upgrade to",
+        ];
+        const isLimitMessage = limitPatterns.some(pattern =>
+          lastMsg.content.toLowerCase().includes(pattern)
+        );
+        if (isLimitMessage) {
+          // Show paywall after a brief delay
+          setTimeout(() => setShowPaywall(true), 1500);
+        }
+      }
+      return prev;
+    });
+
     // Mark as viewed after streaming completes to ensure new messages don't show as unread
     if (user?.id) {
       setTimeout(() => markCoachAsViewed(user.id), 500);
@@ -1242,6 +1272,9 @@ export default function CoachPage() {
         </motion.button>
       )}
 
+      {/* Upgrade Banner - shows when messages are running low */}
+      <UpgradeBanner onUpgrade={() => setShowPaywall(true)} />
+
       {/* Input Area - at bottom of flex container, above nav bar */}
       <div
         className="flex-shrink-0 p-4 border-t border-white/5"
@@ -1273,6 +1306,13 @@ export default function CoachPage() {
           </motion.button>
         </form>
       </div>
+
+      {/* Subscription Paywall */}
+      <Paywall
+        isOpen={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        trigger="limit"
+      />
     </div>
   );
 }

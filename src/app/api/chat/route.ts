@@ -3,8 +3,18 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { detectMilestones, markMilestonesCelebrated, formatMilestone, MilestoneContext } from '@/lib/milestones';
 import { formatLocalDate } from '@/lib/date-utils';
-import { AI_MODELS, AI_TOKEN_LIMITS, RATE_LIMITS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
+import {
+  AI_MODELS,
+  AI_TOKEN_LIMITS,
+  RATE_LIMITS,
+  DEFAULT_NUTRITION_GOALS,
+  SUBSCRIPTION_TIERS,
+  DAILY_MESSAGE_LIMITS,
+  SONNET_RATIO,
+  SubscriptionTier,
+} from '@/lib/constants';
 import { retrieveRelevantMemories, RetrievedMemory } from '@/lib/memory-retrieval';
+import type { Profile, NutritionGoals } from '@/lib/supabase/types';
 
 // Helper to get service role client for bypassing RLS (used for profile updates)
 function getSupabaseAdmin() {
@@ -714,7 +724,7 @@ function parseTargetReps(targetRepsStr: string): number {
 // Fetch user's best sets for exercises (by name matching)
 // Returns a map of exercise name (lowercase) -> { weight, reps, est1RM }
 async function fetchUserBestSets(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   exerciseNames: string[]
 ): Promise<Map<string, { weight: number; reps: number; est1RM: number }>> {
@@ -1097,14 +1107,112 @@ const tools: Anthropic.Tool[] = [
 // Prefix used by the client to signal a system trigger (hidden from UI)
 const TRIGGER_PREFIX = '[SYSTEM_TRIGGER]';
 
-// Daily message limit from constants
-const { DAILY_MESSAGE_LIMIT, MAX_TOOL_ROUNDS } = RATE_LIMITS;
+// Rate limits from constants
+const { MAX_TOOL_ROUNDS } = RATE_LIMITS;
+
+// === SMART MODEL ROUTING ===
+// Classify messages to determine if they need complex (Sonnet) or simple (Haiku) processing
+function classifyMessageComplexity(message: string): 'simple' | 'complex' {
+  const msgLower = message.toLowerCase().trim();
+  const wordCount = msgLower.split(/\s+/).length;
+
+  // Simple confirmations and acknowledgments → always Haiku
+  const simplePatterns = [
+    /^(yes|yeah|yep|yup|ok|okay|sure|got it|thanks|thank you|cool|nice|perfect|great|good|k|kk)\.?$/i,
+    /^log (it|that|this)\.?$/i,
+    /^(add|save|confirm) (it|that|this)\.?$/i,
+    /^(sounds good|works for me|let's do it|do it)\.?$/i,
+  ];
+
+  for (const pattern of simplePatterns) {
+    if (pattern.test(msgLower)) return 'simple';
+  }
+
+  // Quick data queries
+  const quickQueryPatterns = [
+    /^(what'?s|how much|how many).{0,20}(protein|calories|carbs|fat|macros)\??$/i,
+    /^(what did i|did i).{0,20}(eat|log|have)\??$/i,
+    /^(am i|how am i).{0,15}(doing|tracking)\??$/i,
+  ];
+
+  for (const pattern of quickQueryPatterns) {
+    if (pattern.test(msgLower)) return 'simple';
+  }
+
+  // Complex patterns that benefit from Sonnet
+  const complexPatterns = [
+    /workout|exercise|training|routine|program|split/i,
+    /meal plan|what should i eat|suggest|recommend/i,
+    /why|how does|explain|help me understand/i,
+    /review|analyze|breakdown|evaluate/i,
+    /generate|create|build|design/i,
+    /goal|bulk|cut|maintain|weight loss|muscle/i,
+    /stall|plateau|not working|stuck/i,
+    /injury|pain|hurt|sore/i,
+    // Decision/advice questions
+    /should i|is it okay|is it fine|is it bad|is it good|can i|would it/i,
+  ];
+
+  for (const pattern of complexPatterns) {
+    if (pattern.test(msgLower)) return 'complex';
+  }
+
+  // Short messages without complex patterns → simple
+  if (wordCount <= 3) return 'simple';
+
+  // Detailed food logging → complex (needs accurate parsing)
+  if (/\d+\s*(g|oz|lb|cal|gram|ounce)/i.test(msgLower)) return 'complex';
+
+  // Food logging with specific items (e.g., "I had 2 eggs and toast", "ate chicken and rice")
+  // Detect: number + food word, or eating verbs + multiple foods
+  const foodWords = /egg|chicken|beef|fish|rice|bread|toast|oat|yogurt|milk|cheese|salad|vegetable|fruit|banana|apple|protein|shake|sandwich|burger|pizza|pasta|steak|salmon|tuna/i;
+  const eatingVerbs = /^(i |just )?(had|ate|eaten|got|made|cooked|prepared|finished)/i;
+  if (foodWords.test(msgLower) && (eatingVerbs.test(msgLower) || /\d+/.test(msgLower))) {
+    return 'complex';
+  }
+
+  // Longer messages default to complex
+  if (wordCount > 10) return 'complex';
+
+  // Default to simple for cost savings
+  return 'simple';
+}
+
+// Determine which model to use based on tier and message complexity
+function selectModel(
+  tier: SubscriptionTier,
+  complexity: 'simple' | 'complex',
+  isSystemTrigger: boolean
+): { model: string; maxTokens: number } {
+  // System triggers always use Sonnet (daily briefs need quality)
+  if (isSystemTrigger) {
+    return { model: AI_MODELS.COACHING, maxTokens: AI_TOKEN_LIMITS.COACHING };
+  }
+
+  // Simple messages always use Haiku
+  if (complexity === 'simple') {
+    return { model: AI_MODELS.COACHING_SIMPLE, maxTokens: AI_TOKEN_LIMITS.COACHING_SIMPLE };
+  }
+
+  // Complex messages: use Sonnet based on tier's ratio
+  const sonnetRatio = SONNET_RATIO[tier];
+  const useSonnet = Math.random() < sonnetRatio;
+
+  if (useSonnet) {
+    return { model: AI_MODELS.COACHING, maxTokens: AI_TOKEN_LIMITS.COACHING };
+  } else {
+    return { model: AI_MODELS.COACHING_SIMPLE, maxTokens: AI_TOKEN_LIMITS.COACHING_SIMPLE };
+  }
+}
 
 export async function POST(req: Request) {
   console.log('[Coach] ========== CHAT API CALLED ==========');
 
   // Parse request body with error handling
-  let messages, currentWorkout, localDate, localTime;
+  let messages: { role: string; content: string }[] | undefined;
+  let currentWorkout: string | undefined;
+  let localDate: string | undefined;
+  let localTime: string | undefined;
   try {
     const body = await req.json();
     messages = body.messages;
@@ -1136,6 +1244,26 @@ export async function POST(req: Request) {
 
   console.log('[Coach] User authenticated:', user.id);
 
+  // Get user's subscription tier
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('tier, expires_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  // Determine effective tier (check expiration for paid tiers)
+  let userTier: SubscriptionTier = SUBSCRIPTION_TIERS.FREE;
+  if (subscription?.tier && subscription.tier !== SUBSCRIPTION_TIERS.FREE) {
+    const isExpired = subscription.expires_at && new Date(subscription.expires_at) < new Date();
+    if (!isExpired) {
+      userTier = subscription.tier as SubscriptionTier;
+    }
+  }
+  console.log('[Coach] User tier:', userTier);
+
+  // Get daily message limit for this tier
+  const dailyLimit = DAILY_MESSAGE_LIMITS[userTier];
+
   // Check daily message limit (skip for system triggers)
   const isSystemTriggerCheck = messages.length === 1 &&
     messages[0].role === 'user' &&
@@ -1155,10 +1283,17 @@ export async function POST(req: Request) {
 
     const currentCount = countData ? parseInt(countData.value) : 0;
 
-    if (currentCount >= DAILY_MESSAGE_LIMIT) {
-      // Return limit reached message
+    if (currentCount >= dailyLimit) {
+      // Return limit reached message with tier-appropriate messaging
       const encoder = new TextEncoder();
-      const limitMessage = "coach is done for the day — go crush your workout and i'll be back tomorrow. resets at midnight.";
+      let limitMessage: string;
+      if (userTier === SUBSCRIPTION_TIERS.FREE) {
+        limitMessage = "you've hit your 3 free messages for today. upgrade to Basic for 15 messages/day, or Premium for 50. resets at midnight.";
+      } else if (userTier === SUBSCRIPTION_TIERS.BASIC) {
+        limitMessage = "you've hit your 15 messages for today. upgrade to Premium for 50 messages/day, or check back at midnight.";
+      } else {
+        limitMessage = "you've hit your 50 messages for today — that's a lot of coaching! resets at midnight.";
+      }
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode(`0:${JSON.stringify(limitMessage)}\n`));
@@ -1185,6 +1320,8 @@ export async function POST(req: Request) {
         .from('coach_memory')
         .insert({ user_id: user.id, key: countKey, value: '1' });
     }
+
+    console.log('[Coach] Message count:', currentCount + 1, '/', dailyLimit);
   }
 
   const anthropic = new Anthropic();
@@ -1200,7 +1337,15 @@ export async function POST(req: Request) {
   let profileComplete: boolean = true; // Default to true, will be set in each branch
   let pendingChanges: { type: string; from?: string; to?: string; newCalories?: number; newRotation?: string[] } | null = null;
 
+  // Smart routing model selection (set in each branch)
+  let selectedModel: string = AI_MODELS.COACHING;
+  let selectedMaxTokens: number = AI_TOKEN_LIMITS.COACHING;
+
   if (isSystemTrigger) {
+    // System triggers always use Sonnet for quality daily briefs
+    selectedModel = AI_MODELS.COACHING;
+    selectedMaxTokens = AI_TOKEN_LIMITS.COACHING;
+    console.log('[Coach] System trigger - using Sonnet');
     console.log('[Coach] === SYSTEM TRIGGER DETECTED ===');
 
     // Parse effective date from trigger message (for debug date override support)
@@ -1242,7 +1387,7 @@ export async function POST(req: Request) {
     if (yesterdayMealsResult.error) console.error('[Coach] Yesterday meals query error:', yesterdayMealsResult.error);
 
     // Handle profile query failure - retry with admin client to bypass RLS race conditions during token refresh
-    let profile = profileResult.data;
+    let profile = profileResult.data as Profile | null;
     if (profileResult.error || !profile) {
       console.warn('[Coach] Profile query failed or empty, retrying with admin client:', profileResult.error?.message);
       const adminClient = getSupabaseAdmin();
@@ -1261,10 +1406,11 @@ export async function POST(req: Request) {
     }
     const memories = memoriesResult.data || [];
     const recentWorkouts = workoutsResult.data || [];
-    const todayMeals = todayMealsResult.data || [];
-    const yesterdayMeals = yesterdayMealsResult.data || [];
-    const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
-    const latestWeighIn = latestWeighInResult.data?.[0];
+    type MealData = { calories: number; protein: number; carbs: number; fat: number; food_name: string; created_at: string };
+    const todayMeals = (todayMealsResult.data || []) as MealData[];
+    const yesterdayMeals = (yesterdayMealsResult.data || []) as MealData[];
+    const nutritionGoals = (nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS) as { calories: number; protein: number; carbs: number; fat: number };
+    const latestWeighIn = latestWeighInResult.data?.[0] as { weight_lbs: number } | undefined;
 
     // Auto-sync profile weight from latest weigh-in if different
     if (profile && latestWeighIn && latestWeighIn.weight_lbs !== profile.weight_lbs) {
@@ -1702,6 +1848,14 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     // Get the last user message to use as the query
     const lastUserMessage = messages.filter((m: { role: string }) => m.role === 'user').pop();
     const userMessageContent = lastUserMessage?.content || '';
+
+    // Smart model routing based on tier and message complexity
+    const messageComplexity = classifyMessageComplexity(userMessageContent);
+    const modelSelection = selectModel(userTier, messageComplexity, false);
+    selectedModel = modelSelection.model;
+    selectedMaxTokens = modelSelection.maxTokens;
+    console.log('[Coach] Message complexity:', messageComplexity, '| Model:', selectedModel, '| Tier:', userTier);
+
     let relevantMemories: RetrievedMemory[] = [];
 
     if (userMessageContent) {
@@ -1716,7 +1870,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
 
     // Check if profile is complete
     // Handle profile query failure - retry with admin client to bypass RLS race conditions during token refresh
-    let profile = profileResult.data;
+    let profile = profileResult.data as Profile | null;
     if (profileResult.error || !profile) {
       console.warn('[Coach] Profile query failed or empty (normal flow), retrying with admin client:', profileResult.error?.message);
       const adminClient = getSupabaseAdmin();
@@ -1730,7 +1884,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
         console.error('[Coach] Admin profile query also failed:', adminError.message);
       } else if (adminProfile) {
         console.log('[Coach] Successfully retrieved profile via admin client (normal flow)');
-        profile = adminProfile;
+        profile = adminProfile as Profile;
       }
     }
 
@@ -1768,12 +1922,14 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     } else {
       console.log('[Coach] Meals found:', todayMealsResult.data?.length || 0);
       if (todayMealsResult.data && todayMealsResult.data.length > 0) {
-        console.log('[Coach] Meal names:', todayMealsResult.data.map(m => m.food_name).join(', '));
+        const mealNames = (todayMealsResult.data as { food_name: string }[]).map(m => m.food_name).join(', ');
+        console.log('[Coach] Meal names:', mealNames);
       }
     }
 
-    const todayMeals = todayMealsResult.data || [];
-    const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
+    type MealData = { calories: number; protein: number; carbs: number; fat: number; food_name: string; created_at: string };
+    const todayMeals = (todayMealsResult.data || []) as MealData[];
+    const nutritionGoals = (nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS) as { calories: number; protein: number; carbs: number; fat: number };
     const existingSummary = summaryResult.data?.value || null;
     const lastSummaryCount = parseInt(messageCountResult.data?.value || '0');
 
@@ -2811,10 +2967,10 @@ ${pendingChangesSection}
         async function callAnthropicWithRetry(retries = 2): Promise<Anthropic.Message> {
           for (let attempt = 1; attempt <= retries; attempt++) {
             try {
-              console.log(`[Coach] API call attempt ${attempt}/${retries}`);
+              console.log(`[Coach] API call attempt ${attempt}/${retries} with ${selectedModel}`);
               return await anthropic.messages.create({
-                model: AI_MODELS.COACHING,
-                max_tokens: AI_TOKEN_LIMITS.COACHING,
+                model: selectedModel,
+                max_tokens: selectedMaxTokens,
                 system: dynamicSystemPrompt,
                 messages: currentMessages,
                 tools,

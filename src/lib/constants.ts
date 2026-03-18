@@ -3,7 +3,8 @@
 
 // === AI MODEL CONFIGURATION ===
 export const AI_MODELS = {
-  COACHING: 'claude-sonnet-4-20250514',
+  COACHING: 'claude-sonnet-4-20250514',           // Complex coaching (Sonnet)
+  COACHING_SIMPLE: 'claude-3-haiku-20240307',     // Simple responses (Haiku)
   SUMMARIZATION: 'claude-3-haiku-20240307',
   DAILY_BRIEF: 'claude-3-haiku-20240307',
   NUTRITION_ESTIMATE: 'claude-3-haiku-20240307',
@@ -12,16 +13,53 @@ export const AI_MODELS = {
 
 export const AI_TOKEN_LIMITS = {
   COACHING: 2048,
+  COACHING_SIMPLE: 1024,
   SUMMARIZATION: 250,
   DAILY_BRIEF: 150,
   NUTRITION_ESTIMATE: 256,
   ONBOARDING_PARSE: 256,
 } as const;
 
+// === SUBSCRIPTION TIERS ===
+export const SUBSCRIPTION_TIERS = {
+  FREE: 'free',
+  BASIC: 'basic',
+  PREMIUM: 'premium',
+} as const;
+
+export type SubscriptionTier = typeof SUBSCRIPTION_TIERS[keyof typeof SUBSCRIPTION_TIERS];
+
+// Message limits per day by tier
+export const DAILY_MESSAGE_LIMITS = {
+  [SUBSCRIPTION_TIERS.FREE]: 3,
+  [SUBSCRIPTION_TIERS.BASIC]: 15,
+  [SUBSCRIPTION_TIERS.PREMIUM]: 50,
+} as const;
+
+// Smart routing: percentage of complex messages that use Sonnet (rest use Haiku)
+// Higher = more Sonnet = better quality but higher cost
+export const SONNET_RATIO = {
+  [SUBSCRIPTION_TIERS.FREE]: 0.3,      // 30% Sonnet, 70% Haiku
+  [SUBSCRIPTION_TIERS.BASIC]: 0.3,     // 30% Sonnet, 70% Haiku
+  [SUBSCRIPTION_TIERS.PREMIUM]: 0.5,   // 50% Sonnet, 50% Haiku
+} as const;
+
+// === IN-APP PURCHASE PRODUCTS ===
+// Product IDs must match App Store Connect and RevenueCat
+export const IAP_PRODUCTS = {
+  BASIC_MONTHLY: 'netgains_basic_monthly',
+  PREMIUM_MONTHLY: 'netgains_premium_monthly',
+} as const;
+
+// Map products to tiers
+export const PRODUCT_TO_TIER: Record<string, SubscriptionTier> = {
+  [IAP_PRODUCTS.BASIC_MONTHLY]: SUBSCRIPTION_TIERS.BASIC,
+  [IAP_PRODUCTS.PREMIUM_MONTHLY]: SUBSCRIPTION_TIERS.PREMIUM,
+};
+
 // === RATE LIMITING ===
 export const RATE_LIMITS = {
-  // TODO: Set to 15 before public launch
-  DAILY_MESSAGE_LIMIT: 9999, // Temporarily disabled (was 15)
+  DAILY_MESSAGE_LIMIT: 9999, // Legacy - use DAILY_MESSAGE_LIMITS instead
   MAX_TOOL_ROUNDS: 10,
   SUMMARY_TRIGGER_INTERVAL: 10,
   RECENT_MESSAGES_TO_KEEP: 10,

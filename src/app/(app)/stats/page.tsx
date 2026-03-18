@@ -306,8 +306,9 @@ export default function StatsPage() {
 
     // Group templates by name+equipment (each equipment variant gets its own entry)
     const exerciseMap = new Map<string, ExerciseWithPR>();
+    const typedTemplates = templates as ExerciseTemplate[];
 
-    templates.forEach((template) => {
+    typedTemplates.forEach((template) => {
       const key = getExerciseKey(template.name, template.equipment);
       // Also try key without equipment suffix (e.g., "Chest press machine" -> "Chest press")
       const nameWithoutEquipment = normalizeString(template.name)
@@ -642,7 +643,7 @@ export default function StatsPage() {
                     borderRadius: "8px",
                   }}
                   labelStyle={{ color: "#ffffff" }}
-                  formatter={(value: number) => [`${value} lbs`, "Weight"]}
+                  formatter={(value) => [`${value ?? 0} lbs`, "Weight"]}
                 />
                 <Line
                   type="monotone"
@@ -835,8 +836,8 @@ export default function StatsPage() {
                           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
                         }}
                         labelStyle={{ color: "#ffffff", fontWeight: "bold" }}
-                        formatter={(value: number, name: string, props: any) => {
-                          if (name === "est1RM") {
+                        formatter={(value, name, props) => {
+                          if (name === "est1RM" && value !== undefined) {
                             const { weight, reps } = props.payload;
                             const isBodyweight = selectedExercise?.equipment === "bodyweight";
                             const weightDisplay = isBodyweight ? `BW+${weight}` : `${weight}lbs`;

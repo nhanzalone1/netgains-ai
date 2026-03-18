@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/toast";
 import { SplashWrapper } from "@/components/splash-wrapper";
+import { SubscriptionProvider } from "@/components/subscription-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,9 +57,11 @@ export default function RootLayout({
         <ThemeProvider>
           <ToastProvider>
             <AuthProvider>
-              <SplashWrapper>
-                {children}
-              </SplashWrapper>
+              <SubscriptionProvider>
+                <SplashWrapper>
+                  {children}
+                </SplashWrapper>
+              </SubscriptionProvider>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

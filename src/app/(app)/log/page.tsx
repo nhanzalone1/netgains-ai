@@ -411,11 +411,12 @@ export default function LogPage() {
         return;
       }
 
-      workoutId = workout.id;
+      const workoutData = workout as { id: string };
+      workoutId = workoutData.id;
 
       // Batch insert all exercises (include equipment for PR tracking)
       const exerciseInserts = validExercises.map((ex) => ({
-        workout_id: workout.id,
+        workout_id: workoutData.id,
         name: ex.name,
         equipment: ex.equipment || 'barbell',
         order_index: ex.orderIndex,
@@ -432,10 +433,11 @@ export default function LogPage() {
 
       // Build all sets for batch insert
       const setInserts: { exercise_id: string; weight: number; reps: number; order_index: number; variant: string; measure_type: string }[] = [];
+      const exerciseRecords = exercisesData as { id: string }[];
 
       for (let i = 0; i < validExercises.length; i++) {
         const exercise = validExercises[i];
-        const exerciseRecord = exercisesData[i];
+        const exerciseRecord = exerciseRecords[i];
 
         exercise.validSets.forEach((set, j) => {
           setInserts.push({
@@ -510,13 +512,16 @@ export default function LogPage() {
       return;
     }
 
+    // Type the folder data
+    const typedFolderData = folderData as Folder & { locations: Location };
+
     // Set the location first
-    const location = folderData.locations as Location;
+    const location = typedFolderData.locations;
     setSelectedLocation(location);
 
     // Then set the folder (this will trigger the workout session to open)
     const folderWithCount: FolderWithCount = {
-      ...folderData,
+      ...typedFolderData,
       exercise_count: 0, // Will be loaded when session opens
     };
     setSelectedFolder(folderWithCount);
@@ -948,10 +953,10 @@ export default function LogPage() {
       {!atMaxLocations && (
         <Button
           onClick={() => setShowNewLocation(true)}
-          icon={<Plus className="w-5 h-5" />}
           variant="ghost"
           className="!bg-muted/30"
         >
+          <Plus className="w-5 h-5" />
           Add New Gym
         </Button>
       )}

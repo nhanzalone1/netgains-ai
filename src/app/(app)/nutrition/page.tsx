@@ -35,7 +35,7 @@ interface Meal {
   protein: number;
   carbs: number;
   fat: number;
-  serving_size?: string;
+  serving_size: string | null;
   ai_generated: boolean;
   consumed: boolean;
   created_at: string;

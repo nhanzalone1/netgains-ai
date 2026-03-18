@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain, FileText } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain, FileText, Crown, Zap, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
 import { useTheme, themes } from "./theme-provider";
+import { useSubscription } from "./subscription-provider";
 import { IconButton } from "./ui/icon-button";
 import { CoachMemoriesSheet } from "./coach-memories-sheet";
+import { Paywall } from "./paywall";
 import { apiFetch } from "@/lib/capacitor";
+import { SUBSCRIPTION_TIERS } from "@/lib/constants";
 
 const intensityOptions = [
   { id: "light", name: "Light", description: "~300 cal deficit/surplus" },
@@ -22,6 +25,7 @@ type IntensityId = typeof intensityOptions[number]["id"];
 export function UserMenu() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { tier, messagesRemaining, dailyLimit, isFree, showPaywall, setShowPaywall } = useSubscription();
   const [open, setOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showIntensity, setShowIntensity] = useState(false);
@@ -285,6 +289,47 @@ export function UserMenu() {
                 <p className="text-xs text-muted-foreground truncate uppercase tracking-wide">
                   {user.email}
                 </p>
+              </div>
+
+              {/* Subscription Status */}
+              <div className="p-3 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    tier === SUBSCRIPTION_TIERS.PREMIUM
+                      ? "bg-gradient-to-br from-amber-500/20 to-amber-600/10"
+                      : tier === SUBSCRIPTION_TIERS.BASIC
+                      ? "bg-primary/20"
+                      : "bg-white/10"
+                  }`}>
+                    {tier === SUBSCRIPTION_TIERS.PREMIUM ? (
+                      <Crown className="w-5 h-5 text-amber-500" />
+                    ) : tier === SUBSCRIPTION_TIERS.BASIC ? (
+                      <Zap className="w-5 h-5 text-primary" />
+                    ) : (
+                      <MessageCircle className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white capitalize">
+                      {tier} Plan
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {messagesRemaining}/{dailyLimit} messages today
+                    </p>
+                  </div>
+                  {isFree && (
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setOpen(false);
+                        setShowPaywall(true);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
+                    >
+                      Upgrade
+                    </motion.button>
+                  )}
+                </div>
               </div>
 
               {/* Theme Picker */}
@@ -561,6 +606,13 @@ export function UserMenu() {
       <CoachMemoriesSheet
         isOpen={showMemories}
         onClose={() => setShowMemories(false)}
+      />
+
+      {/* Subscription Paywall */}
+      <Paywall
+        isOpen={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        trigger="manual"
       />
     </div>
   );

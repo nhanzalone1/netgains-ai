@@ -14,19 +14,291 @@ export interface Database {
           id: string;
           created_at: string;
           updated_at: string;
-          muscle_group_mode: string; // 'simple' | 'advanced'
+          muscle_group_mode: string;
+          height_inches: number | null;
+          weight_lbs: number | null;
+          goal: string | null;
+          coaching_mode: string | null;
+          coaching_intensity: string | null;
+          onboarding_complete: boolean;
+          nutrition_onboarding_complete: boolean;
+          app_tour_shown: boolean;
+          beta_welcome_shown: boolean;
         };
         Insert: {
           id: string;
           created_at?: string;
           updated_at?: string;
           muscle_group_mode?: string;
+          height_inches?: number | null;
+          weight_lbs?: number | null;
+          goal?: string | null;
+          coaching_mode?: string | null;
+          coaching_intensity?: string | null;
+          onboarding_complete?: boolean;
+          nutrition_onboarding_complete?: boolean;
+          app_tour_shown?: boolean;
+          beta_welcome_shown?: boolean;
         };
         Update: {
           id?: string;
           created_at?: string;
           updated_at?: string;
           muscle_group_mode?: string;
+          height_inches?: number | null;
+          weight_lbs?: number | null;
+          goal?: string | null;
+          coaching_mode?: string | null;
+          coaching_intensity?: string | null;
+          onboarding_complete?: boolean;
+          nutrition_onboarding_complete?: boolean;
+          app_tour_shown?: boolean;
+          beta_welcome_shown?: boolean;
+        };
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          tier: string;
+          apple_transaction_id: string | null;
+          apple_original_transaction_id: string | null;
+          product_id: string | null;
+          expires_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          tier?: string;
+          apple_transaction_id?: string | null;
+          apple_original_transaction_id?: string | null;
+          product_id?: string | null;
+          expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          tier?: string;
+          apple_transaction_id?: string | null;
+          apple_original_transaction_id?: string | null;
+          product_id?: string | null;
+          expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      coach_memory: {
+        Row: {
+          id: string;
+          user_id: string;
+          key: string;
+          value: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          key: string;
+          value: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          key?: string;
+          value?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "coach_memory_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          user_id: string;
+          role: string;
+          content: string;
+          hidden: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          role: string;
+          content: string;
+          hidden?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          role?: string;
+          content?: string;
+          hidden?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      meals: {
+        Row: {
+          id: string;
+          user_id: string;
+          date: string;
+          meal_type: string;
+          food_name: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          serving_size: string | null;
+          consumed: boolean;
+          ai_generated: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          date?: string;
+          meal_type?: string;
+          food_name: string;
+          calories?: number;
+          protein?: number;
+          carbs?: number;
+          fat?: number;
+          serving_size?: string | null;
+          consumed?: boolean;
+          ai_generated?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          date?: string;
+          meal_type?: string;
+          food_name?: string;
+          calories?: number;
+          protein?: number;
+          carbs?: number;
+          fat?: number;
+          serving_size?: string | null;
+          consumed?: boolean;
+          ai_generated?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "meals_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      nutrition_goals: {
+        Row: {
+          id: string;
+          user_id: string;
+          calories: number;
+          protein: number;
+          carbs: number;
+          fat: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          calories?: number;
+          protein?: number;
+          carbs?: number;
+          fat?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          calories?: number;
+          protein?: number;
+          carbs?: number;
+          fat?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_goals_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      allowed_testers: {
+        Row: {
+          id: string;
+          email: string;
+          added_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          added_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          added_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      waitlist: {
+        Row: {
+          id: string;
+          email: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -106,7 +378,7 @@ export interface Database {
           id: string;
           workout_id: string;
           name: string;
-          equipment: string;  // barbell, dumbbell, cable, machine, smith, bodyweight
+          equipment: string;
           order_index: number;
           created_at: string;
         };
@@ -141,8 +413,8 @@ export interface Database {
           exercise_id: string;
           weight: number;
           reps: number;
-          variant: string;  // 'normal' | 'warmup' | 'failure' | 'drop' | 'drop-parent' | 'assisted-parent' | 'assisted-child' | 'left' | 'right'
-          measure_type: string;  // 'reps' | 'secs'
+          variant: string;
+          measure_type: string;
           order_index: number;
           created_at: string;
         };
@@ -254,8 +526,8 @@ export interface Database {
           name: string;
           equipment: string;
           exercise_type: string;
-          default_measure_type: string;  // 'reps' | 'secs'
-          muscle_group: string[] | null;  // Array of muscle groups
+          default_measure_type: string;
+          muscle_group: string[] | null;
           order_index: number;
           created_at: string;
         };
@@ -444,6 +716,11 @@ export interface Database {
 
 // Convenience types
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
+export type CoachMemory = Database["public"]["Tables"]["coach_memory"]["Row"];
+export type ChatMessage = Database["public"]["Tables"]["chat_messages"]["Row"];
+export type Meal = Database["public"]["Tables"]["meals"]["Row"];
+export type NutritionGoals = Database["public"]["Tables"]["nutrition_goals"]["Row"];
 export type Maxes = Database["public"]["Tables"]["maxes"]["Row"];
 export type Workout = Database["public"]["Tables"]["workouts"]["Row"];
 export type Exercise = Database["public"]["Tables"]["exercises"]["Row"];
@@ -455,6 +732,12 @@ export type ProgramCycle = Database["public"]["Tables"]["program_cycles"]["Row"]
 export type WeighIn = Database["public"]["Tables"]["weigh_ins"]["Row"];
 
 // Insert types
+export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
+export type SubscriptionInsert = Database["public"]["Tables"]["subscriptions"]["Insert"];
+export type CoachMemoryInsert = Database["public"]["Tables"]["coach_memory"]["Insert"];
+export type ChatMessageInsert = Database["public"]["Tables"]["chat_messages"]["Insert"];
+export type MealInsert = Database["public"]["Tables"]["meals"]["Insert"];
+export type NutritionGoalsInsert = Database["public"]["Tables"]["nutrition_goals"]["Insert"];
 export type MaxesInsert = Database["public"]["Tables"]["maxes"]["Insert"];
 export type WorkoutInsert = Database["public"]["Tables"]["workouts"]["Insert"];
 export type ExerciseInsert = Database["public"]["Tables"]["exercises"]["Insert"];
@@ -464,7 +747,7 @@ export type FolderInsert = Database["public"]["Tables"]["folders"]["Insert"];
 export type ExerciseTemplateInsert = Database["public"]["Tables"]["exercise_templates"]["Insert"];
 
 // Equipment types
-export type EquipmentType = "barbell" | "dumbbell" | "cable" | "machine" | "smith";
+export type EquipmentType = "barbell" | "dumbbell" | "cable" | "machine" | "smith" | "bodyweight";
 export type ExerciseType = "strength" | "cardio";
 
 // Workout with nested exercises and sets

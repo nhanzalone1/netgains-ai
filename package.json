@@ -20,6 +20,7 @@
     "@capacitor/ios": "^7.0.0",
     "@capacitor/splash-screen": "^7.0.0",
     "@pinecone-database/pinecone": "^7.1.0",
+    "@revenuecat/purchases-capacitor": "^11.3.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.3",
     "ai": "^6.0.69",

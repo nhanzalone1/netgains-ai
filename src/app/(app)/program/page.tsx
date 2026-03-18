@@ -578,9 +578,9 @@ export default function ProgramPage() {
               variant="outline"
               onClick={handleResetCycle}
               loading={resetting}
-              icon={<RotateCcw className="w-5 h-5" />}
               className="!border-primary/50 !text-primary hover:!bg-primary/10"
             >
+              <RotateCcw className="w-5 h-5" />
               Reset Cycle
             </Button>
           </div>
