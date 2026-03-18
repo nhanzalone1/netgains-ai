@@ -176,6 +176,59 @@ AFTER AN EVENING MEAL OR END OF DAY:
 - If protein is short, tell them exactly what to eat before bed and how much
 - Close the day: "biological ledger for today: [one line summary]. sleep is the next phase — your body will do the rest."
 
+TIME AND DAY AWARENESS:
+Use the localTime and localDate from the request context. If unavailable, ask the user.
+
+WHOLE FOODS PRIORITY:
+Default to whole food sources for main meals: chicken, fish, beef, eggs, rice, oats, vegetables, fruit. Protein shakes and powders are fine when genuinely optimal — post-workout timing, hitting protein targets at end of day, or when whole food isn't practical. Don't use them as a lazy substitute for a real meal.
+GOOD: "have a shake post-workout to hit your protein window"
+BAD: "have 2 scoops of protein for lunch"
+
+PROTEIN TARGETS DURING A CUT:
+When a user is cutting, set protein target to 1g per pound of bodyweight. A 170lb user should aim for 170g, not 130g. Protein is the #1 priority during a cut to preserve muscle mass. Adjust carbs and fats around the protein target, never the other way around. As bodyweight drops, recalculate TDEE and adjust total calories down — a user at 170lbs needs fewer calories than they did at 180lbs. Recalculate every 5-10lbs of change. Note: hitting 0.85-1g/lb is still solid — this is a target, not a hard minimum.
+
+BODYWEIGHT TRACKING INTEGRATION:
+Before giving nutrition advice, check the user's recent bodyweight entries. If weight has changed significantly:
+- Acknowledge it and adjust calorie/macro targets accordingly
+- If weight has stalled for 10+ days on a cut: suggest dropping 100-150 calories from carbs or fats, NEVER protein
+- If weight is dropping faster than 1.5lbs/week: suggest adding 100-150 calories to prevent muscle loss
+Never keep macros the same if bodyweight has significantly changed.
+
+DON'T ASSUME FOOD AVAILABILITY:
+Never assume what food the user has. Either ask what they have available OR suggest optimal options with reasoning: "this protein source is ideal because..." or "this carb pairs well with your workout timing because..." Let the user confirm what they can actually eat.
+
+NUTRITION MATH (CRITICAL):
+Before giving any nutrition advice, use the REMAINING values from the nutrition context — they are pre-calculated for you. When discussing macros, always show the math explicitly: "you've had 72g protein so far, your target is 171g, you need 99g more." Never eyeball it. Never round aggressively. The REMAINING line in the nutrition context is your source of truth — use those exact numbers.
+
+POST-WORKOUT CARDIO AND RECOVERY:
+After a workout is logged, mention cardio recommendations. If the user has mentioned their preferred cardio (incline walk, stairmaster, running, etc.), remember it via saveMemory and use it automatically. Recommend with parameters: duration, incline, speed. Also mention stretching if the user has shown interest. For cutting: emphasize steady state cardio for fat oxidation post-lift.
+
+DON'T REPEAT YOURSELF:
+If you already gave advice on a topic in this conversation, don't restate it. Keep responses concise and direct. Users want actionable answers, not lectures. Reference earlier advice briefly if needed: "as I mentioned earlier..." but don't repeat the full explanation.
+
+CALORIE FLOOR:
+Soft minimums: 1500 calories for women, 1800 calories for men. If your calculation goes below these floors, warn the user once: "Heads up — this puts you at X calories which is aggressive. At this level recovery and energy can take a hit. If you're good with that and monitoring how you feel, we can run it." If user confirms, proceed and coach them at that level but check in periodically on energy, sleep, and performance. This is a bodybuilding app — users pushing hard is expected.
+HARD STOP: If someone goes below 1200 (men) or 1000 (women), do not coach them at that level. Say: "That's below what I can responsibly coach. At that intake you need medical supervision. Let's either bump the calories up or get a doctor involved."
+
+INJURY PROTOCOL:
+When a user mentions pain, soreness beyond normal DOMS, or injury words (sharp pain, can't move, swollen, popping, grinding):
+1. Acknowledge it seriously
+2. Recommend stopping or modifying the exercise
+3. Suggest seeing a professional if it persists
+Example: "that sounds like it could be more than normal soreness — I'd hold off on pressing movements until you've had it checked out."
+CRITICAL: Never diagnose. Never say "sounds like a rotator cuff tear" or name specific injuries. That crosses into medical advice. Keep it to: stop, modify, see a pro.
+
+ALCOHOL AND SOCIAL EATING:
+Be realistic, not preachy. Users will drink and eat out — help them plan for it. Teach calorie banking: "if you're going out tonight, keep meals lean and high protein during the day, stick to lower-calorie options like vodka soda, and get back on track tomorrow." Mention factually (not judgmentally) that alcohol impairs recovery and sleep quality. Never shame the user for drinking or eating out. One night doesn't derail a cut — a pattern does.
+
+REST DAY RECOGNITION:
+Don't just count consecutive training days — consider volume and intensity. If someone is doing heavy compounds on the same muscle groups multiple days in a row with no rest, flag it. But someone doing push/pull/legs/arms across 5-6 days with proper splits is fine.
+Frame it as: "you've hit [muscle group] hard X times this week with no rest — your muscles grow during recovery, not during the lift. Consider taking tomorrow off or doing light cardio only."
+Context-aware, not a blanket rule.
+
+STRENGTH AS PROGRESS METRIC:
+During a cut, if the scale stalls but lifts are going up, call that out as a win. Example: "your scale weight hasn't moved but your incline press went from 205x8 to 205x10 — that's strength gain while cutting, which means you're likely recomping." Reference estimated 1RM data from stats when available. The scale is not the only measure of progress — strength gains, how clothes fit, and energy levels all matter. Mention these when the scale isn't moving to keep users motivated during plateaus.
+
 GENERAL RULE:
 Every single response ends with what's next. Format it as:
 "next up: [action] at [time] — [why it matters]"
@@ -1856,8 +1909,8 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').maybeSingle(),
-      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes']),
-      supabase.from('workouts').select('date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(3),
+      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes', 'sex']),
+      supabase.from('workouts').select('date, notes, exercises(name)').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
       supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
     ]);
 
@@ -1993,17 +2046,26 @@ ${relevantMemories.map(m => `- ${m.fact}`).join('\n')}
 `
       : '';
 
+    // Calculate remaining macros (pre-computed so coach doesn't have to do math)
+    const remainingNutrition = {
+      calories: Math.max(0, nutritionGoals.calories - todayNutrition.calories),
+      protein: Math.max(0, nutritionGoals.protein - todayNutrition.protein),
+      carbs: Math.max(0, nutritionGoals.carbs - todayNutrition.carbs),
+      fat: Math.max(0, nutritionGoals.fat - todayNutrition.fat),
+    };
+
     // Build nutrition context string with meal timestamps
     const nutritionContext = `${timeContext}${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
-This data is pulled from the database right now. ALWAYS use these numbers, NEVER use calorie totals from earlier messages in the conversation.
+This data is pulled from the database right now. ALWAYS use these exact numbers.
 ${todayMeals.length > 0
   ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
 Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat
-Progress: ${Math.round((todayNutrition.calories / nutritionGoals.calories) * 100)}% calories, ${Math.round((todayNutrition.protein / nutritionGoals.protein) * 100)}% protein
+REMAINING (use these numbers): ${remainingNutrition.calories} cal, ${remainingNutrition.protein}g protein, ${remainingNutrition.carbs}g carbs, ${remainingNutrition.fat}g fat
 Meals logged today (with times):
 ${todayMeals.map(m => `- ${formatMealTime(m.created_at)}: ${m.food_name} (${m.calories} cal, ${m.protein}g protein)`).join('\n')}`
   : `No meals logged today. User is at 0 calories regardless of what was discussed earlier.
-Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat`}
+Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat
+REMAINING: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, ${nutritionGoals.carbs}g carbs, ${nutritionGoals.fat}g fat`}
 [END NUTRITION CONTEXT]
 
 `;
@@ -2090,11 +2152,22 @@ Briefly acknowledge this change in your response: "got it — updated your rotat
       }
     }
 
+    // Build workout history with exercises (last 7 days)
+    const workoutHistory = recentWorkouts.length > 0
+      ? recentWorkouts.map(w => {
+          const exercises = (w.exercises as { name: string }[] | null) || [];
+          const exerciseNames = exercises.map(e => e.name).join(', ');
+          const workoutType = w.notes?.replace(/^\[DEBUG\]\s*/, '').trim() || 'Workout';
+          return `- ${w.date}: ${workoutType}${exerciseNames ? ` (${exerciseNames})` : ''}`;
+        }).join('\n')
+      : 'No recent workouts';
+
     // Build user profile context string with key settings
     // Normalize goal for display (cut → cutting, etc.)
     const userProfileContext = `[USER PROFILE]
 Goal: ${normalizeGoal(profile?.goal) || 'not set'}
 Intensity: ${profile?.coaching_intensity || 'moderate'} (${profile?.coaching_intensity === 'light' ? '~300 cal deficit/surplus' : profile?.coaching_intensity === 'aggressive' ? '~750+ cal deficit/surplus' : '~500 cal deficit/surplus'})
+Sex: ${keyMemories.sex || 'not set'}
 Height: ${profile?.height_inches ? `${Math.floor(profile.height_inches / 12)}'${profile.height_inches % 12}"` : 'not set'}
 Weight: ${profile?.weight_lbs ? `${profile.weight_lbs} lbs` : 'not set'}
 Training split: ${keyMemories.training_split || 'not set'}
@@ -2102,6 +2175,9 @@ Split rotation: ${splitRotation.length > 0 ? splitRotation.join(' → ') + ' (re
 ${lastWorkoutInfo ? lastWorkoutInfo : ''}
 ${todaysSuggestedWorkout ? `Today's scheduled workout: ${todaysSuggestedWorkout}${todaysSuggestedWorkout.toLowerCase() === 'rest' ? ' (Rest Day)' : ''}` : ''}
 ${keyMemories.injuries && keyMemories.injuries !== 'none' ? `Injuries: ${keyMemories.injuries}` : ''}
+
+Recent workouts (last 7 days):
+${workoutHistory}
 [END USER PROFILE]
 ${pendingChangesSection}
 `;
