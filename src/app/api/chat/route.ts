@@ -1182,8 +1182,14 @@ function classifyMessageComplexity(message: string): 'simple' | 'complex' {
 function selectModel(
   tier: SubscriptionTier,
   complexity: 'simple' | 'complex',
-  isSystemTrigger: boolean
+  isSystemTrigger: boolean,
+  isAdmin: boolean = false
 ): { model: string; maxTokens: number } {
+  // Admins always get Sonnet
+  if (isAdmin) {
+    return { model: AI_MODELS.COACHING, maxTokens: AI_TOKEN_LIMITS.COACHING };
+  }
+
   // System triggers always use Sonnet (daily briefs need quality)
   if (isSystemTrigger) {
     return { model: AI_MODELS.COACHING, maxTokens: AI_TOKEN_LIMITS.COACHING };
@@ -1261,15 +1267,26 @@ export async function POST(req: Request) {
   }
   console.log('[Coach] User tier:', userTier);
 
+  // Check if user is admin (for bypassing limits and model routing)
+  const { data: adminCheck } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .maybeSingle();
+  const isAdmin = adminCheck?.is_admin === true;
+  if (isAdmin) {
+    console.log('[Coach] Admin user detected - bypassing message limits, using Sonnet');
+  }
+
   // Get daily message limit for this tier
   const dailyLimit = DAILY_MESSAGE_LIMITS[userTier];
 
-  // Check daily message limit (skip for system triggers)
+  // Check daily message limit (skip for system triggers and admins)
   const isSystemTriggerCheck = messages.length === 1 &&
     messages[0].role === 'user' &&
     messages[0].content.startsWith('[SYSTEM_TRIGGER]');
 
-  if (!isSystemTriggerCheck) {
+  if (!isSystemTriggerCheck && !isAdmin) {
     const today = formatLocalDate(new Date());
     const countKey = `message_count_${today}`;
 
@@ -1834,7 +1851,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
 
     // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and latest weigh-in
     const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, latestWeighInResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin').eq('id', user.id).maybeSingle(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').maybeSingle(),
@@ -1851,10 +1868,10 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
 
     // Smart model routing based on tier and message complexity
     const messageComplexity = classifyMessageComplexity(userMessageContent);
-    const modelSelection = selectModel(userTier, messageComplexity, false);
+    const modelSelection = selectModel(userTier, messageComplexity, false, isAdmin);
     selectedModel = modelSelection.model;
     selectedMaxTokens = modelSelection.maxTokens;
-    console.log('[Coach] Message complexity:', messageComplexity, '| Model:', selectedModel, '| Tier:', userTier);
+    console.log('[Coach] Message complexity:', messageComplexity, '| Model:', selectedModel, '| Tier:', userTier, '| Admin:', isAdmin);
 
     let relevantMemories: RetrievedMemory[] = [];
 
@@ -1876,7 +1893,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       const adminClient = getSupabaseAdmin();
       const { data: adminProfile, error: adminError } = await adminClient
         .from('profiles')
-        .select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown')
+        .select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin')
         .eq('id', user.id)
         .maybeSingle();
 

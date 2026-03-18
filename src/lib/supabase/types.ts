@@ -24,6 +24,7 @@ export interface Database {
           nutrition_onboarding_complete: boolean;
           app_tour_shown: boolean;
           beta_welcome_shown: boolean;
+          is_admin: boolean | null;
         };
         Insert: {
           id: string;
@@ -39,6 +40,7 @@ export interface Database {
           nutrition_onboarding_complete?: boolean;
           app_tour_shown?: boolean;
           beta_welcome_shown?: boolean;
+          is_admin?: boolean | null;
         };
         Update: {
           id?: string;
@@ -54,6 +56,7 @@ export interface Database {
           nutrition_onboarding_complete?: boolean;
           app_tour_shown?: boolean;
           beta_welcome_shown?: boolean;
+          is_admin?: boolean | null;
         };
         Relationships: [];
       };
