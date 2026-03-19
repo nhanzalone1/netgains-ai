@@ -53,7 +53,7 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 
 ## Database
 
-- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode
+- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin
 - **workouts** / **exercises** / **sets** — workout logging with variants
 - **nutrition_logs** — meals with macros
 - **coach_memory** — key-value store (split_rotation, food_staples, pending_workout, etc.)
@@ -71,7 +71,71 @@ Check `constants.ts` for current model IDs. If 404 errors, check [model deprecat
 - Tools: `updateUserProfile`, `saveMemory`, `logMeal`, `generateWorkout`, `loadWorkoutToFolder`
 - Evidence-based, no broscience. Punchy headlines, exact numbers, ends with "next up: [action]"
 - Goal-aware: cutting = calorie ceiling, bulking = calorie floor
-- Daily limit: 15 messages (disabled for testing via `constants.ts`)
+- Daily limit: FREE=3, BASIC=15, PREMIUM=50 messages/day
+
+### Admin Bypass
+Admins skip message limits and always get Sonnet (no Haiku routing).
+
+**Database:** `profiles.is_admin` (boolean, default false)
+
+**To make someone admin:**
+```sql
+UPDATE profiles
+SET is_admin = true
+WHERE id IN (
+  SELECT id FROM auth.users
+  WHERE email IN ('user@example.com')
+);
+```
+
+**Implementation:** `api/chat/route.ts` checks `is_admin` early, skips limit check, passes `isAdmin` to `selectModel()`.
+
+### Coach Context (What the AI Sees)
+Each message includes pre-built context injected before the conversation:
+
+**Nutrition Context:**
+- Consumed totals (calories, protein, carbs, fat)
+- Goals from `nutrition_goals` table
+- **REMAINING** (pre-calculated: goal - consumed) — coach uses these exact numbers
+- Individual meals logged today with timestamps
+
+**User Profile Context:**
+- Goal, intensity, sex, height, weight
+- Training split and rotation
+- Injuries
+- **Workout history (last 7 days)** with exercise names
+
+**Example context the coach receives:**
+```
+[TODAY'S NUTRITION - SOURCE OF TRUTH]
+Consumed so far: 1200 cal, 72g protein, 150g carbs, 40g fat
+Goals: 2100 cal, 171g protein, 200g carbs, 70g fat
+REMAINING (use these numbers): 900 cal, 99g protein, 50g carbs, 30g fat
+
+[USER PROFILE]
+Goal: cutting
+Sex: male
+Weight: 170 lbs
+Recent workouts (last 7 days):
+- 2026-03-18: Push (Bench Press, Incline DB Press, Tricep Pushdowns)
+- 2026-03-17: Pull (Deadlift, Barbell Rows, Bicep Curls)
+- 2026-03-16: Legs (Squats, Leg Press, RDLs)
+```
+
+### Coach Behavioral Directives
+System prompt includes 13+ directives. Key ones:
+
+| Directive | Behavior |
+|-----------|----------|
+| **Nutrition Math** | Always show explicit math: "you've had 72g, target is 171g, need 99g more" |
+| **Protein Targets** | 1g/lb bodyweight *target* during cuts (not minimum) |
+| **Calorie Floor** | Soft: 1500W/1800M with warning. Hard stop: 1000W/1200M |
+| **Injury Protocol** | Stop → modify → see pro. Never diagnose. |
+| **Rest Day Recognition** | Flag if same muscle group hit multiple days without rest |
+| **Strength as Progress** | Call out lift gains when scale stalls |
+| **Don't Repeat** | Reference earlier advice, don't restate |
+
+Full list in `getSystemPrompt()` in `api/chat/route.ts`.
 
 ### Long-Term Memory (Pinecone)
 - **Extraction triggers:**
