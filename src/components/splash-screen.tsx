@@ -67,9 +67,14 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
 
             {/* Logo Text */}
             <motion.h1
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: "easeOut", delay: 0.7 }}
+              transition={{
+                duration: 0.5,
+                ease: [0.22, 1, 0.36, 1],
+                delay: 0.7
+              }}
+              style={{ willChange: "transform, opacity", transform: "translateZ(0)" }}
               className="text-3xl font-black uppercase tracking-tighter text-white"
             >
               NetGains<span className="bg-gradient-to-r from-cyan-400 to-cyan-200 bg-clip-text text-transparent">AI</span>
