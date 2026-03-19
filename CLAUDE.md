@@ -342,8 +342,14 @@ Two-stage splash for native iOS:
 1. **iOS LaunchScreen** (`ios/App/App/Base.lproj/LaunchScreen.storyboard`) — solid dark background, shows instantly
 2. **Animated splash** (`src/components/animated-splash.tsx`) — Framer Motion SVG draws cyan chart line going up
 3. **SplashWrapper** (`src/components/splash-wrapper.tsx`) — shows animation once per session on native, skips on web
+4. **SplashScreen** (`src/components/splash-screen.tsx`) — chart + "NetGainsAI" text slide-up animation
 
 The animated splash uses the same gradient as `globals.css` body::before for seamless transition.
+
+**Animation optimization (text slide-up):**
+- Use 20px+ travel distance for smooth perceived motion (short distances show micro-stutters)
+- Custom easing `[0.22, 1, 0.36, 1]` for smooth deceleration
+- GPU acceleration: `willChange: "transform, opacity"` + `transform: "translateZ(0)"`
 
 ### Xcode Troubleshooting
 - **Sandbox errors** (`deny(1) file-read-data`): Set **User Script Sandboxing** to **No** in Build Settings
