@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown } from "lucide-react";
+import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useSubscription } from "@/components/subscription-provider";
 import { UpgradeBanner, Paywall } from "@/components/paywall";
 import { AIConsentModal } from "@/components/ai-consent-modal";
+import { SourcesDisclaimerModal } from "@/components/sources-disclaimer-modal";
 import { createClient } from "@/lib/supabase/client";
 import { markCoachAsViewed } from "@/lib/coach-notification";
 import { apiFetch } from "@/lib/capacitor";
@@ -254,6 +255,7 @@ export default function CoachPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasAIConsent, setHasAIConsent] = useState<boolean | null>(null);
+  const [showSourcesModal, setShowSourcesModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1181,6 +1183,14 @@ export default function CoachPage() {
               <h1 className="text-lg font-bold">Coach</h1>
               <div className="flex items-center gap-2">
                 <p className="text-xs text-muted-foreground">Your AI Training Partner</p>
+                <button
+                  onClick={() => setShowSourcesModal(true)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-xs text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors"
+                  title="Sources & Disclaimer"
+                >
+                  <Info className="w-3 h-3" />
+                  <span>Sources</span>
+                </button>
                 <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-xs text-muted-foreground">
                   <MessageCircle className="w-3 h-3" />
                   <span>{todayMessageCount}</span>
@@ -1338,6 +1348,12 @@ export default function CoachPage() {
       {hasAIConsent === false && (
         <AIConsentModal onConsent={() => setHasAIConsent(true)} />
       )}
+
+      {/* Sources & Disclaimer Modal */}
+      <SourcesDisclaimerModal
+        isOpen={showSourcesModal}
+        onClose={() => setShowSourcesModal(false)}
+      />
     </div>
   );
 }

@@ -172,7 +172,17 @@ export default function TermsPage() {
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-border text-sm text-muted-foreground">
+        {/* Sources & Medical Disclaimer */}
+        <div className="mt-12 pt-8 border-t border-border">
+          <div className="rounded-xl p-4 bg-yellow-500/5 border border-yellow-500/20">
+            <h3 className="text-sm font-semibold text-yellow-500 mb-2">Sources & Medical Disclaimer</h3>
+            <p className="text-sm text-foreground/80 leading-relaxed">
+              Nutrition and fitness recommendations are informed by guidelines from the American College of Sports Medicine (ACSM), International Society of Sports Nutrition (ISSN), and National Academy of Sports Medicine (NASM). NetGains AI is not a medical provider. This app does not provide medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider before starting any diet or exercise program.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-8 border-t border-border text-sm text-muted-foreground">
           <Link href="/privacy" className="text-primary hover:underline">
             Privacy Policy
           </Link>
