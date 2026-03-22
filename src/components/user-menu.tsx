@@ -26,7 +26,7 @@ type IntensityId = typeof intensityOptions[number]["id"];
 export function UserMenu() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
-  const { tier, messagesRemaining, dailyLimit, isFree, showPaywall, setShowPaywall } = useSubscription();
+  const { tier, messagesRemaining, dailyLimit, isFree, expiresAt, showPaywall, setShowPaywall } = useSubscription();
   const [open, setOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showIntensity, setShowIntensity] = useState(false);
@@ -662,6 +662,8 @@ export function UserMenu() {
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteAccount}
+        subscriptionTier={tier}
+        subscriptionExpiresAt={expiresAt}
       />
     </div>
   );
