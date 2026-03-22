@@ -55,7 +55,7 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 
 ## Database
 
-- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin
+- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin, consent_ai_data
 - **workouts** / **exercises** / **sets** — workout logging with variants
 - **nutrition_logs** — meals with macros
 - **coach_memory** — key-value store (split_rotation, food_staples, pending_workout, etc.)
@@ -236,6 +236,32 @@ On first app open, users must accept Terms of Service and Privacy Policy before 
 - `supabase/migrations/add_terms_accepted.sql` — Adds column to profiles
 
 **Access later:** User Menu → "Terms & Privacy" links to `/terms` (which links to `/privacy`)
+
+## AI Data Consent
+
+Apple requires explicit consent before sending user data to third-party AI services. Users must consent before accessing the Coach.
+
+**Flow:**
+1. User opens Coach tab → checks `profiles.consent_ai_data`
+2. If false/null → Full-screen `AIConsentModal` overlay shown (coach UI visible but blurred behind)
+3. User sees disclosures about Anthropic data processing
+4. User taps "I Agree" → `consent_ai_data` set to true
+5. Modal dismisses, coach becomes interactive
+
+**Disclosures shown:**
+- "NetGains AI sends your messages, workout data, and nutrition information to Anthropic's Claude AI to provide personalized coaching."
+- "Your data is processed to generate responses and is not used to train AI models."
+- Link to Privacy Policy for more details
+
+**Database:** `profiles.consent_ai_data` (boolean, default false)
+
+**Files:**
+- `src/components/ai-consent-modal.tsx` — Full-screen consent overlay
+- `src/app/(app)/coach/page.tsx` — Checks consent status on mount
+- `src/app/privacy/page.tsx` — Updated with explicit Anthropic disclosures
+- `supabase/migrations/add_ai_data_consent.sql` — Adds column to profiles
+
+**Existing users:** Migration sets `consent_ai_data = false` for all existing users so they see the consent flow on next visit.
 
 ## Account Deletion
 

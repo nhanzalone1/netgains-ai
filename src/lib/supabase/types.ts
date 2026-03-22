@@ -25,6 +25,7 @@ export interface Database {
           app_tour_shown: boolean;
           beta_welcome_shown: boolean;
           is_admin: boolean | null;
+          consent_ai_data: boolean | null;
         };
         Insert: {
           id: string;
@@ -41,6 +42,7 @@ export interface Database {
           app_tour_shown?: boolean;
           beta_welcome_shown?: boolean;
           is_admin?: boolean | null;
+          consent_ai_data?: boolean | null;
         };
         Update: {
           id?: string;
@@ -57,6 +59,7 @@ export interface Database {
           app_tour_shown?: boolean;
           beta_welcome_shown?: boolean;
           is_admin?: boolean | null;
+          consent_ai_data?: boolean | null;
         };
         Relationships: [];
       };

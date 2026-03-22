@@ -68,11 +68,24 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">AI Processing</h2>
+            <h2 className="text-xl font-semibold mb-3">AI Processing & Third-Party Data Sharing</h2>
             <p className="mb-3">
-              Your conversations with the AI coach are processed by Anthropic&apos;s Claude API. This
-              means your messages and relevant context (profile, recent workouts, memories) are sent
-              to Anthropic&apos;s servers to generate responses.
+              NetGains AI uses <strong>Anthropic&apos;s Claude AI</strong> to power the coaching
+              experience. When you interact with the coach, the following data is sent to
+              Anthropic&apos;s servers:
+            </p>
+            <ul className="list-disc list-inside space-y-2 text-foreground/80 mb-4">
+              <li>Your messages and conversations with the coach</li>
+              <li>Workout logs (exercises, sets, reps, weights)</li>
+              <li>Nutrition logs (meals, calories, macronutrients)</li>
+              <li>Profile information (height, weight, fitness goals)</li>
+              <li>Coach memories (training preferences, injuries, goals)</li>
+            </ul>
+            <p className="mb-3">
+              <strong>Important:</strong> Your data is processed by Anthropic solely to generate
+              personalized coaching responses.{" "}
+              <strong>Your data is not used to train AI models.</strong> We use Anthropic&apos;s API
+              with settings that explicitly prevent your data from being used for model training.
             </p>
             <p>
               Anthropic processes this data according to their{" "}
@@ -84,7 +97,7 @@ export default function PrivacyPage() {
               >
                 privacy policy
               </a>
-              . We use their API in a way that does not allow training on your data.
+              .
             </p>
           </section>
 

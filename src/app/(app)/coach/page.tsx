@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
 import { useSubscription } from "@/components/subscription-provider";
 import { UpgradeBanner, Paywall } from "@/components/paywall";
+import { AIConsentModal } from "@/components/ai-consent-modal";
 import { createClient } from "@/lib/supabase/client";
 import { markCoachAsViewed } from "@/lib/coach-notification";
 import { apiFetch } from "@/lib/capacitor";
@@ -252,6 +253,7 @@ export default function CoachPage() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasAIConsent, setHasAIConsent] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -624,6 +626,24 @@ export default function CoachPage() {
 
   // Track the debug date we last checked for
   const lastCheckedDateRef = useRef<string | null>(null);
+
+  // Check AI consent status on mount
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const checkAIConsent = async () => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("consent_ai_data")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      // Default to false if not set (requires consent)
+      setHasAIConsent(profile?.consent_ai_data === true);
+    };
+
+    checkAIConsent();
+  }, [user?.id]);
 
   // Load messages from database on mount
   useEffect(() => {
@@ -1313,6 +1333,11 @@ export default function CoachPage() {
         onClose={() => setShowPaywall(false)}
         trigger="limit"
       />
+
+      {/* AI Consent Modal - blocks coach until user agrees */}
+      {hasAIConsent === false && (
+        <AIConsentModal onConsent={() => setHasAIConsent(true)} />
+      )}
     </div>
   );
 }
