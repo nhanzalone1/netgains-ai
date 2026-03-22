@@ -1,12 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS, AI_TOKEN_LIMITS } from '@/lib/constants';
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   const { foodDescription, servingSize } = await req.json();
 
   if (!foodDescription || typeof foodDescription !== 'string') {
     return Response.json({ error: 'Food description required' }, { status: 400 });
+  }
+
+  // Validate input length
+  if (foodDescription.length > 500) {
+    return Response.json({ error: 'Food description too long (max 500 characters)' }, { status: 400 });
   }
 
   // If user provided a serving size, include it in the description
@@ -21,6 +27,12 @@ export async function POST(req: Request) {
 
   if (authError || !user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 10 requests per minute per user
+  const rateLimitResult = checkRateLimit(`nutrition_estimate_${user.id}`, RATE_LIMITS.AI_ENDPOINT);
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult);
   }
 
   try {

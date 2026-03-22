@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS } from '@/lib/constants';
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 
 const anthropic = new Anthropic();
 
@@ -25,10 +27,29 @@ type MuscleGroup = typeof VALID_MUSCLE_GROUPS[number];
 // Categorize a single exercise using AI
 export async function POST(request: Request) {
   try {
+    // Verify authentication
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit: 10 requests per minute per user
+    const rateLimitResult = checkRateLimit(`categorize_${user.id}`, RATE_LIMITS.AI_ENDPOINT);
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const { exerciseName } = await request.json();
 
     if (!exerciseName || typeof exerciseName !== 'string') {
       return Response.json({ error: 'exerciseName is required' }, { status: 400 });
+    }
+
+    // Validate input length
+    if (exerciseName.length > 100) {
+      return Response.json({ error: 'Exercise name too long (max 100 characters)' }, { status: 400 });
     }
 
     const muscleGroup = await categorizeExercise(exerciseName);

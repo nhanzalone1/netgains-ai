@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { getMemoryIndex, isPineconeAvailable, getPineconeClient } from '@/lib/pinecone';
 import { PINECONE_CONFIG, MEMORY_CATEGORIES, MemoryCategory } from '@/lib/constants';
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 
 interface ExtractedMemory {
   fact: string;
@@ -24,6 +25,13 @@ export async function POST(req: Request) {
   if (authError || !user) {
     console.log('[Memory Extract] Auth failed:', authError?.message);
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 10 requests per minute per user (expensive AI + Pinecone operation)
+  const rateLimitResult = checkRateLimit(`memory_extract_${user.id}`, RATE_LIMITS.AI_ENDPOINT);
+  if (!rateLimitResult.success) {
+    console.log('[Memory Extract] Rate limited:', user.id);
+    return rateLimitResponse(rateLimitResult);
   }
 
   console.log('[Memory Extract] User:', user.id);

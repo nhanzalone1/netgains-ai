@@ -15,6 +15,15 @@ import {
 } from '@/lib/constants';
 import { retrieveRelevantMemories, RetrievedMemory } from '@/lib/memory-retrieval';
 import type { Profile, NutritionGoals } from '@/lib/supabase/types';
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  getClientIP,
+  RATE_LIMITS as API_RATE_LIMITS,
+} from '@/lib/rate-limit';
+
+// Maximum message length (2000 characters)
+const MAX_MESSAGE_LENGTH = 2000;
 
 // Helper to get service role client for bypassing RLS (used for profile updates)
 function getSupabaseAdmin() {
@@ -1292,6 +1301,16 @@ export async function POST(req: Request) {
     });
   }
 
+  // Validate message length (server-side enforcement of 2000 char limit)
+  for (const msg of messages) {
+    if (typeof msg.content === 'string' && msg.content.length > MAX_MESSAGE_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Message exceeds ${MAX_MESSAGE_LENGTH} characters` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
   // Get authenticated user
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -1302,6 +1321,20 @@ export async function POST(req: Request) {
   }
 
   console.log('[Coach] User authenticated:', user.id);
+
+  // Rate limiting: 20 requests per minute per user, 60 per IP
+  const userRateLimit = checkRateLimit(`chat_user_${user.id}`, API_RATE_LIMITS.CHAT_USER);
+  if (!userRateLimit.success) {
+    console.log('[Coach] User rate limited:', user.id);
+    return rateLimitResponse(userRateLimit);
+  }
+
+  const clientIP = getClientIP(req);
+  const ipRateLimit = checkRateLimit(`chat_ip_${clientIP}`, API_RATE_LIMITS.CHAT_IP);
+  if (!ipRateLimit.success) {
+    console.log('[Coach] IP rate limited:', clientIP);
+    return rateLimitResponse(ipRateLimit);
+  }
 
   // Get user's subscription tier
   const { data: subscription } = await supabase

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { formatLocalDate } from '@/lib/date-utils';
 import { AI_MODELS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Use Haiku for fast, cheap auto-triggers
 const TRIGGER_MODEL = AI_MODELS.DAILY_BRIEF; // claude-3-haiku-20240307
@@ -16,6 +17,13 @@ export async function POST(req: Request) {
   if (authError || !user) {
     console.log('[CoachTrigger API] Auth failed:', authError?.message);
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 10 requests per minute per user
+  const rateLimitResult = checkRateLimit(`coach_trigger_${user.id}`, RATE_LIMITS.AI_ENDPOINT);
+  if (!rateLimitResult.success) {
+    console.log('[CoachTrigger API] Rate limited:', user.id);
+    return rateLimitResponse(rateLimitResult);
   }
 
   console.log('[CoachTrigger API] User authenticated:', user.id);

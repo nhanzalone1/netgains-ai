@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS } from '@/lib/constants';
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 
 const anthropic = new Anthropic();
 
@@ -29,6 +31,20 @@ interface SplitMapping {
 // Parse split day names into muscle groups
 export async function POST(request: Request) {
   try {
+    // Verify authentication
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit: 10 requests per minute per user
+    const rateLimitResult = checkRateLimit(`parse_split_${user.id}`, RATE_LIMITS.AI_ENDPOINT);
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const { splitDays } = await request.json();
 
     if (!splitDays || !Array.isArray(splitDays)) {

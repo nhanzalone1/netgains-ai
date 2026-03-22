@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendWaitlistConfirmation } from '@/lib/email';
+import { checkRateLimit, rateLimitResponse, getClientIP, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,13 @@ function getSupabaseClient() {
 
 export async function POST(request: Request) {
   try {
+    // Rate limit: 5 requests per minute per IP
+    const clientIP = getClientIP(request);
+    const rateLimitResult = checkRateLimit(`waitlist_${clientIP}`, RATE_LIMITS.WAITLIST);
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const { email } = await request.json();
 
     if (!email || typeof email !== 'string') {
