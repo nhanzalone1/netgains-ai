@@ -1,5 +1,7 @@
 # CLAUDE.md — NetGains AI
 
+**Project Root:** `~/netgains-ai` (NOT `~/Desktop/netgains-ai`)
+
 ## Overview
 
 Vertical AI fitness coaching app. Personalized workout tracking, nutrition logging, and an AI coach that knows training history, goals, and preferences. Coach is the core product.

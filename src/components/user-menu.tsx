@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain, FileText, Crown, Zap, MessageCircle } from "lucide-react";
+import { User, LogOut, Palette, Check, Flame, Calendar, Pencil, X, Save, Repeat, Trash2, PlayCircle, Brain, FileText, Crown, Zap, MessageCircle, UserX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -11,6 +11,7 @@ import { useSubscription } from "./subscription-provider";
 import { IconButton } from "./ui/icon-button";
 import { CoachMemoriesSheet } from "./coach-memories-sheet";
 import { Paywall } from "./paywall";
+import { DeleteAccountModal } from "./delete-account-modal";
 import { apiFetch } from "@/lib/capacitor";
 import { SUBSCRIPTION_TIERS } from "@/lib/constants";
 
@@ -31,6 +32,7 @@ export function UserMenu() {
   const [showIntensity, setShowIntensity] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
   const [showMemories, setShowMemories] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [intensity, setIntensityState] = useState<IntensityId>("moderate");
   const [splitRotation, setSplitRotation] = useState<string[]>([]);
   const [editingSplitIndex, setEditingSplitIndex] = useState<number | null>(null);
@@ -246,6 +248,33 @@ export function UserMenu() {
     keysToRemove.forEach(key => localStorage.removeItem(key));
 
     await supabase.auth.signOut();
+    router.push("/auth/login");
+    router.refresh();
+  };
+
+  const handleDeleteAccount = async () => {
+    const response = await apiFetch("/api/account/delete", { method: "POST" });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || "Failed to delete account");
+    }
+
+    // Clear all localStorage data
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('netgains-') ||
+        key.startsWith('coach-') ||
+        key.includes(user?.id || '')
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
+    // Redirect to login
     router.push("/auth/login");
     router.refresh();
   };
@@ -592,10 +621,23 @@ export function UserMenu() {
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={handleSignOut}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px]"
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors min-h-[44px] border-b border-white/5"
               >
                 <LogOut className="w-4 h-4 text-primary" />
                 <span className="font-medium">Sign Out</span>
+              </motion.button>
+
+              {/* Delete Account */}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setOpen(false);
+                  setShowDeleteModal(true);
+                }}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-500/10 transition-colors min-h-[44px]"
+              >
+                <UserX className="w-4 h-4 text-red-500" />
+                <span className="font-medium text-red-500">Delete Account</span>
               </motion.button>
             </motion.div>
           </>
@@ -613,6 +655,13 @@ export function UserMenu() {
         isOpen={showPaywall}
         onClose={() => setShowPaywall(false)}
         trigger="manual"
+      />
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteAccount}
       />
     </div>
   );
