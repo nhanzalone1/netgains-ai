@@ -237,6 +237,30 @@ On first app open, users must accept Terms of Service and Privacy Policy before 
 
 **Access later:** User Menu → "Terms & Privacy" links to `/terms` (which links to `/privacy`)
 
+## Account Deletion
+
+App Store requires apps to provide account deletion. Users can delete their account from the User Menu.
+
+**Flow:**
+1. User Menu → "Delete Account" (red button at bottom)
+2. Confirmation modal warns about permanent deletion
+3. User must type "DELETE" to enable confirm button
+4. Modal includes note: "If you have an active subscription, please cancel it in your iPhone Settings before deleting your account."
+5. On confirm → `POST /api/account/delete`
+6. Server deletes all user data, signs out, redirects to login
+
+**What gets deleted:**
+- All Supabase tables: profiles, workouts, exercises, sets, meals, nutrition_goals, coach_memory, chat_messages, milestones, weigh_ins, maxes, program_settings, program_progress, exercise_templates, folders, locations, program_cycles
+- All Pinecone vectors (filtered by `user_id` metadata)
+- Auth user via `auth.admin.deleteUser()`
+
+**Files:**
+- `src/app/api/account/delete/route.ts` — Server endpoint (verifies auth, cascading deletes)
+- `src/components/delete-account-modal.tsx` — Confirmation UI with "DELETE" input
+- `src/components/user-menu.tsx` — Delete Account button
+
+**Note:** RevenueCat subscriptions are NOT cancelled automatically. Apple handles billing; subscription expires naturally when user is gone.
+
 ## Onboarding
 
 1. Empty profile → Coach asks for intro
