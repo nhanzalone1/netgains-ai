@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown, Info } from "lucide-react";
-import { motion } from "framer-motion";
+import { Send, Sparkles, RotateCcw, MessageCircle, ChevronDown, Info, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/auth-provider";
@@ -256,6 +256,7 @@ export default function CoachPage() {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [hasAIConsent, setHasAIConsent] = useState<boolean | null>(null);
   const [showSourcesModal, setShowSourcesModal] = useState(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1070,7 +1071,6 @@ export default function CoachPage() {
 
   // Hard reset: wipes everything including onboarding and memories (accessed via debug)
   const handleFullReset = async () => {
-    if (!confirm("Reset chat and onboarding? This will wipe your coach data so you can start fresh.")) return;
     // Clear chat messages from database
     if (user?.id) {
       await clearMessagesFromDB(user.id);
@@ -1095,6 +1095,8 @@ export default function CoachPage() {
     hasGeneratedOpeningRef.current = false;
     lastGeneratedDateRef.current = null;
     lastCheckedDateRef.current = null;
+    // Close modal
+    setShowResetConfirmModal(false);
     // Trigger new opening after reset (clear previous timeout first)
     if (resetTimeoutRef.current) {
       clearTimeout(resetTimeoutRef.current);

@@ -8,7 +8,7 @@ import type { ExerciseTemplate } from "@/lib/supabase/types";
 import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup, isGymSpecificEquipment } from "@/lib/supabase/types";
 import { apiFetch } from "@/lib/capacitor";
 
-// Equipment badge colors
+// Equipment badge colors (standard equipment)
 const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
   barbell: { bg: "rgba(99, 102, 241, 0.2)", text: "#818cf8" },
   dumbbell: { bg: "rgba(34, 197, 94, 0.2)", text: "#4ade80" },
@@ -19,7 +19,10 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
   plate: { bg: "rgba(234, 179, 8, 0.2)", text: "#eab308" },
 };
 
-// Equipment order for section display
+// Default color for custom equipment types
+const CUSTOM_EQUIPMENT_COLOR = { bg: "rgba(236, 72, 153, 0.2)", text: "#ec4899" }; // Pink
+
+// Equipment order for section display (standard equipment)
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
 // Simple muscle groups (6 options) - for simplified UI mode
@@ -127,9 +130,26 @@ export function ExercisePickerModal({
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Rename confirmation modal state
+  const [showRenameConfirm, setShowRenameConfirm] = useState(false);
+  const [pendingRename, setPendingRename] = useState<{
+    oldName: string;
+    newName: string;
+    exerciseId: string;
+    equipment: string;
+    muscleGroups: string[] | null;
+    historyCount: number;
+  } | null>(null);
+
   // Muscle group mode (simple/advanced) - loaded from user profile
   const [muscleGroupMode, setMuscleGroupMode] = useState<MuscleGroupMode>("simple");
   const [modeLoaded, setModeLoaded] = useState(false);
+
+  // Custom equipment types state
+  const [customEquipmentTypes, setCustomEquipmentTypes] = useState<string[]>([]);
+  const [showCustomEquipmentInput, setShowCustomEquipmentInput] = useState(false);
+  const [customEquipmentName, setCustomEquipmentName] = useState("");
+  const [savingCustomEquipment, setSavingCustomEquipment] = useState(false);
 
   // Track mount state for async operations
   useEffect(() => {
@@ -239,6 +259,7 @@ export function ExercisePickerModal({
       recategorizationAttemptedRef.current = false;
       loadExercises();
       loadRecentExercises();
+      loadCustomEquipmentTypes();
       setActiveTab("Recent");
       setSearchQuery("");
       setShowCreateForm(false);
@@ -248,9 +269,59 @@ export function ExercisePickerModal({
       setAiSuggestedGroup(null);
       setEditMode(false);
       setEditingExercise(null);
+      setShowCustomEquipmentInput(false);
+      setCustomEquipmentName("");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, folderId, locationId]);
+
+  // Load custom equipment types for this gym
+  const loadCustomEquipmentTypes = async () => {
+    const { data } = await supabase
+      .from("user_equipment_types")
+      .select("name")
+      .eq("user_id", userId)
+      .or(`gym_id.eq.${locationId},gym_id.is.null`)
+      .order("name", { ascending: true });
+
+    if (isMountedRef.current && data) {
+      setCustomEquipmentTypes(data.map(t => t.name.toLowerCase()));
+    }
+  };
+
+  // Save a new custom equipment type
+  const handleSaveCustomEquipment = async () => {
+    const name = customEquipmentName.trim().toLowerCase();
+    if (!name) return;
+
+    // Check if it already exists
+    if (EQUIPMENT_ORDER.includes(name) || customEquipmentTypes.includes(name)) {
+      setShowCustomEquipmentInput(false);
+      setCustomEquipmentName("");
+      return;
+    }
+
+    setSavingCustomEquipment(true);
+    try {
+      const { error } = await supabase
+        .from("user_equipment_types")
+        .insert({
+          user_id: userId,
+          gym_id: locationId,
+          name: name,
+        });
+
+      if (!error) {
+        setCustomEquipmentTypes(prev => [...prev, name].sort());
+        setNewEquipment(name); // Select the new equipment type
+      }
+    } catch (e) {
+      console.error("Failed to save custom equipment:", e);
+    }
+    setSavingCustomEquipment(false);
+    setShowCustomEquipmentInput(false);
+    setCustomEquipmentName("");
+  };
 
   const loadExercises = async () => {
     setLoading(true);
@@ -594,20 +665,60 @@ export function ExercisePickerModal({
   const handleSaveEdit = async () => {
     if (!editingExercise || !editName.trim()) return;
 
+    const trimmedName = editName.trim();
+    const muscleGroupsToSave = editMuscleGroups.length > 0 ? editMuscleGroups : null;
+
+    // Check if name is being changed - need to prompt for historical rename
+    const nameChanged = trimmedName.toLowerCase() !== editingExercise.name.toLowerCase();
+
+    if (nameChanged) {
+      // Count how many historical workout logs use this exercise name
+      const { count } = await supabase
+        .from("exercises")
+        .select("id", { count: "exact", head: true })
+        .eq("name", editingExercise.name);
+
+      const historyCount = count || 0;
+
+      if (historyCount > 0) {
+        // Show confirmation modal
+        setPendingRename({
+          oldName: editingExercise.name,
+          newName: trimmedName,
+          exerciseId: editingExercise.id,
+          equipment: editEquipment,
+          muscleGroups: muscleGroupsToSave,
+          historyCount,
+        });
+        setShowRenameConfirm(true);
+        return;
+      }
+    }
+
+    // No name change or no history - proceed with normal save
+    await performExerciseSave(editingExercise.id, trimmedName, editEquipment, muscleGroupsToSave, false);
+  };
+
+  // Perform the actual exercise save
+  const performExerciseSave = async (
+    exerciseId: string,
+    newName: string,
+    newEquipment: string,
+    muscleGroupsToSave: string[] | null,
+    renameHistory: boolean,
+    oldName?: string
+  ) => {
     setSavingEdit(true);
     try {
-      const muscleGroupsToSave = editMuscleGroups.length > 0 ? editMuscleGroups : null;
-      const newName = editName.trim();
-      const newEquipment = editEquipment;
-
       console.log("[Exercise Edit] Updating exercise:", {
-        id: editingExercise.id,
+        id: exerciseId,
         name: newName,
         equipment: newEquipment,
         muscle_group: muscleGroupsToSave,
+        renameHistory,
       });
 
-      // First do the update
+      // Update the exercise template
       const { error: updateError } = await supabase
         .from("exercise_templates")
         .update({
@@ -615,68 +726,103 @@ export function ExercisePickerModal({
           equipment: newEquipment,
           muscle_group: muscleGroupsToSave,
         })
-        .eq("id", editingExercise.id);
+        .eq("id", exerciseId);
 
       if (updateError) {
-        console.error("Failed to update exercise:", updateError);
+        console.error("Failed to update exercise template:", updateError);
         setSavingEdit(false);
         return;
       }
 
-      // Then fetch the updated row
+      // If renaming history, update all historical workout logs
+      if (renameHistory && oldName) {
+        const { error: historyError } = await supabase
+          .from("exercises")
+          .update({ name: newName, equipment: newEquipment })
+          .eq("name", oldName);
+
+        if (historyError) {
+          console.error("Failed to rename historical exercises:", historyError);
+          // Continue anyway - template was updated
+        } else {
+          console.log("[Exercise Edit] Historical exercises renamed successfully");
+        }
+      }
+
+      // Fetch the updated row to verify and get fresh data
       const { data, error: fetchError } = await supabase
         .from("exercise_templates")
         .select("*")
-        .eq("id", editingExercise.id)
+        .eq("id", exerciseId)
         .single();
 
-      if (fetchError) {
+      const currentEditingExercise = editingExercise;
+
+      if (fetchError || !data) {
         console.error("Failed to fetch updated exercise:", fetchError);
         // Update succeeded but fetch failed - update local state manually
-        const manualUpdate = {
-          ...editingExercise,
-          name: newName,
-          equipment: newEquipment,
-          muscle_group: muscleGroupsToSave,
-        };
-        setExercises((prev) =>
-          prev.map((e) =>
-            e.id === editingExercise.id ? manualUpdate : e
-          )
-        );
-        setRecentExercises((prev) =>
-          prev.map((e) =>
-            e.id === editingExercise.id ? manualUpdate : e
-          )
-        );
-        setEditingExercise(null);
-        setSavingEdit(false);
-        return;
-      }
-
-      if (data) {
+        if (currentEditingExercise) {
+          const manualUpdate = {
+            ...currentEditingExercise,
+            name: newName,
+            equipment: newEquipment,
+            muscle_group: muscleGroupsToSave,
+          };
+          setExercises((prev) =>
+            prev.map((e) => (e.id === exerciseId ? manualUpdate : e))
+          );
+          setRecentExercises((prev) =>
+            prev.map((e) => (e.id === exerciseId ? manualUpdate : e))
+          );
+        }
+      } else {
         console.log("[Exercise Edit] Update successful:", data);
         const updatedExercise = data as ExerciseWithMuscleGroup;
         setExercises((prev) =>
-          prev.map((e) =>
-            e.id === editingExercise.id ? updatedExercise : e
-          )
+          prev.map((e) => (e.id === exerciseId ? updatedExercise : e))
         );
         setRecentExercises((prev) =>
-          prev.map((e) =>
-            e.id === editingExercise.id ? updatedExercise : e
-          )
+          prev.map((e) => (e.id === exerciseId ? updatedExercise : e))
         );
-        setEditingExercise(null);
       }
+
+      setEditingExercise(null);
+      setShowRenameConfirm(false);
+      setPendingRename(null);
     } catch (error) {
       console.error("Failed to update exercise (exception):", error);
     }
     setSavingEdit(false);
   };
 
+  // Handle rename confirmation - rename history
+  const handleConfirmRenameHistory = () => {
+    if (!pendingRename) return;
+    performExerciseSave(
+      pendingRename.exerciseId,
+      pendingRename.newName,
+      pendingRename.equipment,
+      pendingRename.muscleGroups,
+      true,
+      pendingRename.oldName
+    );
+  };
+
+  // Handle rename confirmation - keep history
+  const handleKeepHistoryName = () => {
+    if (!pendingRename) return;
+    performExerciseSave(
+      pendingRename.exerciseId,
+      pendingRename.newName,
+      pendingRename.equipment,
+      pendingRename.muscleGroups,
+      false
+    );
+  };
+
   const getEquipmentStyle = (equipment: string) => {
-    return EQUIPMENT_COLORS[equipment.toLowerCase()] || EQUIPMENT_COLORS.barbell;
+    const normalized = equipment.toLowerCase();
+    return EQUIPMENT_COLORS[normalized] || CUSTOM_EQUIPMENT_COLOR;
   };
 
   const formatEquipment = (equipment: string) => {
@@ -799,6 +945,7 @@ export function ExercisePickerModal({
                       Equipment
                     </label>
                     <div className="flex flex-wrap gap-2">
+                      {/* Standard equipment types */}
                       {EQUIPMENT_ORDER.map((equip) => {
                         const style = getEquipmentStyle(equip);
                         const isActive = newEquipment === equip;
@@ -819,6 +966,74 @@ export function ExercisePickerModal({
                           </button>
                         );
                       })}
+                      {/* Custom equipment types */}
+                      {customEquipmentTypes.map((equip) => {
+                        const style = CUSTOM_EQUIPMENT_COLOR;
+                        const isActive = newEquipment === equip;
+                        return (
+                          <button
+                            key={equip}
+                            onClick={() => setNewEquipment(equip)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                              isActive ? "ring-2 ring-offset-2 ring-offset-[#0d1117]" : ""
+                            }`}
+                            style={{
+                              background: style.bg,
+                              color: style.text,
+                              ringColor: isActive ? style.text : undefined,
+                            }}
+                          >
+                            {formatEquipment(equip)}
+                          </button>
+                        );
+                      })}
+                      {/* Add custom equipment button */}
+                      {showCustomEquipmentInput ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={customEquipmentName}
+                            onChange={(e) => setCustomEquipmentName(e.target.value)}
+                            placeholder="e.g., E-Gym"
+                            className="w-24 px-3 py-2 rounded-full text-sm bg-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ec4899]"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveCustomEquipment();
+                              if (e.key === "Escape") {
+                                setShowCustomEquipmentInput(false);
+                                setCustomEquipmentName("");
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={handleSaveCustomEquipment}
+                            disabled={!customEquipmentName.trim() || savingCustomEquipment}
+                            className="w-8 h-8 rounded-full flex items-center justify-center bg-[#ec4899] text-white disabled:opacity-50"
+                          >
+                            {savingCustomEquipment ? (
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <Plus className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowCustomEquipmentInput(false);
+                              setCustomEquipmentName("");
+                            }}
+                            className="w-8 h-8 rounded-full flex items-center justify-center bg-white/10 text-gray-400"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowCustomEquipmentInput(true)}
+                          className="px-3 py-2 rounded-full text-sm font-medium bg-white/10 text-gray-400 hover:text-white hover:bg-white/15 transition-all flex items-center gap-1"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1193,8 +1408,31 @@ export function ExercisePickerModal({
                         Equipment
                       </label>
                       <div className="flex flex-wrap gap-2">
+                        {/* Standard equipment types */}
                         {EQUIPMENT_ORDER.map((equip) => {
                           const style = getEquipmentStyle(equip);
+                          const isActive = editEquipment === equip;
+                          return (
+                            <button
+                              type="button"
+                              key={equip}
+                              onClick={() => setEditEquipment(equip)}
+                              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                                isActive ? "ring-2 ring-offset-2 ring-offset-[var(--card)]" : ""
+                              }`}
+                              style={{
+                                background: style.bg,
+                                color: style.text,
+                                ringColor: isActive ? style.text : undefined,
+                              }}
+                            >
+                              {formatEquipment(equip)}
+                            </button>
+                          );
+                        })}
+                        {/* Custom equipment types */}
+                        {customEquipmentTypes.map((equip) => {
+                          const style = CUSTOM_EQUIPMENT_COLOR;
                           const isActive = editEquipment === equip;
                           return (
                             <button
@@ -1308,6 +1546,84 @@ export function ExercisePickerModal({
                     >
                       {deletingId === editingExercise?.id ? "Deleting..." : "Delete Exercise"}
                     </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Rename Confirmation Modal */}
+            <AnimatePresence>
+              {showRenameConfirm && pendingRename && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                  onClick={() => {
+                    setShowRenameConfirm(false);
+                    setPendingRename(null);
+                  }}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full max-w-sm rounded-2xl p-6"
+                    style={{
+                      background: "var(--card)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                    }}
+                  >
+                    {/* Icon */}
+                    <div className="flex justify-center mb-4">
+                      <div
+                        className="w-16 h-16 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(249, 115, 22, 0.15)" }}
+                      >
+                        <Pencil className="w-8 h-8 text-orange-500" />
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <h2 className="text-xl font-bold text-center text-white mb-2">
+                      Rename Exercise?
+                    </h2>
+
+                    {/* Message */}
+                    <p className="text-sm text-gray-400 text-center mb-2">
+                      You&apos;re renaming <span className="text-white font-semibold">&quot;{pendingRename.oldName}&quot;</span> to <span className="text-white font-semibold">&quot;{pendingRename.newName}&quot;</span>.
+                    </p>
+                    <p className="text-sm text-gray-400 text-center mb-6">
+                      This exercise appears in <span className="text-orange-400 font-semibold">{pendingRename.historyCount}</span> past workout{pendingRename.historyCount !== 1 ? "s" : ""}. Would you like to update the name in your workout history too?
+                    </p>
+
+                    {/* Buttons */}
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleConfirmRenameHistory}
+                        disabled={savingEdit}
+                        className="w-full py-3 rounded-xl font-semibold text-black bg-[#22d3ee] disabled:opacity-50"
+                      >
+                        {savingEdit ? "Updating..." : "Yes, Rename Everywhere"}
+                      </button>
+                      <button
+                        onClick={handleKeepHistoryName}
+                        disabled={savingEdit}
+                        className="w-full py-3 rounded-xl font-semibold text-gray-300 bg-white/10 hover:bg-white/15 transition-colors disabled:opacity-50"
+                      >
+                        Keep Old Name in History
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowRenameConfirm(false);
+                          setPendingRename(null);
+                        }}
+                        className="w-full py-3 rounded-xl font-semibold text-gray-500 hover:text-gray-400 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </motion.div>
                 </motion.div>
               )}

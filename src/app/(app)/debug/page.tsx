@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { AlertTriangle, RefreshCw, Trash2, Play, Eye, EyeOff } from "lucide-react";
 import { apiFetch } from "@/lib/capacitor";
+import { ConfirmModal } from "@/components/confirm-modal";
 
 // Only allow in development
 const IS_DEV = process.env.NODE_ENV === "development";
@@ -38,6 +39,36 @@ export default function DebugPage() {
   const [dateOverride, setDateOverride] = useState("");
   const [lastWorkoutOverride, setLastWorkoutOverride] = useState("");
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant?: "destructive" | "warning" | "reset";
+    confirmText?: string;
+  }>({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  // Helper to show confirm modal
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    variant: "destructive" | "warning" | "reset" = "destructive",
+    confirmText = "Delete"
+  ) => {
+    setConfirmModal({ open: true, title, message, onConfirm, variant, confirmText });
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, open: false }));
+  };
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -327,15 +358,16 @@ export default function DebugPage() {
   };
 
   // Reset nutrition onboarding (clear flag + delete all meals)
-  const resetNutritionOnboarding = async () => {
+  const doResetNutritionOnboarding = async () => {
     if (!user) return;
-    if (!confirm("Reset nutrition onboarding? This will delete ALL meals and reset the flag.")) return;
 
     // Delete all meals
     const { error: mealError } = await supabase
       .from("meals")
       .delete()
       .eq("user_id", user.id);
+
+    closeConfirmModal();
 
     if (mealError) {
       showMessage(`Error deleting meals: ${mealError.message}`);
@@ -360,10 +392,21 @@ export default function DebugPage() {
     loadData();
   };
 
+  // Show confirm modal for nutrition reset
+  const resetNutritionOnboarding = () => {
+    showConfirm(
+      "Reset Nutrition?",
+      "This will delete ALL meals and reset the onboarding flag. This cannot be undone.",
+      doResetNutritionOnboarding,
+      "destructive",
+      "Reset"
+    );
+  };
+
   // Delete all workouts
-  const clearAllWorkouts = async () => {
+  const doClearAllWorkouts = async () => {
     if (!user) return;
-    if (!confirm("Delete ALL workouts? This cannot be undone.")) return;
+    closeConfirmModal();
 
     // Get workout IDs
     const { data: workouts } = await supabase
@@ -391,6 +434,17 @@ export default function DebugPage() {
     } else {
       showMessage("No workouts to delete");
     }
+  };
+
+  // Show confirm modal for clearing workouts
+  const clearAllWorkouts = () => {
+    showConfirm(
+      "Delete All Workouts?",
+      "This will delete ALL your workout data. This cannot be undone.",
+      doClearAllWorkouts,
+      "destructive",
+      "Delete All"
+    );
   };
 
   // Split rotation editing
@@ -462,15 +516,11 @@ export default function DebugPage() {
     setShowWorkouts(true);
   };
 
-  const deleteDebugWorkouts = async () => {
+  const doDeleteDebugWorkouts = async () => {
     if (!user) return;
-    const debugWorkouts = workouts.filter(w => w.notes?.includes("[DEBUG]"));
-    if (debugWorkouts.length === 0) {
-      showMessage("No debug workouts to delete");
-      return;
-    }
-    if (!confirm(`Delete ${debugWorkouts.length} debug workouts?`)) return;
+    closeConfirmModal();
 
+    const debugWorkouts = workouts.filter(w => w.notes?.includes("[DEBUG]"));
     const workoutIds = debugWorkouts.map(w => w.id);
 
     // Get exercise IDs for these workouts
@@ -488,6 +538,22 @@ export default function DebugPage() {
     await supabase.from("workouts").delete().in("id", workoutIds);
     showMessage(`Deleted ${debugWorkouts.length} debug workouts`);
     loadWorkouts();
+  };
+
+  const deleteDebugWorkouts = () => {
+    if (!user) return;
+    const debugWorkouts = workouts.filter(w => w.notes?.includes("[DEBUG]"));
+    if (debugWorkouts.length === 0) {
+      showMessage("No debug workouts to delete");
+      return;
+    }
+    showConfirm(
+      "Delete Debug Workouts?",
+      `This will delete ${debugWorkouts.length} debug workouts. This cannot be undone.`,
+      doDeleteDebugWorkouts,
+      "destructive",
+      "Delete"
+    );
   };
 
   const deleteWorkout = async (workoutId: string) => {
@@ -523,9 +589,9 @@ export default function DebugPage() {
     setMilestones(data || []);
   };
 
-  const resetMilestones = async () => {
+  const doResetMilestones = async () => {
     if (!user) return;
-    if (!confirm("Delete ALL milestones? This will reset all achievement tracking.")) return;
+    closeConfirmModal();
 
     const { error } = await supabase
       .from("milestones")
@@ -538,6 +604,16 @@ export default function DebugPage() {
       showMessage("All milestones reset!");
       loadMilestones();
     }
+  };
+
+  const resetMilestones = () => {
+    showConfirm(
+      "Reset All Milestones?",
+      "This will delete ALL milestones and reset all achievement tracking. This cannot be undone.",
+      doResetMilestones,
+      "destructive",
+      "Reset"
+    );
   };
 
   const create7DayStreak = async () => {
@@ -653,6 +729,57 @@ export default function DebugPage() {
     }
   };
 
+  // Full coach reset handler
+  const doFullCoachReset = async () => {
+    closeConfirmModal();
+    clearChatHistory();
+    try {
+      await apiFetch("/api/coach-reset", { method: "POST" });
+      showMessage("Full coach reset complete!");
+    } catch (e) {
+      showMessage(`Reset error: ${e}`);
+    }
+  };
+
+  const fullCoachReset = () => {
+    showConfirm(
+      "Full Coach Reset?",
+      "This will wipe onboarding, memories, and milestones. This cannot be undone.",
+      doFullCoachReset,
+      "reset",
+      "Reset"
+    );
+  };
+
+  // Nuclear reset handler
+  const doNuclearReset = async () => {
+    closeConfirmModal();
+    clearChatHistory();
+    localStorage.removeItem(`netgains-daily-brief-${user?.id}`);
+    try {
+      const res = await apiFetch("/api/coach-reset?full=true", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        showMessage("Nuclear reset complete! Refresh to start fresh.");
+      } else {
+        showMessage(`Reset error: ${data.error}`);
+      }
+    } catch (e) {
+      showMessage(`Reset error: ${e}`);
+    }
+    loadData();
+  };
+
+  const nuclearReset = () => {
+    showConfirm(
+      "NUCLEAR RESET",
+      "This deletes EVERYTHING - workouts, meals, memories, chat. This is completely irreversible!",
+      doNuclearReset,
+      "destructive",
+      "WIPE EVERYTHING"
+    );
+  };
+
   if (!IS_DEV) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -725,35 +852,10 @@ export default function DebugPage() {
             <DebugButton onClick={clearChatHistory} variant="warning">
               <Trash2 className="w-4 h-4" /> Clear chat history (soft reset)
             </DebugButton>
-            <DebugButton onClick={async () => {
-              if (!confirm("Full reset? This wipes onboarding, memories, and milestones.")) return;
-              clearChatHistory();
-              try {
-                await apiFetch("/api/coach-reset", { method: "POST" });
-                showMessage("Full coach reset complete!");
-              } catch (e) {
-                showMessage(`Reset error: ${e}`);
-              }
-            }} variant="danger">
+            <DebugButton onClick={fullCoachReset} variant="danger">
               <Trash2 className="w-4 h-4" /> Full Coach Reset (onboarding + memories)
             </DebugButton>
-            <DebugButton onClick={async () => {
-              if (!confirm("NUCLEAR RESET: This deletes EVERYTHING - workouts, meals, memories, chat. Are you sure?")) return;
-              clearChatHistory();
-              localStorage.removeItem(`netgains-daily-brief-${user?.id}`);
-              try {
-                const res = await apiFetch("/api/coach-reset?full=true", { method: "POST" });
-                const data = await res.json();
-                if (data.success) {
-                  showMessage("Nuclear reset complete! Refresh to start fresh.");
-                } else {
-                  showMessage(`Reset error: ${data.error}`);
-                }
-              } catch (e) {
-                showMessage(`Reset error: ${e}`);
-              }
-              loadData();
-            }} variant="danger">
+            <DebugButton onClick={nuclearReset} variant="danger">
               <Trash2 className="w-4 h-4" /> NUCLEAR RESET (wipe everything)
             </DebugButton>
             <DebugButton onClick={triggerAIOpening} variant="default">
@@ -1002,6 +1104,17 @@ export default function DebugPage() {
           </div>
         </Section>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        open={confirmModal.open}
+        onClose={closeConfirmModal}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmText={confirmModal.confirmText}
+      />
     </div>
   );
 }

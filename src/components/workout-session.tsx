@@ -84,7 +84,7 @@ interface WorkoutSessionProps {
   folderName: string;
   locationId: string; // Current gym/location ID
   onBack: () => void;
-  onSave: (exercises: ActiveExercise[]) => void;
+  onSave: (exercises: ActiveExercise[], cardioNotes?: string) => void;
 }
 
 // Equipment badge colors
@@ -96,6 +96,9 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
   smith: { bg: "rgba(255, 71, 87, 0.2)", text: "#ff4757" },
   bodyweight: { bg: "rgba(168, 85, 247, 0.2)", text: "#a855f7" },
 };
+
+// Default color for custom equipment types
+const CUSTOM_EQUIPMENT_COLOR = { bg: "rgba(236, 72, 153, 0.2)", text: "#ec4899" }; // Pink
 
 // Set variant styles - backgrounds and borders
 const SET_VARIANT_STYLES: Record<SetVariant, { bg: string; inputBg: string; borderLeft?: string }> = {
@@ -289,8 +292,8 @@ export function WorkoutSession({
       const stored = localStorage.getItem("netgains-current-workout");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.exercises && Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
-          const restoredExercises = parsed.exercises.map(
+        if ((parsed.exercises && Array.isArray(parsed.exercises) && parsed.exercises.length > 0) || parsed.cardioNotes) {
+          const restoredExercises = (parsed.exercises || []).map(
             (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets?: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string; previousWeight?: string; previousReps?: string }[] }) => ({
               id: Math.random().toString(36).substring(2, 9),
               name: ex.name,
@@ -314,6 +317,10 @@ export function WorkoutSession({
             })
           );
           setActiveExercises(restoredExercises);
+          // Restore cardio notes if present
+          if (parsed.cardioNotes) {
+            setCardioNotes(parsed.cardioNotes);
+          }
           // Skip choice screen if we have an in-progress workout
           setWorkoutMode("started");
         }
@@ -380,14 +387,17 @@ export function WorkoutSession({
   // Exercise picker modal state
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
+  // Cardio notes state
+  const [cardioNotes, setCardioNotes] = useState("");
 
   // Sync current workout to localStorage so Coach can see in-progress data
   // and so the workout can be restored if the user navigates away
   useEffect(() => {
-    if (workoutMode === "started" && activeExercises.length > 0) {
+    if (workoutMode === "started" && (activeExercises.length > 0 || cardioNotes.trim())) {
       const workoutData = {
         folderName,
         startedAt: new Date().toISOString(),
+        cardioNotes: cardioNotes.trim() || undefined,
         exercises: activeExercises.map((ex) => ({
           name: ex.name,
           equipment: ex.equipment,
@@ -406,10 +416,10 @@ export function WorkoutSession({
         })),
       };
       localStorage.setItem("netgains-current-workout", JSON.stringify(workoutData));
-    } else if (workoutMode === "started" && activeExercises.length === 0) {
+    } else if (workoutMode === "started" && activeExercises.length === 0 && !cardioNotes.trim()) {
       localStorage.removeItem("netgains-current-workout");
     }
-  }, [activeExercises, folderName, workoutMode]);
+  }, [activeExercises, folderName, workoutMode, cardioNotes]);
 
 
   // Load library exercises on mount
@@ -988,25 +998,26 @@ export function WorkoutSession({
 
   // Finish and save
   const handleFinish = async () => {
-    if (activeExercises.length === 0) return;
-
     const validExercises = activeExercises.filter((ex) =>
       ex.sets.some((s) => isValidSet(s))
     );
 
-    if (validExercises.length === 0) {
-      toast.error("Complete at least one set before saving.");
+    const hasCardio = cardioNotes.trim().length > 0;
+
+    if (validExercises.length === 0 && !hasCardio) {
+      toast.error("Complete at least one set or add cardio notes before saving.");
       return;
     }
 
     setSaving(true);
     localStorage.removeItem("netgains-current-workout");
-    onSave(validExercises);
+    onSave(validExercises, cardioNotes.trim() || undefined);
   };
 
   // Get equipment badge style
   const getEquipmentStyle = (equipment: string) => {
-    return EQUIPMENT_COLORS[equipment] || EQUIPMENT_COLORS.barbell;
+    const normalized = equipment?.toLowerCase() || "barbell";
+    return EQUIPMENT_COLORS[normalized] || CUSTOM_EQUIPMENT_COLOR;
   };
 
 
@@ -1477,12 +1488,35 @@ export function WorkoutSession({
         </AnimatePresence>
 
         {/* Empty State - only show when workout has started */}
-        {workoutMode === "started" && activeExercises.length === 0 && (
+        {workoutMode === "started" && activeExercises.length === 0 && !cardioNotes.trim() && (
           <div className="text-center py-16">
             <p className="text-muted-foreground mb-2">No exercises yet</p>
             <p className="text-sm text-muted-foreground">
               Tap Add Exercise below to start
             </p>
+          </div>
+        )}
+
+        {/* Cardio Notes Field - show when workout started */}
+        {workoutMode === "started" && (
+          <div
+            className="rounded-2xl p-4"
+            style={{
+              background: "var(--card)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+            }}
+          >
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Cardio Notes (Optional)
+            </label>
+            <textarea
+              value={cardioNotes}
+              onChange={(e) => setCardioNotes(e.target.value)}
+              placeholder="e.g., 25 min incline walk, 10% incline, 3.2 mph"
+              className="w-full bg-background/50 rounded-xl px-4 py-3 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              rows={2}
+              style={{ minHeight: "60px" }}
+            />
           </div>
         )}
       </div>
@@ -1521,8 +1555,8 @@ export function WorkoutSession({
         </div>
       )}
 
-      {/* End Workout Button (below Add Exercise) - only show when workout started */}
-      {workoutMode === "started" && activeExercises.length > 0 && (
+      {/* End Workout Button (below Add Exercise) - only show when workout started and has content */}
+      {workoutMode === "started" && (activeExercises.length > 0 || cardioNotes.trim()) && (
         <div className="fixed left-0 right-0 z-40 px-4 bottom-28">
           <div className="max-w-lg mx-auto">
             <Button onClick={handleFinish} loading={saving}>

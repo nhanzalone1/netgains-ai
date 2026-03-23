@@ -55,25 +55,25 @@ export async function categorizeExercise(exerciseName: string): Promise<MuscleGr
 Exercise: "${exerciseName}"
 
 Valid categories (respond with ONLY one of these exact strings):
-- chest (bench press variations, chest fly, push-ups, dips with forward lean)
-- back (lat pulldown, pull-ups, chin-ups, rows, shrugs, deadlifts, t-bar rows, cable rows, straight arm pulldown)
+- chest (bench press variations, chest fly, push-ups, dips with forward lean, pec deck)
+- back (lat pulldown, pull-ups, chin-ups, rows, shrugs, t-bar rows, cable rows, straight arm pulldown)
 - biceps (all curl variations, hammer curls, preacher curls, concentration curls)
-- triceps (pushdowns, skull crushers, tricep dips, close grip bench, overhead extensions)
-- front_delt (overhead press, military press, front raises, arnold press)
+- triceps (pushdowns, skull crushers, tricep dips, close grip bench, overhead extensions, kickbacks)
+- front_delt (overhead press, military press, front raises, arnold press, shoulder press)
 - side_delt (lateral raises, upright rows, face pulls with wide grip)
 - rear_delt (reverse fly, face pulls, rear delt rows, band pull-aparts)
-- quads (squats, leg press, leg extension, lunges, hack squats, sissy squats)
-- hamstrings (leg curls, Romanian deadlifts, stiff leg deadlifts, good mornings)
-- glutes (hip thrusts, glute bridges, kickbacks, Bulgarian split squats)
+- quads (squats, leg press, leg extension, lunges, hack squats, sissy squats, front squats)
+- hamstrings (leg curls, deadlifts, Romanian deadlifts, stiff leg deadlifts, good mornings, Nordic curls)
+- glutes (hip thrusts, glute bridges, kickbacks, Bulgarian split squats, cable pull-throughs)
 - calves (standing calf raises, seated calf raises, donkey calf raises)
-- abs (crunches, planks, leg raises, ab rollouts, Russian twists, dead bugs, sit-ups)
+- abs (crunches, planks, leg raises, ab rollouts, Russian twists, dead bugs, sit-ups, cable crunches)
 - forearms (wrist curls, reverse curls, farmer's walks, grip exercises)
 
 CRITICAL RULES:
-- "Press" alone or with direction (incline/decline/flat) = chest
-- "Overhead press" / "shoulder press" / "military press" = front_delt
-- "Pulldown" / "pull down" = back
-- "Pushdown" / "push down" = triceps
+- "Press" alone or "bench press" or with direction (incline/decline/flat) = chest
+- "Overhead press" / "shoulder press" / "military press" / "OHP" = front_delt
+- "Pulldown" / "pull down" / "lat pulldown" = back
+- "Pushdown" / "push down" / "tricep pushdown" = triceps
 - "Curl" = biceps (unless "leg curl" = hamstrings, "wrist curl" = forearms)
 - "Row" = back (unless "upright row" = side_delt)
 - "Raise" with "lateral" or "side" = side_delt
@@ -82,7 +82,7 @@ CRITICAL RULES:
 - "Fly" / "Flye" = chest (unless "reverse fly" = rear_delt)
 - "Extension" with "leg" = quads, with "tricep/overhead" = triceps
 - "Squat" / "Lunge" = quads (glute involvement is secondary)
-- "Deadlift" = back (primary mover is back, not hamstrings)
+- "Deadlift" (all variations including conventional, Romanian, stiff leg, sumo) = hamstrings
 
 If you cannot determine the muscle group with high confidence, respond with exactly: UNKNOWN
 

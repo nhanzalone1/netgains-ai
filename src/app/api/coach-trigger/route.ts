@@ -191,6 +191,7 @@ RULES:
 - Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed
+      const cardioLine = context.cardioNotes ? `\n- Cardio: ${context.cardioNotes}` : '';
       prompt = `You are Coach, an elite fitness trainer. The user just finished a workout. Generate a SHORT (2-3 sentences max) post-workout directive.
 
 USER CONTEXT:
@@ -200,7 +201,7 @@ USER CONTEXT:
 
 WORKOUT COMPLETED:
 - ${context.workoutName || 'Training session'}
-- ${context.exerciseCount || 'Multiple'} exercises
+- ${context.exerciseCount || 'Multiple'} exercises${cardioLine}
 
 TODAY'S NUTRITION SO FAR:
 - Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
@@ -210,7 +211,7 @@ ${foodStaples ? `USER'S FOOD STAPLES: ${foodStaples}` : ''}
 ${splitRotation ? `SPLIT ROTATION: ${splitRotation}` : ''}
 
 RULES:
-1. React to the workout completion (one short line)
+1. React to the workout completion (one short line)${context.cardioNotes ? ' — acknowledge the cardio they did' : ''}
 2. Tell them their post-workout window is open — give EXACT protein target (40-50g) and timing
 3. End with: "next up: [specific recovery meal] — [biological reason]"
 4. Keep it punchy and direct. This is a critical recovery moment.`;

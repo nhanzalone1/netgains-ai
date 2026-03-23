@@ -381,7 +381,7 @@ export default function LogPage() {
     equipment: string;
     templateId: string | null;
     sets: { id: string; weight: string; reps: string; variant: string; measureType?: string }[];
-  }[]) => {
+  }[], cardioNotes?: string) => {
     if (!user) return;
 
     // Pre-validate: filter exercises with at least one valid set
@@ -393,8 +393,9 @@ export default function LogPage() {
       }))
       .filter((ex) => ex.validSets.length > 0);
 
-    if (validExercises.length === 0) {
-      toast.error("Add at least one complete set to save.");
+    // Allow saving with only cardio notes (no exercises)
+    if (validExercises.length === 0 && !cardioNotes?.trim()) {
+      toast.error("Add at least one complete set or cardio notes to save.");
       return;
     }
 
@@ -410,6 +411,7 @@ export default function LogPage() {
           notes: `${selectedFolder?.name} session`,
           folder_id: selectedFolder?.id ? Number(selectedFolder.id) : null,
           location_id: selectedLocation?.id ? Number(selectedLocation.id) : null,
+          cardio_notes: cardioNotes?.trim() || null,
         })
         .select()
         .single();
@@ -481,6 +483,7 @@ export default function LogPage() {
         triggerCoachResponse(user.id, 'workout_completed', {
           workoutName: selectedFolder?.name || 'Training session',
           exerciseCount: validExercises.length,
+          cardioNotes: cardioNotes?.trim() || undefined,
         });
       }
     } catch (err) {

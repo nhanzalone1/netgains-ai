@@ -104,6 +104,7 @@ export async function triggerCoachResponse(
     // For workouts
     workoutName?: string;
     exerciseCount?: number;
+    cardioNotes?: string;  // Free-text cardio description
     // Time context
     localTime?: string;  // e.g., "9:30 PM"
     localHour?: number;  // 0-23
