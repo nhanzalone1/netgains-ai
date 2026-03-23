@@ -818,7 +818,9 @@ export default function LogPage() {
             <button
               onClick={() => {
                 if (editingFolder) {
-                  setDeleteFolderId(editingFolder.id);
+                  const folderId = editingFolder.id;
+                  setEditingFolder(null); // Close edit modal first
+                  setTimeout(() => setDeleteFolderId(folderId), 100); // Then show confirmation
                 }
               }}
               className="w-full py-3 rounded-xl text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors font-medium"
