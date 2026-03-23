@@ -841,6 +841,64 @@ export default function LogPage() {
             userId={user.id}
           />
         )}
+
+        {/* Delete Folder/Split Confirmation Modal - STATE 2 */}
+        <AnimatePresence>
+          {deleteFolderId && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+              onClick={() => setDeleteFolderId(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl p-6"
+                style={{
+                  background: "var(--card)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <div className="flex justify-center mb-4">
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(239, 68, 68, 0.15)" }}
+                  >
+                    <Trash2 className="w-8 h-8 text-red-500" />
+                  </div>
+                </div>
+
+                <h2 className="text-xl font-bold text-center text-white mb-2">
+                  Delete Split?
+                </h2>
+
+                <p className="text-sm text-gray-400 text-center mb-6">
+                  This will delete the split and all its exercises. This action cannot be undone.
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteFolderId(null)}
+                    className="flex-1 py-3 rounded-xl font-semibold text-white transition-colors"
+                    style={{ background: "rgba(55, 55, 65, 0.8)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFolder(deleteFolderId)}
+                    className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
