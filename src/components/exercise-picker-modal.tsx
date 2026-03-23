@@ -766,21 +766,36 @@ export function ExercisePickerModal({
         renameHistory,
       });
 
-      // Update the exercise template
-      const { error: updateError } = await supabase
+      // Update the exercise template and return the updated row to verify it worked
+      const { data: updateData, error: updateError } = await supabase
         .from("exercise_templates")
         .update({
           name: newName,
           equipment: newEquipment,
           muscle_group: muscleGroupsToSave,
         })
-        .eq("id", exerciseId);
+        .eq("id", exerciseId)
+        .select()
+        .single();
 
       if (updateError) {
-        console.error("Failed to update exercise template:", updateError);
+        console.error("[Exercise Edit] Failed to update exercise template:", updateError);
         setSavingEdit(false);
         return;
       }
+
+      // Verify the update actually persisted
+      if (!updateData) {
+        console.error("[Exercise Edit] Update returned no data - RLS may have blocked it");
+        setSavingEdit(false);
+        return;
+      }
+
+      console.log("[Exercise Edit] Update verified:", {
+        id: updateData.id,
+        name: updateData.name,
+        muscle_group: updateData.muscle_group,
+      });
 
       // If renaming history, update all historical workout logs
       if (renameHistory && oldName) {
