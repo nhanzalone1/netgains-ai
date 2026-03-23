@@ -58,7 +58,7 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 ## Database
 
 - **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin, consent_ai_data, key_memories (JSONB)
-- **workouts** / **exercises** / **sets** — workout logging with variants
+- **workouts** / **exercises** / **sets** — workout logging with variants, folder_id, location_id for "Load Previous"
 - **nutrition_logs** — meals with macros
 - **coach_memory** — key-value store (split_rotation, food_staples, pending_workout, etc.)
 - **chat_messages** — persisted for cross-device sync
@@ -293,6 +293,39 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 
 ### PR Detection
 Separated by equipment type. Excludes warmup and time-based sets.
+
+### Load Previous Workout
+When opening a split day, users see two options: "Load Last Workout" or "Start Fresh".
+
+**Load Last Workout:**
+- Queries most recent workout by `folder_id` + `location_id`
+- Fallback: matches by workout notes if no folder_id (for legacy workouts)
+- Pre-populates exercises with previous weight/reps as faded placeholder text (30% opacity)
+- User types over placeholders with new values
+- Exact number of sets from last time are pre-loaded
+
+**Start Fresh:** Blank workout, current behavior.
+
+**Database:** `workouts.folder_id` (bigint FK to folders), `workouts.location_id` (bigint FK to locations)
+
+**Files:**
+- `src/components/workout-session.tsx` — Choice screen, previous workout loading, placeholder styling
+- `src/app/(app)/log/page.tsx` — Saves folder_id/location_id when workout is created
+- `supabase/migrations/add_workout_folder_id.sql` — Migration for new columns
+
+### Inline Previous Stats
+Under each exercise name, shows previous performance to guide progressive overload.
+
+**Display format:**
+- "Last time: 225 lbs × 8 reps" — most recent performance
+- "Best: 260 lbs × 8 reps" — all-time best (by Epley 1RM formula)
+- "Last time (PR): 225 lbs × 8 reps" — combined if last time IS the best
+
+**Gym-aware queries:**
+- Gym-specific exercises (machine, cable, smith): only shows stats from SAME gym
+- Universal exercises (barbell, dumbbell, bodyweight): shows stats from ANY gym
+
+**Implementation:** `fetchExerciseStats()` in `workout-session.tsx`
 
 ## Terms & Privacy Acceptance
 
