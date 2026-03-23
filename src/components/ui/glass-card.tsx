@@ -1,14 +1,14 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, HTMLAttributes } from "react";
 
-interface GlassCardProps {
+interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
   variant?: "default" | "elevated" | "subtle";
 }
 
-export function GlassCard({ children, className = "", variant = "default" }: GlassCardProps) {
+export function GlassCard({ children, className = "", variant = "default", ...props }: GlassCardProps) {
   const variantClass = {
     default: "glass",
     elevated: "glass-elevated",
@@ -16,7 +16,7 @@ export function GlassCard({ children, className = "", variant = "default" }: Gla
   }[variant];
 
   return (
-    <div className={`rounded-2xl p-4 ${variantClass} ${className}`}>
+    <div className={`rounded-2xl p-4 ${variantClass} ${className}`} {...props}>
       {children}
     </div>
   );
