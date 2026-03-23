@@ -6,6 +6,14 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+// Key memories structure for coach profile
+export interface KeyMemories {
+  supplements: string;
+  food_available: string;
+  preferences: string;
+  injuries: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -26,6 +34,7 @@ export interface Database {
           beta_welcome_shown: boolean;
           is_admin: boolean | null;
           consent_ai_data: boolean | null;
+          key_memories: KeyMemories | null;
         };
         Insert: {
           id: string;
@@ -43,6 +52,7 @@ export interface Database {
           beta_welcome_shown?: boolean;
           is_admin?: boolean | null;
           consent_ai_data?: boolean | null;
+          key_memories?: KeyMemories | null;
         };
         Update: {
           id?: string;
@@ -60,6 +70,7 @@ export interface Database {
           beta_welcome_shown?: boolean;
           is_admin?: boolean | null;
           consent_ai_data?: boolean | null;
+          key_memories?: KeyMemories | null;
         };
         Relationships: [];
       };

@@ -1937,7 +1937,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
 
     // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and latest weigh-in
     const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, latestWeighInResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin, key_memories').eq('id', user.id).maybeSingle(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').maybeSingle(),
@@ -1979,7 +1979,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       const adminClient = getSupabaseAdmin();
       const { data: adminProfile, error: adminError } = await adminClient
         .from('profiles')
-        .select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin')
+        .select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin, key_memories')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -2069,6 +2069,27 @@ Use this for time-appropriate advice (meal timing, workout scheduling, sleep rec
 `
       : '';
 
+    // Build key memories context from profile (HIGHEST PRIORITY - always reference these)
+    // This is fetched directly from the database, not Pinecone
+    const profileKeyMemories = profile?.key_memories as { supplements?: string; food_available?: string; preferences?: string; injuries?: string } | null;
+    const hasKeyMemories = profileKeyMemories && (
+      profileKeyMemories.supplements ||
+      profileKeyMemories.food_available ||
+      profileKeyMemories.preferences ||
+      profileKeyMemories.injuries
+    );
+
+    const keyMemoriesContext = hasKeyMemories
+      ? `[USER KEY PREFERENCES - ALWAYS REFERENCE THESE]
+${profileKeyMemories.supplements ? `Supplements: ${profileKeyMemories.supplements}` : ''}
+${profileKeyMemories.food_available ? `Food Available: ${profileKeyMemories.food_available}` : ''}
+${profileKeyMemories.preferences ? `Preferences: ${profileKeyMemories.preferences}` : ''}
+${profileKeyMemories.injuries ? `Injuries/Limitations: ${profileKeyMemories.injuries}` : ''}
+[END KEY PREFERENCES]
+
+`.replace(/\n{3,}/g, '\n')
+      : '';
+
     // Build long-term memory context from Pinecone
     const memoryContext = relevantMemories.length > 0
       ? `[LONG-TERM MEMORIES]
@@ -2088,7 +2109,8 @@ ${relevantMemories.map(m => `- ${m.fact}`).join('\n')}
     };
 
     // Build nutrition context string with meal timestamps
-    const nutritionContext = `${timeContext}${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
+    // Key memories come FIRST (highest priority), then time context, then Pinecone memories
+    const nutritionContext = `${keyMemoriesContext}${timeContext}${memoryContext}[TODAY'S NUTRITION - SOURCE OF TRUTH - ${todayStr}]
 This data is pulled from the database right now. ALWAYS use these exact numbers.
 ${todayMeals.length > 0
   ? `Consumed so far: ${todayNutrition.calories} cal, ${todayNutrition.protein}g protein, ${todayNutrition.carbs}g carbs, ${todayNutrition.fat}g fat
