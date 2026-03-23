@@ -12,6 +12,8 @@ import {
   Trash2,
   Flame,        // For warmup sets
   Target,       // For failure sets
+  RotateCcw,    // For load previous workout
+  Sparkles,     // For start fresh
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -42,6 +44,9 @@ interface WorkoutSet {
   measureType: MeasureType;
   label?: string; // For special set labels
   targetReps?: string; // Coach-suggested target reps (e.g., "8-12")
+  // Previous workout values for backdrop display
+  previousWeight?: string;
+  previousReps?: string;
 }
 
 interface ActiveExercise {
@@ -113,6 +118,28 @@ const formatEquipment = (equipment: string): string => {
 // Cache limit for best sets to prevent unbounded memory growth
 const BEST_SETS_CACHE_LIMIT = 100;
 
+// Previous workout data structure
+interface PreviousWorkoutData {
+  workoutId: string;
+  date: string;
+  exercises: {
+    name: string;
+    equipment: string;
+    sets: {
+      weight: number;
+      reps: number;
+      variant: string;
+      measureType: string;
+    }[];
+  }[];
+}
+
+// Exercise stats (last time + best)
+interface ExerciseStats {
+  lastTime: { weight: number; reps: number; date: string } | null;
+  best: { weight: number; reps: number } | null;
+}
+
 export function WorkoutSession({
   userId,
   folderId,
@@ -125,6 +152,13 @@ export function WorkoutSession({
   const { theme } = useTheme();
   const toast = useToast();
 
+  // Workout start mode: "choice" = show Load/Start buttons, "started" = workout in progress
+  const [workoutMode, setWorkoutMode] = useState<"choice" | "started">("choice");
+
+  // Previous workout data for this folder + gym
+  const [previousWorkout, setPreviousWorkout] = useState<PreviousWorkoutData | null>(null);
+  const [loadingPrevious, setLoadingPrevious] = useState(true);
+
   // Library exercises (from exercise_templates)
   const [libraryExercises, setLibraryExercises] = useState<ExerciseTemplate[]>([]);
 
@@ -135,7 +169,118 @@ export function WorkoutSession({
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
   const hasRestoredFromStorage = useRef(false);
 
+  // Exercise stats: last time + best for each exercise (keyed by templateId or name)
+  const [exerciseStats, setExerciseStats] = useState<Record<string, ExerciseStats>>({});
+
+  // Fetch previous workout for this folder + gym
+  useEffect(() => {
+    const fetchPreviousWorkout = async () => {
+      setLoadingPrevious(true);
+
+      // First try to find by folder_id + location_id
+      let { data: workout } = await supabase
+        .from("workouts")
+        .select(`
+          id,
+          date,
+          exercises (
+            name,
+            equipment,
+            order_index,
+            sets (
+              weight,
+              reps,
+              variant,
+              measure_type,
+              order_index
+            )
+          )
+        `)
+        .eq("user_id", userId)
+        .eq("folder_id", folderId)
+        .eq("location_id", locationId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Fallback: if no folder_id match, try matching by notes (for existing workouts)
+      if (!workout) {
+        const { data: fallbackWorkout } = await supabase
+          .from("workouts")
+          .select(`
+            id,
+            date,
+            notes,
+            exercises (
+              name,
+              equipment,
+              order_index,
+              gym_id,
+              sets (
+                weight,
+                reps,
+                variant,
+                measure_type,
+                order_index
+              )
+            )
+          `)
+          .eq("user_id", userId)
+          .ilike("notes", `%${folderName}%`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Also check if the gym matches (for fallback)
+        if (fallbackWorkout) {
+          const exercises = fallbackWorkout.exercises as { gym_id: number | null }[];
+          // Accept if any exercise was at this gym, or if exercises have no gym (universal)
+          const gymMatches = exercises.some(ex => !ex.gym_id || ex.gym_id === Number(locationId));
+          if (gymMatches) {
+            workout = fallbackWorkout;
+          }
+        }
+      }
+
+      if (workout) {
+        const exercises = (workout.exercises || []) as {
+          name: string;
+          equipment: string;
+          order_index: number;
+          sets: { weight: number; reps: number; variant: string; measure_type: string; order_index: number }[];
+        }[];
+
+        // Sort exercises by order_index
+        exercises.sort((a, b) => a.order_index - b.order_index);
+
+        const previousData: PreviousWorkoutData = {
+          workoutId: workout.id,
+          date: workout.date,
+          exercises: exercises.map((ex) => ({
+            name: ex.name,
+            equipment: ex.equipment,
+            sets: (ex.sets || [])
+              .sort((a, b) => a.order_index - b.order_index)
+              .map((s) => ({
+                weight: s.weight,
+                reps: s.reps,
+                variant: s.variant,
+                measureType: s.measure_type,
+              })),
+          })),
+        };
+
+        setPreviousWorkout(previousData);
+      }
+
+      setLoadingPrevious(false);
+    };
+
+    fetchPreviousWorkout();
+  }, [userId, folderId, locationId, folderName, supabase]);
+
   // Restore workout from localStorage on mount (client-side only)
+  // If there's an in-progress workout, skip the choice screen
   useEffect(() => {
     if (hasRestoredFromStorage.current) return;
     hasRestoredFromStorage.current = true;
@@ -144,9 +289,9 @@ export function WorkoutSession({
       const stored = localStorage.getItem("netgains-current-workout");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.exercises && Array.isArray(parsed.exercises)) {
+        if (parsed.exercises && Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
           const restoredExercises = parsed.exercises.map(
-            (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets?: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string }[] }) => ({
+            (ex: { name: string; equipment: string; templateId?: string | null; defaultMeasureType?: string; sets?: { weight: string; reps: string; variant: string; label?: string; targetReps?: string; measureType?: string; previousWeight?: string; previousReps?: string }[] }) => ({
               id: Math.random().toString(36).substring(2, 9),
               name: ex.name,
               equipment: ex.equipment,
@@ -161,17 +306,62 @@ export function WorkoutSession({
                       variant: (s.variant || "normal") as SetVariant,
                       measureType: (s.measureType || "reps") as MeasureType,
                       label: s.label,
-                      targetReps: s.targetReps, // Coach-suggested target
+                      targetReps: s.targetReps,
+                      previousWeight: s.previousWeight,
+                      previousReps: s.previousReps,
                     }))
                   : [{ id: Math.random().toString(36).substring(2, 9), weight: "", reps: "", variant: "normal" as SetVariant, measureType: "reps" as MeasureType }],
             })
           );
           setActiveExercises(restoredExercises);
+          // Skip choice screen if we have an in-progress workout
+          setWorkoutMode("started");
         }
       }
     } catch { /* ignore parse errors */ }
   }, []);
   const [saving, setSaving] = useState(false);
+
+  // Handle "Load Last Workout" - pre-populate with previous workout data
+  const handleLoadPreviousWorkout = () => {
+    if (!previousWorkout) return;
+
+    const loadedExercises: ActiveExercise[] = previousWorkout.exercises.map((ex) => {
+      const defaultMeasureType: MeasureType = ex.sets[0]?.measureType === "secs" ? "secs" : "reps";
+
+      return {
+        id: generateId(),
+        name: ex.name,
+        equipment: ex.equipment,
+        templateId: null, // Will be matched when adding to library
+        defaultMeasureType,
+        sets: ex.sets.map((s) => ({
+          id: generateId(),
+          weight: "", // Empty - user fills in
+          reps: "", // Empty - user fills in
+          variant: s.variant as SetVariant,
+          measureType: s.measureType as MeasureType,
+          // Store previous values for backdrop display
+          previousWeight: s.weight.toString(),
+          previousReps: s.reps.toString(),
+        })),
+      };
+    });
+
+    setActiveExercises(loadedExercises);
+    setWorkoutMode("started");
+
+    // Fetch stats for loaded exercises
+    loadedExercises.forEach((ex) => {
+      fetchExerciseStats(ex.name, ex.equipment);
+    });
+  };
+
+  // Handle "Start Fresh" - blank workout
+  const handleStartFresh = () => {
+    setActiveExercises([]);
+    setWorkoutMode("started");
+  };
 
   // New exercise modal
   const [showNewExercise, setShowNewExercise] = useState(false);
@@ -190,13 +380,11 @@ export function WorkoutSession({
   // Exercise picker modal state
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
-  // Progressive overload - best sets per exercise (keyed by templateId AND name for redundancy)
-  const [bestSets, setBestSets] = useState<Record<string, { weight: number; reps: number } | null>>({});
 
   // Sync current workout to localStorage so Coach can see in-progress data
   // and so the workout can be restored if the user navigates away
   useEffect(() => {
-    if (activeExercises.length > 0) {
+    if (workoutMode === "started" && activeExercises.length > 0) {
       const workoutData = {
         folderName,
         startedAt: new Date().toISOString(),
@@ -211,22 +399,18 @@ export function WorkoutSession({
             variant: s.variant,
             measureType: s.measureType,
             label: s.label,
-            targetReps: s.targetReps, // Preserve coach targets
+            targetReps: s.targetReps,
+            previousWeight: s.previousWeight, // Preserve previous values for backdrop
+            previousReps: s.previousReps,
           })),
         })),
       };
       localStorage.setItem("netgains-current-workout", JSON.stringify(workoutData));
-    } else {
+    } else if (workoutMode === "started" && activeExercises.length === 0) {
       localStorage.removeItem("netgains-current-workout");
     }
-  }, [activeExercises, folderName]);
+  }, [activeExercises, folderName, workoutMode]);
 
-  // Helper to safely get best set using multiple possible keys
-  const getBestSetForExercise = (exercise: ActiveExercise): { weight: number; reps: number } | null => {
-    // Try templateId first, then exercise name (normalized)
-    const nameKey = exercise.name.toLowerCase();
-    return bestSets[exercise.templateId || ""] || bestSets[nameKey] || null;
-  };
 
   // Load library exercises on mount
   useEffect(() => {
@@ -265,38 +449,47 @@ export function WorkoutSession({
     }
   };
 
-  // Fetch best set for a given exercise template (using Epley formula for 1RM)
-  // Matches by exercise NAME (case-insensitive) since exercises table doesn't have template_id
-  const fetchBestSet = async (templateId: string, exerciseName: string) => {
-    if (!templateId || !exerciseName || bestSets[templateId] !== undefined) return;
+  // Fetch exercise stats: last time (gym-aware) + best (1RM using Epley formula)
+  const fetchExerciseStats = async (exerciseName: string, equipment: string) => {
+    const nameKey = exerciseName.toLowerCase();
+    if (exerciseStats[nameKey] !== undefined) return;
 
-    // Skip if cache is full (prevents unbounded growth)
-    if (Object.keys(bestSets).length >= BEST_SETS_CACHE_LIMIT) return;
+    // Skip if cache is full
+    if (Object.keys(exerciseStats).length >= BEST_SETS_CACHE_LIMIT) return;
 
-    // Mark as loading (null means we're fetching)
-    setBestSets((prev) => ({ ...prev, [templateId]: null }));
+    // Mark as loading
+    setExerciseStats((prev) => ({ ...prev, [nameKey]: { lastTime: null, best: null } }));
 
-    // Query all workouts with exercises and sets, then filter by name
+    const isGymSpecific = isGymSpecificEquipment(equipment);
+
+    // Query workouts with exercises and sets
     const { data: workouts } = await supabase
       .from("workouts")
       .select(`
         id,
+        date,
+        created_at,
         exercises (
           id,
           name,
+          equipment,
+          gym_id,
+          is_gym_specific,
           sets (
             weight,
-            reps
+            reps,
+            variant
           )
         )
       `)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
     if (!workouts || workouts.length === 0) {
       return;
     }
 
-    // Calculate estimated 1RM using Epley formula and find the best
+    let lastTimeSet: { weight: number; reps: number; date: string } | null = null;
     let bestSet: { weight: number; reps: number } | null = null;
     let best1RM = 0;
 
@@ -304,7 +497,10 @@ export function WorkoutSession({
       const exercises = workout.exercises as {
         id: string;
         name: string;
-        sets: { weight: number; reps: number }[];
+        equipment: string;
+        gym_id: number | null;
+        is_gym_specific: boolean;
+        sets: { weight: number; reps: number; variant: string }[];
       }[];
 
       // Find matching exercises (case-insensitive)
@@ -313,27 +509,57 @@ export function WorkoutSession({
       );
 
       matchingExercises.forEach((ex) => {
-        ex.sets.forEach((set) => {
-          if (set.weight > 0 && set.reps > 0) {
-            const estimated1RM = set.weight * (1 + set.reps / 30);
-            if (estimated1RM > best1RM) {
-              best1RM = estimated1RM;
-              bestSet = { weight: set.weight, reps: set.reps };
-            }
-          }
+        // For gym-specific exercises, only count if at same gym
+        // For universal exercises, count all gyms
+        const gymMatches = !isGymSpecific || ex.gym_id === Number(locationId) || !ex.gym_id;
+
+        // Get best working set (exclude warmups)
+        const workingSets = ex.sets.filter((s) => s.variant !== "warmup" && s.weight > 0 && s.reps > 0);
+        if (workingSets.length === 0) return;
+
+        // Find the top set by weight (or by 1RM if same weight)
+        const topSet = workingSets.reduce((best, s) => {
+          const s1RM = s.weight * (1 + s.reps / 30);
+          const best1RM = best.weight * (1 + best.reps / 30);
+          return s1RM > best1RM ? s : best;
         });
+
+        // Track last time (gym-aware)
+        if (gymMatches && !lastTimeSet) {
+          lastTimeSet = {
+            weight: topSet.weight,
+            reps: topSet.reps,
+            date: workout.date,
+          };
+        }
+
+        // Track best overall (across all gyms for best 1RM)
+        const topSet1RM = topSet.weight * (1 + topSet.reps / 30);
+        if (topSet1RM > best1RM) {
+          best1RM = topSet1RM;
+          bestSet = { weight: topSet.weight, reps: topSet.reps };
+        }
       });
     });
 
-    if (bestSet) {
-      // Store under both templateId AND normalized name for redundant lookup
-      const nameKey = exerciseName.toLowerCase();
-      setBestSets((prev) => ({
-        ...prev,
-        [templateId]: bestSet,
-        [nameKey]: bestSet,
-      }));
-    }
+    setExerciseStats((prev) => ({
+      ...prev,
+      [nameKey]: { lastTime: lastTimeSet, best: bestSet },
+    }));
+  };
+
+  // Legacy wrapper for compatibility
+  const fetchBestSet = async (templateId: string, exerciseName: string) => {
+    // Find the template to get equipment
+    const template = libraryExercises.find((t) => t.id === templateId);
+    const equipment = template?.equipment || "barbell";
+    await fetchExerciseStats(exerciseName, equipment);
+  };
+
+  // Helper to get stats for an exercise
+  const getStatsForExercise = (exercise: ActiveExercise): ExerciseStats | null => {
+    const nameKey = exercise.name.toLowerCase();
+    return exerciseStats[nameKey] || null;
   };
 
   // Generate unique ID
@@ -374,10 +600,8 @@ export function WorkoutSession({
       return [...prev, newExercise];
     });
 
-    // Fetch best set for progressive overload indicator
-    if (template.id) {
-      fetchBestSet(template.id, template.name);
-    }
+    // Fetch stats for progressive overload indicator
+    fetchExerciseStats(template.name, template.equipment);
 
     return newExercise.id;
   };
@@ -426,10 +650,8 @@ export function WorkoutSession({
       return newList;
     });
 
-    // Fetch best set for progressive overload indicator
-    if (template.id) {
-      fetchBestSet(template.id, template.name);
-    }
+    // Fetch stats for progressive overload indicator
+    fetchExerciseStats(template.name, template.equipment);
 
     setSupersetForExerciseId(null);
   };
@@ -815,6 +1037,80 @@ export function WorkoutSession({
         </motion.button>
       </div>
 
+      {/* Choice Screen: Load Last Workout or Start Fresh */}
+      {workoutMode === "choice" && (
+        <div className="px-4 mb-6">
+          {loadingPrevious ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-pulse text-muted-foreground text-sm">
+                Checking for previous workouts...
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {previousWorkout && (
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleLoadPreviousWorkout}
+                  className="w-full py-4 px-4 rounded-2xl flex items-center gap-4 text-left"
+                  style={{
+                    background: `rgba(${theme.primaryRgb}, 0.12)`,
+                    border: `1px solid rgba(${theme.primaryRgb}, 0.3)`,
+                  }}
+                >
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: `rgba(${theme.primaryRgb}, 0.2)` }}
+                  >
+                    <RotateCcw className="w-6 h-6" style={{ color: theme.primary }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-base" style={{ color: theme.primary }}>
+                      Load Last Workout
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {previousWorkout.exercises.length} exercises from{" "}
+                      {new Date(previousWorkout.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </motion.button>
+              )}
+
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: previousWorkout ? 0.1 : 0 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleStartFresh}
+                className="w-full py-4 px-4 rounded-2xl flex items-center gap-4 text-left"
+                style={{
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(255, 255, 255, 0.08)" }}
+                >
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-base text-white">Start Fresh</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Begin with a blank workout
+                  </p>
+                </div>
+              </motion.button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Active Workout Area - Extra bottom padding for dropdown visibility */}
       <div className="flex-1 px-4 space-y-4 pb-64">
         <AnimatePresence>
@@ -961,17 +1257,52 @@ export function WorkoutSession({
                   </div>
                   </div>
 
-                  {/* Progressive Overload Indicator */}
+                  {/* Previous Stats: Last Time + Best */}
                   {(() => {
-                    const bestSet = getBestSetForExercise(exercise);
-                    return bestSet ? (
-                      <div className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
-                        <span>🏆</span>
-                        <span>
-                          Best: {bestSet.weight} lbs × {bestSet.reps}
-                        </span>
+                    const stats = getStatsForExercise(exercise);
+                    if (!stats) return null;
+
+                    const { lastTime, best } = stats;
+
+                    // Check if last time IS the best (same weight and reps)
+                    const lastTimeIsBest =
+                      lastTime &&
+                      best &&
+                      lastTime.weight === best.weight &&
+                      lastTime.reps === best.reps;
+
+                    if (lastTimeIsBest && lastTime) {
+                      // Combined line
+                      return (
+                        <div className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
+                          <span>🏆</span>
+                          <span>
+                            Last time (PR): {lastTime.weight} lbs × {lastTime.reps} reps
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="mt-1.5 space-y-0.5">
+                        {lastTime && (
+                          <div className="text-xs text-gray-400 flex items-center gap-1">
+                            <span>📊</span>
+                            <span>
+                              Last time: {lastTime.weight} lbs × {lastTime.reps} reps
+                            </span>
+                          </div>
+                        )}
+                        {best && !lastTimeIsBest && (
+                          <div className="text-xs text-amber-400 flex items-center gap-1">
+                            <span>🏆</span>
+                            <span>
+                              Best: {best.weight} lbs × {best.reps} reps
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ) : null;
+                    );
                   })()}
                 </div>
 
@@ -1060,12 +1391,23 @@ export function WorkoutSession({
                           {getSetLabel()}
                         </span>
 
-                        {/* Weight Input */}
+                        {/* Weight Input with backdrop for previous values */}
                         <div className="relative">
                           {exercise.equipment === "bodyweight" && (
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-400 pointer-events-none">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-400 pointer-events-none z-10">
                               +
                             </span>
+                          )}
+                          {/* Backdrop for previous weight */}
+                          {set.previousWeight && !set.weight && (
+                            <div
+                              className={`absolute inset-0 rounded-lg py-2.5 text-right font-semibold pointer-events-none flex items-center justify-end ${
+                                exercise.equipment === "bodyweight" ? "pl-10 pr-10" : "pl-3 pr-10"
+                              }`}
+                              style={{ color: "rgba(255, 255, 255, 0.25)" }}
+                            >
+                              {set.previousWeight}
+                            </div>
                           )}
                           <input
                             type="text"
@@ -1074,19 +1416,28 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "weight", e.target.value)
                             }
-                            placeholder={exercise.equipment === "bodyweight" ? "0" : "—"}
-                            className={`w-full rounded-lg py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
+                            placeholder={set.previousWeight ? "" : (exercise.equipment === "bodyweight" ? "0" : "—")}
+                            className={`w-full rounded-lg py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] bg-transparent relative z-[1] ${
                               exercise.equipment === "bodyweight" ? "pl-10 pr-10" : "pl-3 pr-10"
                             }`}
                             style={{ background: variantStyle.inputBg }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none">
-                            {exercise.equipment === "bodyweight" ? "lbs" : "lbs"}
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none z-10">
+                            lbs
                           </span>
                         </div>
 
-                        {/* Reps/Secs Input */}
+                        {/* Reps/Secs Input with backdrop for previous values */}
                         <div className="relative">
+                          {/* Backdrop for previous reps */}
+                          {set.previousReps && !set.reps && (
+                            <div
+                              className="absolute inset-0 rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold pointer-events-none flex items-center justify-end"
+                              style={{ color: "rgba(255, 255, 255, 0.25)" }}
+                            >
+                              {set.previousReps}
+                            </div>
+                          )}
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1094,9 +1445,9 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "reps", e.target.value)
                             }
-                            placeholder={set.targetReps || "—"}
-                            className={`w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
-                              set.targetReps ? "placeholder:text-cyan-500/60" : ""
+                            placeholder={set.previousReps ? "" : (set.targetReps || "—")}
+                            className={`w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] bg-transparent relative z-[1] ${
+                              set.targetReps && !set.previousReps ? "placeholder:text-cyan-500/60" : ""
                             }`}
                             style={{ background: variantStyle.inputBg }}
                           />
@@ -1105,12 +1456,12 @@ export function WorkoutSession({
                             <button
                               type="button"
                               onClick={() => toggleSetMeasureType(exercise.id, set.id)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-medium rounded bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white transition-colors"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-medium rounded bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white transition-colors z-10"
                             >
                               {set.measureType === "secs" ? "secs" : "reps"}
                             </button>
                           ) : (
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none">
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none z-10">
                               reps
                             </span>
                           )}
@@ -1141,12 +1492,12 @@ export function WorkoutSession({
           })}
         </AnimatePresence>
 
-        {/* Empty State */}
-        {activeExercises.length === 0 && (
+        {/* Empty State - only show when workout has started */}
+        {workoutMode === "started" && activeExercises.length === 0 && (
           <div className="text-center py-16">
             <p className="text-muted-foreground mb-2">No exercises yet</p>
             <p className="text-sm text-muted-foreground">
-              Tap an exercise from your library below to start
+              Tap Add Exercise below to start
             </p>
           </div>
         )}
@@ -1160,32 +1511,34 @@ export function WorkoutSession({
         />
       )}
 
-      {/* Add Exercise Button (primary action - on top) */}
-      <div
-        className="fixed bottom-48 left-0 right-0 z-50"
-        style={{
-          background: "var(--background)",
-        }}
-      >
-        <div className="max-w-lg mx-auto px-4 py-2">
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowExercisePicker(true)}
-            className="w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wide flex items-center justify-center gap-2"
-            style={{
-              background: `rgba(${theme.primaryRgb}, 0.15)`,
-              border: `1px solid rgba(${theme.primaryRgb}, 0.3)`,
-              color: theme.primary,
-            }}
-          >
-            <Plus className="w-5 h-5" />
-            Add Exercise
-          </motion.button>
+      {/* Add Exercise Button (primary action - on top) - only show when workout started */}
+      {workoutMode === "started" && (
+        <div
+          className="fixed bottom-48 left-0 right-0 z-50"
+          style={{
+            background: "var(--background)",
+          }}
+        >
+          <div className="max-w-lg mx-auto px-4 py-2">
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowExercisePicker(true)}
+              className="w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wide flex items-center justify-center gap-2"
+              style={{
+                background: `rgba(${theme.primaryRgb}, 0.15)`,
+                border: `1px solid rgba(${theme.primaryRgb}, 0.3)`,
+                color: theme.primary,
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Add Exercise
+            </motion.button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* End Workout Button (below Add Exercise) */}
-      {activeExercises.length > 0 && (
+      {/* End Workout Button (below Add Exercise) - only show when workout started */}
+      {workoutMode === "started" && activeExercises.length > 0 && (
         <div className="fixed left-0 right-0 z-40 px-4 bottom-28">
           <div className="max-w-lg mx-auto">
             <Button onClick={handleFinish} loading={saving}>
@@ -1195,11 +1548,13 @@ export function WorkoutSession({
         </div>
       )}
 
-      {/* Background fill below nav to prevent scroll bleed-through */}
-      <div
-        className="fixed bottom-0 left-0 right-0 h-24 z-30"
-        style={{ background: "var(--background)" }}
-      />
+      {/* Background fill below nav to prevent scroll bleed-through - only when workout started */}
+      {workoutMode === "started" && (
+        <div
+          className="fixed bottom-0 left-0 right-0 h-24 z-30"
+          style={{ background: "var(--background)" }}
+        />
+      )}
 
       {/* Main Exercise Picker Modal */}
       <ExercisePickerModal

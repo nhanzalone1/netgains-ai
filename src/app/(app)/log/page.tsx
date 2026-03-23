@@ -398,13 +398,15 @@ export default function LogPage() {
     let workoutId: string | null = null;
 
     try {
-      // Create workout entry
+      // Create workout entry with folder_id and location_id for "Load Previous" feature
       const { data: workout, error: workoutError } = await supabase
         .from("workouts")
         .insert({
           user_id: user.id,
           date: formatLocalDate(new Date()),
           notes: `${selectedFolder?.name} session`,
+          folder_id: selectedFolder?.id || null,
+          location_id: selectedLocation?.id ? Number(selectedLocation.id) : null,
         })
         .select()
         .single();

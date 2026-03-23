@@ -365,6 +365,8 @@ export interface Database {
           user_id: string;
           date: string;
           notes: string | null;
+          folder_id: string | null;
+          location_id: number | null;
           created_at: string;
         };
         Insert: {
@@ -372,6 +374,8 @@ export interface Database {
           user_id: string;
           date?: string;
           notes?: string | null;
+          folder_id?: string | null;
+          location_id?: number | null;
           created_at?: string;
         };
         Update: {
@@ -379,6 +383,8 @@ export interface Database {
           user_id?: string;
           date?: string;
           notes?: string | null;
+          folder_id?: string | null;
+          location_id?: number | null;
           created_at?: string;
         };
         Relationships: [
@@ -386,6 +392,18 @@ export interface Database {
             foreignKeyName: "workouts_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workouts_folder_id_fkey";
+            columns: ["folder_id"];
+            referencedRelation: "folders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workouts_location_id_fkey";
+            columns: ["location_id"];
+            referencedRelation: "locations";
             referencedColumns: ["id"];
           }
         ];
