@@ -371,7 +371,13 @@ export function ExercisePickerModal({
       return ex.gym_id === locationId;
     }) as ExerciseWithMuscleGroup[];
 
-    setExercises(filteredByGym);
+    // Deduplicate by ID to prevent exercises appearing in multiple categories
+    const uniqueExercises = Array.from(
+      new Map(filteredByGym.map(ex => [ex.id, ex])).values()
+    );
+
+    console.log("[ExercisePicker] Loaded exercises:", uniqueExercises.length, "unique exercises");
+    setExercises(uniqueExercises);
     setLoading(false);
 
     // Auto-recategorize if any exercises have null muscle_group (only attempt once per modal open)
@@ -532,19 +538,36 @@ export function ExercisePickerModal({
       );
     }
 
+    // Track which exercise IDs have been assigned to a valid muscle group
+    // This prevents exercises from appearing in both a category AND uncategorized
+    const categorizedIds = new Set<string>();
     const muscleGroupsMap: Record<string, ExerciseWithMuscleGroup[]> = {};
 
-    // With array-based muscle groups, an exercise can appear in multiple groups
-    // Exercises without muscle_group go into "uncategorized" (shown at the end)
+    // First pass: categorize exercises with valid muscle groups
     filtered.forEach(ex => {
-      const groups = ex.muscle_group && ex.muscle_group.length > 0 ? ex.muscle_group : ["uncategorized"];
-      groups.forEach(group => {
-        if (!muscleGroupsMap[group]) muscleGroupsMap[group] = [];
-        // Avoid duplicates if exercise is already in this group
-        if (!muscleGroupsMap[group].some(e => e.id === ex.id)) {
-          muscleGroupsMap[group].push(ex);
+      if (ex.muscle_group && ex.muscle_group.length > 0) {
+        // Exercise has muscle groups - add to each group
+        ex.muscle_group.forEach(group => {
+          // Only add to valid muscle groups (not "uncategorized" stored in DB)
+          if (MUSCLE_GROUPS.includes(group as MuscleGroup)) {
+            if (!muscleGroupsMap[group]) muscleGroupsMap[group] = [];
+            if (!muscleGroupsMap[group].some(e => e.id === ex.id)) {
+              muscleGroupsMap[group].push(ex);
+              categorizedIds.add(ex.id);
+            }
+          }
+        });
+      }
+    });
+
+    // Second pass: add uncategorized exercises (those not in any valid category)
+    filtered.forEach(ex => {
+      if (!categorizedIds.has(ex.id)) {
+        if (!muscleGroupsMap["uncategorized"]) muscleGroupsMap["uncategorized"] = [];
+        if (!muscleGroupsMap["uncategorized"].some(e => e.id === ex.id)) {
+          muscleGroupsMap["uncategorized"].push(ex);
         }
-      });
+      }
     });
 
     // Build result with categorized groups first, then uncategorized at the end
