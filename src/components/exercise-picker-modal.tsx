@@ -59,6 +59,22 @@ const SIMPLE_TO_ADVANCED_MAP: Record<SimpleMuscleGroup, MuscleGroup[]> = {
   abs: ["abs"],
 };
 
+// Helper to expand simple muscle groups to their advanced equivalents
+// This ensures the database always stores advanced muscle groups for proper grouping
+const expandToAdvancedGroups = (groups: string[]): string[] => {
+  const expanded = new Set<string>();
+  groups.forEach(group => {
+    if (group in SIMPLE_TO_ADVANCED_MAP) {
+      // It's a simple group - expand it
+      SIMPLE_TO_ADVANCED_MAP[group as SimpleMuscleGroup].forEach(adv => expanded.add(adv));
+    } else {
+      // It's already an advanced group or unknown - keep as-is
+      expanded.add(group);
+    }
+  });
+  return Array.from(expanded);
+};
+
 // Muscle group mode type
 type MuscleGroupMode = "simple" | "advanced";
 
@@ -610,8 +626,9 @@ export function ExercisePickerModal({
     setCreating(true);
     // Only use muscle groups that user explicitly selected
     // Don't fall back to AI suggestion - require explicit user choice
+    // Expand simple muscle groups to advanced equivalents before saving
     const muscleGroupsToSave = newMuscleGroups.length > 0
-      ? newMuscleGroups
+      ? expandToAdvancedGroups(newMuscleGroups)
       : undefined;
 
     // Determine if gym-specific based on equipment
@@ -666,7 +683,12 @@ export function ExercisePickerModal({
     if (!editingExercise || !editName.trim()) return;
 
     const trimmedName = editName.trim();
-    const muscleGroupsToSave = editMuscleGroups.length > 0 ? editMuscleGroups : null;
+    // Expand simple muscle groups to advanced equivalents before saving
+    // This ensures proper grouping in the "All" tab
+    const expandedGroups = editMuscleGroups.length > 0
+      ? expandToAdvancedGroups(editMuscleGroups)
+      : null;
+    const muscleGroupsToSave = expandedGroups;
 
     // Check if name is being changed - need to prompt for historical rename
     const nameChanged = trimmedName.toLowerCase() !== editingExercise.name.toLowerCase();
