@@ -405,7 +405,7 @@ export default function LogPage() {
           user_id: user.id,
           date: formatLocalDate(new Date()),
           notes: `${selectedFolder?.name} session`,
-          folder_id: selectedFolder?.id || null,
+          folder_id: selectedFolder?.id ? Number(selectedFolder.id) : null,
           location_id: selectedLocation?.id ? Number(selectedLocation.id) : null,
         })
         .select()

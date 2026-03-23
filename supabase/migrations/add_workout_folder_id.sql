@@ -1,7 +1,8 @@
 -- Add folder_id and location_id to workouts table for "Load Previous Workout" feature
 -- This allows querying the most recent workout for a specific split day at a specific gym
 
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS folder_id uuid REFERENCES folders(id) ON DELETE SET NULL;
+-- Note: folders.id is bigint, not uuid
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS folder_id bigint REFERENCES folders(id) ON DELETE SET NULL;
 ALTER TABLE workouts ADD COLUMN IF NOT EXISTS location_id bigint REFERENCES locations(id) ON DELETE SET NULL;
 
 -- Create indexes for efficient queries

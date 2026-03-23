@@ -365,7 +365,7 @@ export interface Database {
           user_id: string;
           date: string;
           notes: string | null;
-          folder_id: string | null;
+          folder_id: number | null;
           location_id: number | null;
           created_at: string;
         };
@@ -374,7 +374,7 @@ export interface Database {
           user_id: string;
           date?: string;
           notes?: string | null;
-          folder_id?: string | null;
+          folder_id?: number | null;
           location_id?: number | null;
           created_at?: string;
         };
@@ -383,7 +383,7 @@ export interface Database {
           user_id?: string;
           date?: string;
           notes?: string | null;
-          folder_id?: string | null;
+          folder_id?: number | null;
           location_id?: number | null;
           created_at?: string;
         };
