@@ -775,8 +775,7 @@ export function ExercisePickerModal({
           muscle_group: muscleGroupsToSave,
         })
         .eq("id", exerciseId)
-        .select()
-        .single();
+        .select();
 
       if (updateError) {
         console.error("[Exercise Edit] Failed to update exercise template:", updateError);
@@ -784,17 +783,18 @@ export function ExercisePickerModal({
         return;
       }
 
-      // Verify the update actually persisted
-      if (!updateData) {
-        console.error("[Exercise Edit] Update returned no data - RLS may have blocked it");
+      // Verify the update actually persisted (RLS may silently block updates)
+      if (!updateData || updateData.length === 0) {
+        console.error("[Exercise Edit] Update affected 0 rows - RLS policy may be blocking updates. Check Supabase RLS policies for exercise_templates table.");
+        alert("Failed to save: You may not have permission to update this exercise. Check RLS policies.");
         setSavingEdit(false);
         return;
       }
 
       console.log("[Exercise Edit] Update verified:", {
-        id: updateData.id,
-        name: updateData.name,
-        muscle_group: updateData.muscle_group,
+        id: updateData[0].id,
+        name: updateData[0].name,
+        muscle_group: updateData[0].muscle_group,
       });
 
       // If renaming history, update all historical workout logs
