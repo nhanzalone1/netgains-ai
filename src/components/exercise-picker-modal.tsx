@@ -771,46 +771,16 @@ export function ExercisePickerModal({
         }
       }
 
-      // Fetch the updated row to verify and get fresh data
-      const { data, error: fetchError } = await supabase
-        .from("exercise_templates")
-        .select("*")
-        .eq("id", exerciseId)
-        .single();
-
-      const currentEditingExercise = editingExercise;
-
-      if (fetchError || !data) {
-        console.error("Failed to fetch updated exercise:", fetchError);
-        // Update succeeded but fetch failed - update local state manually
-        if (currentEditingExercise) {
-          const manualUpdate = {
-            ...currentEditingExercise,
-            name: newName,
-            equipment: newEquipment,
-            muscle_group: muscleGroupsToSave,
-          };
-          setExercises((prev) =>
-            prev.map((e) => (e.id === exerciseId ? manualUpdate : e))
-          );
-          setRecentExercises((prev) =>
-            prev.map((e) => (e.id === exerciseId ? manualUpdate : e))
-          );
-        }
-      } else {
-        console.log("[Exercise Edit] Update successful:", data);
-        const updatedExercise = data as ExerciseWithMuscleGroup;
-        setExercises((prev) =>
-          prev.map((e) => (e.id === exerciseId ? updatedExercise : e))
-        );
-        setRecentExercises((prev) =>
-          prev.map((e) => (e.id === exerciseId ? updatedExercise : e))
-        );
-      }
-
+      // Close the edit modal first
       setEditingExercise(null);
       setShowRenameConfirm(false);
       setPendingRename(null);
+
+      // Reload exercises from database to ensure UI is in sync
+      // This guarantees the exercise appears under its new muscle group immediately
+      console.log("[Exercise Edit] Update successful, reloading exercise list...");
+      await loadExercises();
+      await loadRecentExercises();
     } catch (error) {
       console.error("Failed to update exercise (exception):", error);
     }
