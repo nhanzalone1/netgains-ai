@@ -112,13 +112,14 @@ Each message includes pre-built context injected before the conversation:
 - Injuries
 - **Workout history (last 7 days)** with exercise names
 
+**Bodyweight Trend Context:**
+- Last 14 days of weigh-ins with dates
+- Current weight and period change (+/- lbs)
+- **Estimated TDEE** (calculated from calorie target + goal + intensity)
+- Daily calorie target with goal type
+
 **Example context the coach receives:**
 ```
-[TODAY'S NUTRITION - SOURCE OF TRUTH]
-Consumed so far: 1200 cal, 72g protein, 150g carbs, 40g fat
-Goals: 2100 cal, 171g protein, 200g carbs, 70g fat
-REMAINING (use these numbers): 900 cal, 99g protein, 50g carbs, 30g fat
-
 [USER PROFILE]
 Goal: cutting
 Sex: male
@@ -127,6 +128,21 @@ Recent workouts (last 7 days):
 - 2026-03-18: Push (Bench Press, Incline DB Press, Tricep Pushdowns)
 - 2026-03-17: Pull (Deadlift, Barbell Rows, Bicep Curls)
 - 2026-03-16: Legs (Squats, Leg Press, RDLs)
+
+[BODYWEIGHT TREND - last 14 weigh-ins]
+- Mar 22: 170.5 lbs
+- Mar 20: 171.0 lbs
+- Mar 18: 171.5 lbs
+- Mar 15: 172.0 lbs
+Current: 170.5 lbs
+14-day change: -1.5 lbs
+Estimated TDEE: ~2600 cal
+Daily calorie target: 2100 cal (cutting)
+
+[TODAY'S NUTRITION - SOURCE OF TRUTH]
+Consumed so far: 1200 cal, 72g protein, 150g carbs, 40g fat
+Goals: 2100 cal, 171g protein, 200g carbs, 70g fat
+REMAINING (use these numbers): 900 cal, 99g protein, 50g carbs, 30g fat
 ```
 
 ### Coach Behavioral Directives
@@ -144,6 +160,7 @@ System prompt includes 20+ directives. Key ones:
 | **Nutrition Math** | Always show explicit math: "you've had 72g, target is 171g, need 99g more" |
 | **Protein Targets** | 1g/lb bodyweight *target* during cuts (not minimum) |
 | **Calorie Floor** | Soft: 1500W/1800M with warning. Hard stop: 1000W/1200M |
+| **Weight-Based Adjustments** | Use bodyweight trend to suggest macro changes. Cutting too fast (>1.5 lbs/week) = add calories. Stalled = reduce calories or add cardio. |
 | **Injury Protocol** | Stop → modify → see pro. Never diagnose. |
 | **Capitalization** | Always capitalize first word of every sentence. |
 
