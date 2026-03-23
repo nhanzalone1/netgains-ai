@@ -288,6 +288,29 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 - `src/components/exercise-picker-modal.tsx` — Exercise library UI with edit/create/delete
 - `src/components/split-editor-modal.tsx` — Assign muscle groups to split days
 
+**RLS Policies for exercise_templates:**
+The table requires SELECT, INSERT, UPDATE, and DELETE policies. If updates silently fail (exercise stays in Uncategorized after edit), check RLS policies:
+
+```sql
+-- Required policies (run in Supabase SQL Editor if missing)
+CREATE POLICY "Users can view their own templates"
+ON exercise_templates FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own templates"
+ON exercise_templates FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own templates"
+ON exercise_templates FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own templates"
+ON exercise_templates FOR DELETE
+USING (auth.uid() = user_id);
+```
+
 ### Set Variants
 `normal`, `warmup`, `drop`, `failure`, `assisted-parent/child`, `left/right`. Warmup excluded from PRs.
 
