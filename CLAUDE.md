@@ -29,9 +29,11 @@ Vertical AI fitness coaching app. Personalized workout tracking, nutrition loggi
 src/
 ├── app/
 │   ├── (app)/              # Auth pages: coach, log, nutrition, stats, program
+│   │   └── settings/       # Settings page + coach-profile subpage
 │   ├── api/
 │   │   ├── chat/           # Coach API (Sonnet + tool_use)
 │   │   ├── memory/         # extract, list, test-extract
+│   │   ├── profile/        # key-memories endpoint
 │   │   ├── coach-trigger/  # Post-meal/workout triggers (Haiku)
 │   │   ├── exercise/       # categorize, parse-split
 │   │   ├── nutrition/      # estimate, recalculate
@@ -55,7 +57,7 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 
 ## Database
 
-- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin, consent_ai_data
+- **profiles** — height, weight, goal, coaching_intensity, muscle_group_mode, is_admin, consent_ai_data, key_memories (JSONB)
 - **workouts** / **exercises** / **sets** — workout logging with variants
 - **nutrition_logs** — meals with macros
 - **coach_memory** — key-value store (split_rotation, food_staples, pending_workout, etc.)
@@ -142,6 +144,44 @@ System prompt includes 13+ directives. Key ones:
 
 Full list in `getSystemPrompt()` in `api/chat/route.ts`.
 
+### Key Memories (User Preferences)
+Structured preferences the coach always remembers. Higher priority than Pinecone memories.
+
+**Database:** `profiles.key_memories` (JSONB column)
+```json
+{
+  "supplements": "creatine 5g daily, vitamin D 5000iu morning",
+  "food_available": "dorm: protein powder, rice cakes. dining hall: grilled chicken",
+  "preferences": "grams not ounces, cardio after lifting",
+  "injuries": "left shoulder clicks on overhead press"
+}
+```
+
+**API:** `/api/profile/key-memories`
+- `GET` — Returns current key_memories
+- `PUT` — Partial update of individual fields
+
+**Coach Context Integration:**
+- Fetched on EVERY coach message (not from Pinecone, direct DB read)
+- Injected BEFORE Pinecone memories in context window
+- Format: `[USER KEY PREFERENCES - ALWAYS REFERENCE THESE]`
+
+**UI:** Settings → Coach Profile (`/settings/coach-profile`)
+- 4 free-text fields with placeholder examples
+- Auto-saves on blur (no save button)
+- "View all memories" debug section shows Pinecone memories
+
+**Files:**
+- `src/app/api/profile/key-memories/route.ts` — API endpoint
+- `src/app/(app)/settings/coach-profile/page.tsx` — Coach Profile UI
+- `src/app/(app)/settings/page.tsx` — Settings page (theme, intensity, split, reset coach)
+- `supabase/migrations/add_key_memories.sql` — Migration
+
+**Migration SQL:**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_memories JSONB DEFAULT '{}'::jsonb;
+```
+
 ### Long-Term Memory (Pinecone)
 - **Extraction triggers:**
   1. Visibility change (user switches apps/tabs, waits 5s)
@@ -149,9 +189,7 @@ Full list in `getSystemPrompt()` in `api/chat/route.ts`.
 - **Retrieval:** Top 7 memories injected into system prompt per message
 - **Dedup:** 0.92 similarity threshold
 - **Categories:** training, nutrition, injuries, preferences, biometrics, history
-- **UI:** User Menu → "What Coach Remembers" shows both:
-  - Extracted memories from Pinecone (learned from conversations)
-  - Saved Data from coach_memory table (food_staples, split_rotation, etc.)
+- **UI:** Settings → Coach Profile → "View all memories" (debug section)
 - **Config:** `PINECONE_CONFIG` in `constants.ts`
 - **Debug endpoints:**
   - `POST /api/memory/test-write` — Write test record directly to Pinecone
