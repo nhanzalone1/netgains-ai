@@ -122,6 +122,9 @@ export function ExercisePickerModal({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Version counter to force memo recalculation after exercise updates
+  const [exerciseVersion, setExerciseVersion] = useState(0);
+
   // Split-based tabs
   const [splitTabs, setSplitTabs] = useState<string[]>(["Recent", "All"]);
   const [splitMapping, setSplitMapping] = useState<Record<string, MuscleGroup[]>>({});
@@ -377,6 +380,11 @@ export function ExercisePickerModal({
     );
 
     console.log("[ExercisePicker] Loaded exercises:", uniqueExercises.length, "unique exercises");
+    // Debug: show sample of muscle_group values
+    console.log("[MG-DEBUG] Sample exercises:", uniqueExercises.slice(0, 5).map(e => ({
+      name: e.name,
+      muscle_group: e.muscle_group
+    })));
     setExercises(uniqueExercises);
     setLoading(false);
 
@@ -538,35 +546,30 @@ export function ExercisePickerModal({
       );
     }
 
-    // Track which exercise IDs have been assigned to a valid muscle group
-    // This prevents exercises from appearing in both a category AND uncategorized
-    const categorizedIds = new Set<string>();
     const muscleGroupsMap: Record<string, ExerciseWithMuscleGroup[]> = {};
 
-    // First pass: categorize exercises with valid muscle groups
+    // SINGLE PASS: Each exercise goes to category OR uncategorized, never both
     filtered.forEach(ex => {
-      if (ex.muscle_group && ex.muscle_group.length > 0) {
-        // Exercise has muscle groups - add to each group
-        ex.muscle_group.forEach(group => {
-          // Only add to valid muscle groups (not "uncategorized" stored in DB)
-          if (MUSCLE_GROUPS.includes(group as MuscleGroup)) {
-            if (!muscleGroupsMap[group]) muscleGroupsMap[group] = [];
-            if (!muscleGroupsMap[group].some(e => e.id === ex.id)) {
-              muscleGroupsMap[group].push(ex);
-              categorizedIds.add(ex.id);
-            }
-          }
-        });
-      }
-    });
+      const muscleGroups = ex.muscle_group;
 
-    // Second pass: add uncategorized exercises (those not in any valid category)
-    filtered.forEach(ex => {
-      if (!categorizedIds.has(ex.id)) {
+      // Check if has ANY valid muscle group
+      const validGroups = (muscleGroups && Array.isArray(muscleGroups))
+        ? muscleGroups.filter(g => MUSCLE_GROUPS.includes(g as MuscleGroup))
+        : [];
+
+      // Debug logging
+      console.log('[MG-DEBUG] Grouping:', ex.name, '→', validGroups.length > 0 ? validGroups : 'uncategorized');
+
+      if (validGroups.length > 0) {
+        // Has valid groups - add to each one
+        validGroups.forEach(group => {
+          if (!muscleGroupsMap[group]) muscleGroupsMap[group] = [];
+          muscleGroupsMap[group].push(ex);
+        });
+      } else {
+        // No valid groups - uncategorized
         if (!muscleGroupsMap["uncategorized"]) muscleGroupsMap["uncategorized"] = [];
-        if (!muscleGroupsMap["uncategorized"].some(e => e.id === ex.id)) {
-          muscleGroupsMap["uncategorized"].push(ex);
-        }
+        muscleGroupsMap["uncategorized"].push(ex);
       }
     });
 
@@ -583,13 +586,13 @@ export function ExercisePickerModal({
     if (muscleGroupsMap["uncategorized"]?.length > 0) {
       result.push({
         muscleGroup: "uncategorized",
-        displayName: MUSCLE_GROUP_DISPLAY["uncategorized"],
+        displayName: "Uncategorized",
         exercises: muscleGroupsMap["uncategorized"].sort((a, b) => a.name.localeCompare(b.name))
       });
     }
 
     return result;
-  }, [exercises, searchQuery, activeTab]);
+  }, [exercises, searchQuery, activeTab, exerciseVersion]);
 
   // Toggle muscle group section collapse (for UI accordion)
   const toggleMuscleGroupCollapse = (group: string) => {
@@ -802,8 +805,12 @@ export function ExercisePickerModal({
       // Reload exercises from database to ensure UI is in sync
       // This guarantees the exercise appears under its new muscle group immediately
       console.log("[Exercise Edit] Update successful, reloading exercise list...");
+      console.log("[MG-DEBUG] Saving muscle_group:", muscleGroupsToSave);
       await loadExercises();
       await loadRecentExercises();
+
+      // Force memo recalculation by incrementing version
+      setExerciseVersion(v => v + 1);
     } catch (error) {
       console.error("Failed to update exercise (exception):", error);
     }
