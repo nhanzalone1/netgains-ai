@@ -1473,15 +1473,15 @@ export async function POST(req: Request) {
     console.log('[Coach] Today (effective):', todayStr);
     console.log('[Coach] Yesterday (looking for data):', yesterdayStr);
 
-    // Gather context for personalized opening (including latest weigh-in for sync)
-    const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult, latestWeighInResult] = await Promise.all([
+    // Gather context for personalized opening (including weigh-in history for trend analysis)
+    const [profileResult, memoriesResult, workoutsResult, todayMealsResult, yesterdayMealsResult, nutritionGoalsResult, weighInsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('workouts').select('id, date, notes').eq('user_id', user.id).order('date', { ascending: false }).limit(10),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', yesterdayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
-      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
     ]);
 
     // Log any query errors (don't fail, use defaults)
@@ -1514,7 +1514,9 @@ export async function POST(req: Request) {
     const todayMeals = (todayMealsResult.data || []) as MealData[];
     const yesterdayMeals = (yesterdayMealsResult.data || []) as MealData[];
     const nutritionGoals = (nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS) as { calories: number; protein: number; carbs: number; fat: number };
-    const latestWeighIn = latestWeighInResult.data?.[0] as { weight_lbs: number } | undefined;
+    type WeighInData = { weight_lbs: number; date: string };
+    const weighIns = (weighInsResult.data || []) as WeighInData[];
+    const latestWeighIn = weighIns[0];
 
     // Auto-sync profile weight from latest weigh-in if different
     if (profile && latestWeighIn && latestWeighIn.weight_lbs !== profile.weight_lbs) {
@@ -1828,6 +1830,46 @@ Your opening MUST start by celebrating the highest-priority milestone above. Do 
       ? `\nUSER'S FOOD STAPLES (always available):\n${foodStaples.join(', ')}\n`
       : '';
 
+    // Build bodyweight trend section for opening context
+    // Calculate TDEE estimate based on goal and intensity (same logic as normal flow)
+    const intensityDeficitOpening = profile?.coaching_intensity === 'light' ? 300
+      : profile?.coaching_intensity === 'aggressive' ? 750
+      : 500;
+    const normalizedGoalOpening = normalizeGoal(profile?.goal);
+    let estimatedTdeeOpening = nutritionGoals.calories;
+    if (normalizedGoalOpening === 'cutting') {
+      estimatedTdeeOpening = nutritionGoals.calories + intensityDeficitOpening;
+    } else if (normalizedGoalOpening === 'bulking') {
+      estimatedTdeeOpening = nutritionGoals.calories - intensityDeficitOpening;
+    }
+
+    // Format date for display (e.g., "Mar 22")
+    const formatWeighInDateOpening = (dateStr: string) => {
+      const date = new Date(dateStr + 'T00:00:00');
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    let bodyweightSection = '';
+    if (weighIns.length > 0) {
+      const currentWeight = weighIns[0].weight_lbs;
+      const oldestWeighIn = weighIns[weighIns.length - 1];
+      const weightChange = currentWeight - oldestWeighIn.weight_lbs;
+      const changeDirection = weightChange > 0 ? '+' : '';
+
+      // Format weigh-in history (most recent first)
+      const weighInHistory = weighIns.map(w =>
+        `- ${formatWeighInDateOpening(w.date)}: ${w.weight_lbs} lbs`
+      ).join('\n');
+
+      bodyweightSection = `
+BODYWEIGHT TREND (last ${weighIns.length} weigh-ins):
+${weighInHistory}
+Current: ${currentWeight} lbs
+${weighIns.length >= 2 ? `${weighIns.length > 7 ? '14' : weighIns.length}-day change: ${changeDirection}${weightChange.toFixed(1)} lbs` : ''}
+Estimated TDEE: ~${estimatedTdeeOpening} cal | Daily target: ${nutritionGoals.calories} cal
+`;
+    }
+
     // Build context for opening generation - compact format to save tokens
     // IMPORTANT: Use profileComplete (calculated from actual data) not the database onboarding_complete field
     // Normalize goal for display (cut → cutting, etc.)
@@ -1876,7 +1918,7 @@ Recent Workouts (last 10):
 ${workoutDetails.length > 0 ? workoutDetails.map(w => `${w.date}: ${formatWorkoutCompact(w.exercises)}`).join('\n') : 'No workouts logged yet'}
 
 Days since last workout: ${daysSinceLastWorkout !== null ? daysSinceLastWorkout : 'Never logged'}
-
+${bodyweightSection}
 INSTRUCTIONS:
 Generate a morning greeting. Talk like an elite personal trainer texting their client, not an AI.
 
@@ -1936,8 +1978,8 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     console.log('[Coach] Using todayStr:', todayStr);
     console.log('[Coach] Server date:', formatLocalDate(new Date()));
 
-    // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and latest weigh-in
-    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, latestWeighInResult] = await Promise.all([
+    // Fetch profile, today's nutrition data, conversation summary, message count, key memories, recent workouts, and weigh-in history
+    const [profileResult, todayMealsResult, nutritionGoalsResult, summaryResult, messageCountResult, memoriesResult, recentWorkoutsResult, weighInsResult] = await Promise.all([
       supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, app_tour_shown, is_admin, key_memories').eq('id', user.id).maybeSingle(),
       supabase.from('meals').select('*').eq('user_id', user.id).eq('date', todayStr).eq('consumed', true),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
@@ -1945,7 +1987,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes', 'sex']),
       supabase.from('workouts').select('date, notes, exercises(name)').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
-      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+      supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
     ]);
 
     // Retrieve relevant long-term memories from Pinecone
@@ -1992,7 +2034,9 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       }
     }
 
-    const latestWeighIn = latestWeighInResult.data?.[0];
+    type WeighInData = { weight_lbs: number; date: string };
+    const weighIns = (weighInsResult.data || []) as WeighInData[];
+    const latestWeighIn = weighIns[0];
 
     // Auto-sync profile weight from latest weigh-in if different
     if (profile && latestWeighIn && latestWeighIn.weight_lbs !== profile.weight_lbs) {
@@ -2125,6 +2169,48 @@ REMAINING: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein, $
 [END NUTRITION CONTEXT]
 
 `;
+
+    // Build bodyweight trend context (last 14 days of weigh-ins)
+    // Calculate TDEE estimate based on goal and intensity
+    const intensityDeficit = profile?.coaching_intensity === 'light' ? 300
+      : profile?.coaching_intensity === 'aggressive' ? 750
+      : 500;
+    const normalizedGoal = normalizeGoal(profile?.goal);
+    let estimatedTdee = nutritionGoals.calories;
+    if (normalizedGoal === 'cutting') {
+      estimatedTdee = nutritionGoals.calories + intensityDeficit;
+    } else if (normalizedGoal === 'bulking') {
+      estimatedTdee = nutritionGoals.calories - intensityDeficit;
+    }
+
+    // Format date for display (e.g., "Mar 22")
+    const formatWeighInDate = (dateStr: string) => {
+      const date = new Date(dateStr + 'T00:00:00');
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    let bodyweightContext = '';
+    if (weighIns.length > 0) {
+      const currentWeight = weighIns[0].weight_lbs;
+      const oldestWeighIn = weighIns[weighIns.length - 1];
+      const weightChange = currentWeight - oldestWeighIn.weight_lbs;
+      const changeDirection = weightChange > 0 ? '+' : '';
+
+      // Format weigh-in history (show all entries, most recent first)
+      const weighInHistory = weighIns.map(w =>
+        `- ${formatWeighInDate(w.date)}: ${w.weight_lbs} lbs`
+      ).join('\n');
+
+      bodyweightContext = `[BODYWEIGHT TREND - last ${weighIns.length} weigh-ins]
+${weighInHistory}
+Current: ${currentWeight} lbs
+${weighIns.length >= 2 ? `${weighIns.length > 7 ? '14' : weighIns.length}-day change: ${changeDirection}${weightChange.toFixed(1)} lbs` : ''}
+Estimated TDEE: ~${estimatedTdee} cal
+Daily calorie target: ${nutritionGoals.calories} cal (${normalizedGoal || 'not set'})
+[END BODYWEIGHT TREND]
+
+`;
+    }
 
     // Parse split rotation and calculate today's suggested workout
     let splitRotation: string[] = [];
@@ -2265,16 +2351,16 @@ ${pendingChangesSection}
 
     const mappedMessages = messagesToSend.map((m: { role: string; content: string }, index: number) => ({
       role: m.role as 'user' | 'assistant',
-      // Prepend summary + user profile + nutrition context to the first user message
+      // Prepend summary + user profile + bodyweight + nutrition context to the first user message
       content: index === 0 && m.role === 'user'
-        ? summaryPrefix + userProfileContext + nutritionContext + m.content
+        ? summaryPrefix + userProfileContext + bodyweightContext + nutritionContext + m.content
         : m.content,
     }));
 
     // Fix message ordering if needed - if first message is assistant, prepend synthetic user
     if (mappedMessages.length > 0 && mappedMessages[0].role === 'assistant') {
       anthropicMessages = [
-        { role: 'user' as const, content: summaryPrefix + userProfileContext + nutritionContext + '[User opened the coach tab]' },
+        { role: 'user' as const, content: summaryPrefix + userProfileContext + bodyweightContext + nutritionContext + '[User opened the coach tab]' },
         ...mappedMessages,
       ];
     } else {
