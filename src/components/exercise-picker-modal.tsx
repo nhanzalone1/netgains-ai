@@ -379,12 +379,6 @@ export function ExercisePickerModal({
       new Map(filteredByGym.map(ex => [ex.id, ex])).values()
     );
 
-    console.log("[ExercisePicker] Loaded exercises:", uniqueExercises.length, "unique exercises");
-    // Debug: show sample of muscle_group values
-    console.log("[MG-DEBUG] Sample exercises:", uniqueExercises.slice(0, 5).map(e => ({
-      name: e.name,
-      muscle_group: e.muscle_group
-    })));
     setExercises(uniqueExercises);
     setLoading(false);
 
@@ -556,9 +550,6 @@ export function ExercisePickerModal({
       const validGroups = (muscleGroups && Array.isArray(muscleGroups))
         ? muscleGroups.filter(g => MUSCLE_GROUPS.includes(g as MuscleGroup))
         : [];
-
-      // Debug logging
-      console.log('[MG-DEBUG] Grouping:', ex.name, '→', validGroups.length > 0 ? validGroups : 'uncategorized');
 
       if (validGroups.length > 0) {
         // Has valid groups - add to each one
@@ -785,17 +776,10 @@ export function ExercisePickerModal({
 
       // Verify the update actually persisted (RLS may silently block updates)
       if (!updateData || updateData.length === 0) {
-        console.error("[Exercise Edit] Update affected 0 rows - RLS policy may be blocking updates. Check Supabase RLS policies for exercise_templates table.");
-        alert("Failed to save: You may not have permission to update this exercise. Check RLS policies.");
+        console.error("[Exercise Edit] Update affected 0 rows - check RLS policies");
         setSavingEdit(false);
         return;
       }
-
-      console.log("[Exercise Edit] Update verified:", {
-        id: updateData[0].id,
-        name: updateData[0].name,
-        muscle_group: updateData[0].muscle_group,
-      });
 
       // If renaming history, update all historical workout logs
       if (renameHistory && oldName) {
@@ -818,9 +802,6 @@ export function ExercisePickerModal({
       setPendingRename(null);
 
       // Reload exercises from database to ensure UI is in sync
-      // This guarantees the exercise appears under its new muscle group immediately
-      console.log("[Exercise Edit] Update successful, reloading exercise list...");
-      console.log("[MG-DEBUG] Saving muscle_group:", muscleGroupsToSave);
       await loadExercises();
       await loadRecentExercises();
 
