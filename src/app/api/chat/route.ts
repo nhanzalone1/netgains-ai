@@ -3157,6 +3157,16 @@ ${pendingChangesSection}
             console.log('[Coach] Tool use detected!');
             const assistantContent = response.content;
 
+            // Stream any text content that came with the tool use BEFORE processing tools
+            for (const block of assistantContent) {
+              if (block.type === 'text' && block.text.trim()) {
+                const formatted = `0:${JSON.stringify(block.text)}\n`;
+                controller.enqueue(encoder.encode(formatted));
+                textStreamed = true;
+                fullResponseText += block.text;
+              }
+            }
+
             // Add assistant message with tool use
             currentMessages.push({
               role: 'assistant',
