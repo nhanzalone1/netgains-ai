@@ -2,27 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_MODELS } from '@/lib/constants';
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
+import { MUSCLE_GROUPS, type MuscleGroup } from '@/lib/supabase/types';
 
 const anthropic = new Anthropic();
 
 // Valid muscle groups
-const VALID_MUSCLE_GROUPS = [
-  'chest',
-  'front_delt',
-  'side_delt',
-  'rear_delt',
-  'lats',
-  'upper_back',
-  'biceps',
-  'triceps',
-  'quads',
-  'hamstrings',
-  'glutes',
-  'calves',
-  'core',
-] as const;
-
-type MuscleGroup = typeof VALID_MUSCLE_GROUPS[number];
+const VALID_MUSCLE_GROUPS = MUSCLE_GROUPS;
 
 interface SplitMapping {
   [splitDay: string]: MuscleGroup[];
@@ -76,35 +61,35 @@ Split days: ${JSON.stringify(splitDays)}
 
 Valid muscle groups:
 - chest
-- front_delt (front raises, overhead press, incline pressing)
-- side_delt (lateral raises, upright rows)
-- rear_delt (reverse fly, face pulls)
-- lats (pulldowns, pull-ups)
-- upper_back (rows, shrugs)
+- back (includes lats, upper back, traps)
 - biceps
 - triceps
+- front_delt (front raises, overhead press)
+- side_delt (lateral raises, upright rows)
+- rear_delt (reverse fly, face pulls)
 - quads (squats, leg press, leg extensions)
 - hamstrings (leg curls, RDLs)
 - glutes (hip thrusts, kickbacks)
 - calves
-- core (abs)
+- abs
+- forearms
 
 Rules:
 - "Chest/Front Delt" → ["chest", "front_delt"]
-- "Back/Rear Delt" → ["lats", "upper_back", "rear_delt"]
+- "Back/Rear Delt" → ["back", "rear_delt"]
 - "Arms/Side Delt" → ["biceps", "triceps", "side_delt"]
 - "Legs" → ["quads", "hamstrings", "glutes", "calves"]
 - "Push" → ["chest", "front_delt", "triceps"]
-- "Pull" → ["lats", "upper_back", "rear_delt", "biceps"]
-- "Upper" → ["chest", "front_delt", "side_delt", "rear_delt", "lats", "upper_back", "biceps", "triceps"]
+- "Pull" → ["back", "rear_delt", "biceps"]
+- "Upper" → ["chest", "back", "front_delt", "side_delt", "rear_delt", "biceps", "triceps"]
 - "Lower" → ["quads", "hamstrings", "glutes", "calves"]
 - "Shoulders" alone → ["front_delt", "side_delt", "rear_delt"]
-- "Back" alone → ["lats", "upper_back"]
-- "Arms" alone → ["biceps", "triceps"]
-- Include "core" if mentioned or if it's a legs day
+- "Back" alone → ["back"]
+- "Arms" alone → ["biceps", "triceps", "forearms"]
+- Include "abs" if mentioned or if it's a legs day
 
 Respond with ONLY valid JSON object mapping each split day to an array of muscle groups.
-Example: {"Chest/Front Delt": ["chest", "front_delt"], "Legs": ["quads", "hamstrings", "glutes", "calves", "core"]}`;
+Example: {"Chest/Front Delt": ["chest", "front_delt"], "Legs": ["quads", "hamstrings", "glutes", "calves", "abs"]}`;
 
   try {
     const response = await anthropic.messages.create({
@@ -157,13 +142,12 @@ function fallbackParseSplitDay(day: string): MuscleGroup[] {
   if (lower.includes('shoulder') && muscles.length === 0) {
     muscles.push('front_delt', 'side_delt', 'rear_delt');
   }
-  if (lower.includes('lat') || lower.includes('pull')) muscles.push('lats');
-  if (lower.includes('back') && !muscles.includes('lats')) {
-    muscles.push('lats', 'upper_back');
+  if (lower.includes('back') || lower.includes('lat') || lower.includes('row') || lower.includes('trap')) {
+    if (!muscles.includes('back')) muscles.push('back');
   }
-  if (lower.includes('upper back') || lower.includes('row') || lower.includes('trap')) muscles.push('upper_back');
   if (lower.includes('bicep') || lower.includes('curl')) muscles.push('biceps');
   if (lower.includes('tricep') || lower.includes('pushdown')) muscles.push('triceps');
+  if (lower.includes('forearm') || lower.includes('grip') || lower.includes('wrist')) muscles.push('forearms');
   if (lower.includes('arm') && !muscles.includes('biceps')) {
     muscles.push('biceps', 'triceps');
   }
@@ -174,7 +158,7 @@ function fallbackParseSplitDay(day: string): MuscleGroup[] {
   if (lower.includes('leg') && muscles.length === 0) {
     muscles.push('quads', 'hamstrings', 'glutes', 'calves');
   }
-  if (lower.includes('core') || lower.includes('ab')) muscles.push('core');
+  if (lower.includes('core') || lower.includes('ab')) muscles.push('abs');
 
   // Push day
   if (lower.includes('push') && muscles.length === 0) {
@@ -182,21 +166,22 @@ function fallbackParseSplitDay(day: string): MuscleGroup[] {
   }
   // Pull day
   if (lower.includes('pull') && muscles.length === 0) {
-    muscles.push('lats', 'upper_back', 'rear_delt', 'biceps');
+    muscles.push('back', 'rear_delt', 'biceps');
   }
   // Upper day
   if (lower.includes('upper') && muscles.length === 0) {
-    muscles.push('chest', 'front_delt', 'side_delt', 'rear_delt', 'lats', 'upper_back', 'biceps', 'triceps');
+    muscles.push('chest', 'back', 'front_delt', 'side_delt', 'rear_delt', 'biceps', 'triceps');
   }
   // Lower day
   if (lower.includes('lower') && muscles.length === 0) {
     muscles.push('quads', 'hamstrings', 'glutes', 'calves');
   }
 
-  // Add core to leg days
-  if ((muscles.includes('quads') || muscles.includes('hamstrings')) && !muscles.includes('core')) {
-    muscles.push('core');
+  // Add abs to leg days
+  if ((muscles.includes('quads') || muscles.includes('hamstrings')) && !muscles.includes('abs')) {
+    muscles.push('abs');
   }
 
-  return muscles.length > 0 ? muscles : ['other' as MuscleGroup];
+  // Return empty array instead of 'other' - let the caller handle empty case
+  return muscles;
 }

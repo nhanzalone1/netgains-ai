@@ -75,6 +75,7 @@ export async function POST() {
       adminClient.from('program_settings').delete().eq('user_id', userId),
       adminClient.from('program_progress').delete().eq('user_id', userId),
       adminClient.from('exercise_templates').delete().eq('user_id', userId),
+      adminClient.from('split_muscle_groups').delete().eq('user_id', userId),
       adminClient.from('folders').delete().eq('user_id', userId),
       adminClient.from('locations').delete().eq('user_id', userId),
       adminClient.from('program_cycles').delete().eq('user_id', userId),

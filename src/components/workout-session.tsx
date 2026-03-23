@@ -21,6 +21,7 @@ import { ExercisePickerModal } from "./exercise-picker-modal";
 import { useTheme } from "./theme-provider";
 import { useToast } from "./toast";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
+import { isGymSpecificEquipment } from "@/lib/supabase/types";
 
 // Set variant types for special sets
 type SetVariant =
@@ -76,6 +77,7 @@ interface WorkoutSessionProps {
   userId: string;
   folderId: string;
   folderName: string;
+  locationId: string; // Current gym/location ID
   onBack: () => void;
   onSave: (exercises: ActiveExercise[]) => void;
 }
@@ -115,6 +117,7 @@ export function WorkoutSession({
   userId,
   folderId,
   folderName,
+  locationId,
   onBack,
   onSave,
 }: WorkoutSessionProps) {
@@ -625,9 +628,12 @@ export function WorkoutSession({
   };
 
   // Handle creating new exercise from superset picker
-  const handleSupersetCreateNew = async (data: { name: string; equipment: string; muscle_group?: string[] }): Promise<ExerciseTemplate | null> => {
+  const handleSupersetCreateNew = async (data: { name: string; equipment: string; muscle_group?: string[]; gym_id?: string; is_gym_specific?: boolean }): Promise<ExerciseTemplate | null> => {
     // Detect default measure type for bodyweight exercises
     const detectedMeasureType = detectMeasureType(data.name, data.equipment);
+
+    // Determine gym-specific based on equipment if not provided
+    const gymSpecific = data.is_gym_specific ?? isGymSpecificEquipment(data.equipment);
 
     const { data: newTemplate, error } = await supabase
       .from("exercise_templates")
@@ -640,6 +646,8 @@ export function WorkoutSession({
         default_measure_type: detectedMeasureType,
         order_index: libraryExercises.length,
         muscle_group: data.muscle_group && data.muscle_group.length > 0 ? data.muscle_group : null,
+        gym_id: data.gym_id || locationId,
+        is_gym_specific: gymSpecific,
       })
       .select()
       .single();
@@ -1204,6 +1212,7 @@ export function WorkoutSession({
         onCreateNew={handleSupersetCreateNew}
         userId={userId}
         folderId={folderId}
+        locationId={locationId}
         folderName={folderName}
       />
 
@@ -1229,6 +1238,7 @@ export function WorkoutSession({
         onCreateNew={handleSupersetCreateNew}
         userId={userId}
         folderId={folderId}
+        locationId={locationId}
         folderName={folderName}
         title="Select Superset Exercise"
         accentColor="purple"

@@ -5,6 +5,7 @@ import { Search, Plus, X, Dumbbell, ChevronRight, ChevronDown, Trash2, Pencil } 
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup, isGymSpecificEquipment } from "@/lib/supabase/types";
 import { apiFetch } from "@/lib/capacitor";
 
 // Equipment badge colors
@@ -21,95 +22,58 @@ const EQUIPMENT_COLORS: Record<string, { bg: string; text: string }> = {
 // Equipment order for section display
 const EQUIPMENT_ORDER = ["barbell", "dumbbell", "cable", "machine", "plate", "bodyweight", "smith"];
 
-// Simple muscle groups (6 options)
+// Simple muscle groups (6 options) - for simplified UI mode
 const SIMPLE_MUSCLE_GROUPS = [
   "chest",
   "back",
   "shoulders",
   "arms",
   "legs",
-  "core",
+  "abs",
 ] as const;
 
 type SimpleMuscleGroup = typeof SIMPLE_MUSCLE_GROUPS[number];
 
-// Advanced muscle groups (17 options)
-const ADVANCED_MUSCLE_GROUPS = [
-  "chest",
-  "front_delt",
-  "side_delt",
-  "rear_delt",
-  "lats",
-  "upper_back",
-  "rhomboids",
-  "traps",
-  "biceps",
-  "triceps",
-  "forearms",
-  "glutes",
-  "quads",
-  "hamstrings",
-  "calves",
-  "core",
-  "other",
-] as const;
-
-type AdvancedMuscleGroup = typeof ADVANCED_MUSCLE_GROUPS[number];
-
-// All possible muscle groups (union)
-type MuscleGroup = SimpleMuscleGroup | AdvancedMuscleGroup;
+// Advanced muscle groups (13 options) - matches the database schema
+const ADVANCED_MUSCLE_GROUPS = MUSCLE_GROUPS;
 
 // Display names for all muscle groups
 const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
-  chest: "Chest",
-  back: "Back",
+  ...MUSCLE_GROUP_LABELS,
   shoulders: "Shoulders",
   arms: "Arms",
   legs: "Legs",
-  front_delt: "Front Delt",
-  side_delt: "Side Delt",
-  rear_delt: "Rear Delt",
-  lats: "Lats",
-  upper_back: "Upper Back",
-  rhomboids: "Rhomboids",
-  traps: "Traps",
-  biceps: "Biceps",
-  triceps: "Triceps",
-  forearms: "Forearms",
-  glutes: "Glutes",
-  quads: "Quads",
-  hamstrings: "Hamstrings",
-  calves: "Calves",
-  core: "Core",
-  other: "Other",
   uncategorized: "Uncategorized",
 };
 
 // Map simple groups to advanced groups for filtering
-const SIMPLE_TO_ADVANCED_MAP: Record<SimpleMuscleGroup, AdvancedMuscleGroup[]> = {
+const SIMPLE_TO_ADVANCED_MAP: Record<SimpleMuscleGroup, MuscleGroup[]> = {
   chest: ["chest"],
-  back: ["lats", "upper_back", "rhomboids", "traps"],
+  back: ["back"],
   shoulders: ["front_delt", "side_delt", "rear_delt"],
   arms: ["biceps", "triceps", "forearms"],
   legs: ["glutes", "quads", "hamstrings", "calves"],
-  core: ["core"],
+  abs: ["abs"],
 };
 
 // Muscle group mode type
 type MuscleGroupMode = "simple" | "advanced";
 
-// Extended exercise template type with muscle_group as array
+// Extended exercise template type with all new fields
 interface ExerciseWithMuscleGroup extends Omit<ExerciseTemplate, 'muscle_group'> {
   muscle_group?: string[] | null;
+  gym_id?: string | null;
+  is_gym_specific?: boolean;
 }
 
 interface ExercisePickerModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (template: ExerciseTemplate) => void;
-  onCreateNew: (data: { name: string; equipment: string; muscle_group?: string[] }) => Promise<ExerciseTemplate | null>;
+  onCreateNew: (data: { name: string; equipment: string; muscle_group?: string[]; gym_id?: string; is_gym_specific?: boolean }) => Promise<ExerciseTemplate | null>;
   userId: string;
   folderId: string;
+  locationId: string; // Current gym/location ID
   folderName?: string;
   title?: string;
   accentColor?: "purple" | "red";
@@ -122,6 +86,7 @@ export function ExercisePickerModal({
   onCreateNew,
   userId,
   folderId,
+  locationId,
   folderName = "",
 }: ExercisePickerModalProps) {
   const supabase = createClient();
@@ -141,6 +106,9 @@ export function ExercisePickerModal({
   // Split-based tabs
   const [splitTabs, setSplitTabs] = useState<string[]>(["Recent", "All"]);
   const [splitMapping, setSplitMapping] = useState<Record<string, MuscleGroup[]>>({});
+
+  // Current folder's muscle groups (from split_muscle_groups table)
+  const [currentFolderMuscleGroups, setCurrentFolderMuscleGroups] = useState<MuscleGroup[]>([]);
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -281,24 +249,47 @@ export function ExercisePickerModal({
       setEditMode(false);
       setEditingExercise(null);
     }
-  }, [open, folderId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, folderId, locationId]);
 
   const loadExercises = async () => {
     setLoading(true);
+
+    // First, get the muscle groups for this folder from split_muscle_groups
+    const { data: splitMapping } = await supabase
+      .from("split_muscle_groups")
+      .select("muscle_groups")
+      .eq("folder_id", folderId)
+      .maybeSingle();
+
+    const folderMuscleGroups = (splitMapping?.muscle_groups || []) as MuscleGroup[];
+    setCurrentFolderMuscleGroups(folderMuscleGroups);
+
+    // Query all exercises for this user that match:
+    // 1. gym_id matches current location OR is_gym_specific is false (universal)
+    // We filter by muscle group in the frontend since Supabase doesn't support array overlap in .or()
     const { data } = await supabase
       .from("exercise_templates")
       .select("*")
-      .eq("folder_id", folderId)
+      .eq("user_id", userId)
       .order("name", { ascending: true });
 
     if (!isMountedRef.current) return;
-    const exerciseList = (data || []) as ExerciseWithMuscleGroup[];
-    setExercises(exerciseList);
+
+    // Filter exercises: gym matches OR is universal
+    const filteredByGym = (data || []).filter(ex => {
+      // Universal exercises are always shown
+      if (ex.is_gym_specific === false) return true;
+      // Gym-specific exercises only shown if gym matches
+      return ex.gym_id === locationId;
+    }) as ExerciseWithMuscleGroup[];
+
+    setExercises(filteredByGym);
     setLoading(false);
 
     // Auto-recategorize if any exercises have null muscle_group (only attempt once per modal open)
-    const needsRecategorization = exerciseList.some(ex => !ex.muscle_group);
-    if (needsRecategorization && exerciseList.length > 0 && !recategorizationAttemptedRef.current) {
+    const needsRecategorization = filteredByGym.some(ex => !ex.muscle_group);
+    if (needsRecategorization && filteredByGym.length > 0 && !recategorizationAttemptedRef.current) {
       console.log("[ExercisePicker] Detected exercises without muscle_group, triggering recategorization...");
       recategorizationAttemptedRef.current = true;
       triggerRecategorization();
@@ -317,10 +308,16 @@ export function ExercisePickerModal({
           const { data } = await supabase
             .from("exercise_templates")
             .select("*")
-            .eq("folder_id", folderId)
+            .eq("user_id", userId)
             .order("name", { ascending: true });
+
           if (isMountedRef.current && data) {
-            setExercises(data as ExerciseWithMuscleGroup[]);
+            // Re-apply gym filter
+            const filteredByGym = data.filter(ex => {
+              if (ex.is_gym_specific === false) return true;
+              return ex.gym_id === locationId;
+            }) as ExerciseWithMuscleGroup[];
+            setExercises(filteredByGym);
           }
         }
       }
@@ -354,14 +351,21 @@ export function ExercisePickerModal({
         }
       });
 
+      // Get templates that match gym (or are universal)
       const { data: templates } = await supabase
         .from("exercise_templates")
         .select("*")
-        .eq("folder_id", folderId);
+        .eq("user_id", userId);
 
       if (templates && isMountedRef.current) {
+        // Filter by gym
+        const gymFiltered = templates.filter(t => {
+          if (t.is_gym_specific === false) return true;
+          return t.gym_id === locationId;
+        });
+
         const matched = recentNames.slice(0, 8).map(name =>
-          templates.find(t => t.name.toLowerCase() === name.toLowerCase())
+          gymFiltered.find(t => t.name.toLowerCase() === name.toLowerCase())
         ).filter(Boolean) as ExerciseWithMuscleGroup[];
         setRecentExercises(matched);
       }
@@ -371,6 +375,11 @@ export function ExercisePickerModal({
   // Get muscle groups for the active tab
   const getActiveMuscleGroups = (): MuscleGroup[] | null => {
     if (activeTab === "Recent" || activeTab === "All") return null;
+    // For split day tabs, use the splitMapping from coach_memory
+    // For the current folder tab (folderName), use currentFolderMuscleGroups
+    if (activeTab === folderName && currentFolderMuscleGroups.length > 0) {
+      return currentFolderMuscleGroups;
+    }
     return splitMapping[activeTab] || null;
   };
 
@@ -402,7 +411,7 @@ export function ExercisePickerModal({
     }
 
     return filtered;
-  }, [exercises, recentExercises, searchQuery, activeTab, splitMapping]);
+  }, [exercises, recentExercises, searchQuery, activeTab, splitMapping, currentFolderMuscleGroups, folderName]);
 
   // Group exercises by equipment (for single muscle group tabs)
   const groupedExercises = useMemo(() => {
@@ -436,36 +445,36 @@ export function ExercisePickerModal({
       );
     }
 
-    const muscleGroups: Record<string, ExerciseWithMuscleGroup[]> = {};
+    const muscleGroupsMap: Record<string, ExerciseWithMuscleGroup[]> = {};
 
     // With array-based muscle groups, an exercise can appear in multiple groups
     // Exercises without muscle_group go into "uncategorized" (shown at the end)
     filtered.forEach(ex => {
       const groups = ex.muscle_group && ex.muscle_group.length > 0 ? ex.muscle_group : ["uncategorized"];
       groups.forEach(group => {
-        if (!muscleGroups[group]) muscleGroups[group] = [];
+        if (!muscleGroupsMap[group]) muscleGroupsMap[group] = [];
         // Avoid duplicates if exercise is already in this group
-        if (!muscleGroups[group].some(e => e.id === ex.id)) {
-          muscleGroups[group].push(ex);
+        if (!muscleGroupsMap[group].some(e => e.id === ex.id)) {
+          muscleGroupsMap[group].push(ex);
         }
       });
     });
 
     // Build result with categorized groups first, then uncategorized at the end
-    const result = ADVANCED_MUSCLE_GROUPS
-      .filter(group => muscleGroups[group]?.length > 0)
+    const result = MUSCLE_GROUPS
+      .filter(group => muscleGroupsMap[group]?.length > 0)
       .map(group => ({
         muscleGroup: group,
-        displayName: MUSCLE_GROUP_DISPLAY[group],
-        exercises: muscleGroups[group].sort((a, b) => a.name.localeCompare(b.name))
+        displayName: MUSCLE_GROUP_DISPLAY[group] || group,
+        exercises: muscleGroupsMap[group].sort((a, b) => a.name.localeCompare(b.name))
       }));
 
     // Add uncategorized at the end if any exist
-    if (muscleGroups["uncategorized"]?.length > 0) {
+    if (muscleGroupsMap["uncategorized"]?.length > 0) {
       result.push({
         muscleGroup: "uncategorized",
         displayName: MUSCLE_GROUP_DISPLAY["uncategorized"],
-        exercises: muscleGroups["uncategorized"].sort((a, b) => a.name.localeCompare(b.name))
+        exercises: muscleGroupsMap["uncategorized"].sort((a, b) => a.name.localeCompare(b.name))
       });
     }
 
@@ -534,10 +543,15 @@ export function ExercisePickerModal({
       ? newMuscleGroups
       : undefined;
 
+    // Determine if gym-specific based on equipment
+    const gymSpecific = isGymSpecificEquipment(newEquipment);
+
     const result = await onCreateNew({
       name: newName.trim(),
       equipment: newEquipment,
       muscle_group: muscleGroupsToSave,
+      gym_id: locationId,
+      is_gym_specific: gymSpecific,
     });
 
     setCreating(false);
@@ -586,27 +600,62 @@ export function ExercisePickerModal({
       const newName = editName.trim();
       const newEquipment = editEquipment;
 
-      // Use .select() to verify the update succeeded and get the updated row
-      const { data, error } = await supabase
+      console.log("[Exercise Edit] Updating exercise:", {
+        id: editingExercise.id,
+        name: newName,
+        equipment: newEquipment,
+        muscle_group: muscleGroupsToSave,
+      });
+
+      // First do the update
+      const { error: updateError } = await supabase
         .from("exercise_templates")
         .update({
           name: newName,
           equipment: newEquipment,
           muscle_group: muscleGroupsToSave,
         })
+        .eq("id", editingExercise.id);
+
+      if (updateError) {
+        console.error("Failed to update exercise:", updateError);
+        setSavingEdit(false);
+        return;
+      }
+
+      // Then fetch the updated row
+      const { data, error: fetchError } = await supabase
+        .from("exercise_templates")
+        .select("*")
         .eq("id", editingExercise.id)
-        .select()
         .single();
 
-      if (error) {
-        console.error("Failed to update exercise:", error);
-        // Keep modal open so user can retry
+      if (fetchError) {
+        console.error("Failed to fetch updated exercise:", fetchError);
+        // Update succeeded but fetch failed - update local state manually
+        const manualUpdate = {
+          ...editingExercise,
+          name: newName,
+          equipment: newEquipment,
+          muscle_group: muscleGroupsToSave,
+        };
+        setExercises((prev) =>
+          prev.map((e) =>
+            e.id === editingExercise.id ? manualUpdate : e
+          )
+        );
+        setRecentExercises((prev) =>
+          prev.map((e) =>
+            e.id === editingExercise.id ? manualUpdate : e
+          )
+        );
+        setEditingExercise(null);
         setSavingEdit(false);
         return;
       }
 
       if (data) {
-        // Update local state with the confirmed database values
+        console.log("[Exercise Edit] Update successful:", data);
         const updatedExercise = data as ExerciseWithMuscleGroup;
         setExercises((prev) =>
           prev.map((e) =>
@@ -621,7 +670,7 @@ export function ExercisePickerModal({
         setEditingExercise(null);
       }
     } catch (error) {
-      console.error("Failed to update exercise:", error);
+      console.error("Failed to update exercise (exception):", error);
     }
     setSavingEdit(false);
   };
@@ -812,7 +861,7 @@ export function ExercisePickerModal({
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : ADVANCED_MUSCLE_GROUPS).map((group) => {
+                      {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : MUSCLE_GROUPS).map((group) => {
                         const isActive = newMuscleGroups.includes(group);
                         const isSuggested = aiSuggestedGroup === group && newMuscleGroups.length === 0;
                         return (
@@ -1149,6 +1198,7 @@ export function ExercisePickerModal({
                           const isActive = editEquipment === equip;
                           return (
                             <button
+                              type="button"
                               key={equip}
                               onClick={() => setEditEquipment(equip)}
                               className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
@@ -1176,6 +1226,7 @@ export function ExercisePickerModal({
                         {/* Simple/Advanced Toggle */}
                         <div className="flex rounded-lg overflow-hidden bg-white/5">
                           <button
+                            type="button"
                             onClick={() => handleModeChange("simple")}
                             className={`px-3 py-1 text-xs font-medium transition-all ${
                               muscleGroupMode === "simple"
@@ -1186,6 +1237,7 @@ export function ExercisePickerModal({
                             Simple
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleModeChange("advanced")}
                             className={`px-3 py-1 text-xs font-medium transition-all ${
                               muscleGroupMode === "advanced"
@@ -1198,10 +1250,11 @@ export function ExercisePickerModal({
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : ADVANCED_MUSCLE_GROUPS).map((group) => {
+                        {(muscleGroupMode === "simple" ? SIMPLE_MUSCLE_GROUPS : MUSCLE_GROUPS).map((group) => {
                           const isActive = editMuscleGroups.includes(group);
                           return (
                             <button
+                              type="button"
                               key={group}
                               onClick={() => toggleMuscleGroup(group, setEditMuscleGroups)}
                               className={`px-3 py-2 rounded-full text-sm font-medium transition-all ${
@@ -1223,14 +1276,16 @@ export function ExercisePickerModal({
                     </div>
 
                     {/* Buttons */}
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 mb-4">
                       <button
+                        type="button"
                         onClick={() => setEditingExercise(null)}
                         className="flex-1 py-3 rounded-xl font-semibold text-gray-400 bg-white/10"
                       >
                         Cancel
                       </button>
                       <button
+                        type="button"
                         onClick={handleSaveEdit}
                         disabled={!editName.trim() || savingEdit}
                         className="flex-1 py-3 rounded-xl font-semibold text-black bg-[#22d3ee] disabled:opacity-50"
@@ -1238,6 +1293,21 @@ export function ExercisePickerModal({
                         {savingEdit ? "Saving..." : "Save"}
                       </button>
                     </div>
+
+                    {/* Delete Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingExercise) {
+                          handleDelete(editingExercise.id);
+                          setEditingExercise(null);
+                        }
+                      }}
+                      disabled={deletingId === editingExercise?.id}
+                      className="w-full py-3 rounded-xl font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {deletingId === editingExercise?.id ? "Deleting..." : "Delete Exercise"}
+                    </button>
                   </motion.div>
                 </motion.div>
               )}

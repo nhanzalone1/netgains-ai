@@ -60,8 +60,11 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 - **nutrition_logs** — meals with macros
 - **coach_memory** — key-value store (split_rotation, food_staples, pending_workout, etc.)
 - **chat_messages** — persisted for cross-device sync
-- **exercise_templates** — user's exercises with muscle_group[]
+- **exercise_templates** — user's exercises with muscle_group[], gym_id, is_gym_specific
+- **split_muscle_groups** — maps split days (folders) to muscle groups for exercise filtering
 - **weigh_ins** — daily weight, auto-syncs to profiles.weight_lbs
+- **locations** — user's gyms (bigint id)
+- **folders** — split days with location_id FK
 
 ## AI Architecture
 
@@ -200,7 +203,7 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 ### Exercise Categorization
 13 muscle groups (no "other" - forces explicit user selection). Exercises can belong to multiple. AI categorizes via `/api/exercise/categorize`.
 
-**Muscle groups:** chest, front_delt, side_delt, rear_delt, lats, upper_back, biceps, triceps, quads, hamstrings, glutes, calves, core
+**Muscle groups:** chest, back, biceps, triceps, front_delt, side_delt, rear_delt, quads, hamstrings, glutes, calves, abs, forearms
 
 **Key behaviors:**
 - AI returns `null` if it can't categorize with confidence (never defaults to "other")
@@ -208,10 +211,22 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 - Uncategorized exercises appear in "Uncategorized" section in the All tab
 - Edit modal uses `.select().single()` to verify database updates succeed
 
+**Gym-specific vs Universal:**
+- `is_gym_specific: true` — machine, cable, smith (varies by gym)
+- `is_gym_specific: false` — barbell, dumbbell, bodyweight, plate (available everywhere)
+- `gym_id` — FK to locations table (which gym this exercise belongs to)
+
+**Split → Muscle Group Mapping:**
+- `split_muscle_groups` table maps folders (split days) to muscle groups
+- When user opens a split, exercises are filtered by matching muscle groups
+- Split editor modal (`src/components/split-editor-modal.tsx`) lets users assign muscle groups to splits
+
 **Files:**
 - `src/app/api/exercise/categorize/route.ts` — AI categorization with detailed prompt rules
 - `src/app/api/exercise/recategorize-all/route.ts` — Batch recategorization (skips failures)
-- `src/components/exercise-picker-modal.tsx` — Exercise library UI with edit/create
+- `src/app/api/split-muscle-groups/route.ts` — CRUD for split → muscle group mappings
+- `src/components/exercise-picker-modal.tsx` — Exercise library UI with edit/create/delete
+- `src/components/split-editor-modal.tsx` — Assign muscle groups to split days
 
 ### Set Variants
 `normal`, `warmup`, `drop`, `failure`, `assisted-parent/child`, `left/right`. Warmup excluded from PRs.
@@ -276,7 +291,7 @@ App Store requires apps to provide account deletion. Users can delete their acco
 6. Server deletes all user data, signs out, redirects to login
 
 **What gets deleted:**
-- All Supabase tables: profiles, workouts, exercises, sets, meals, nutrition_goals, coach_memory, chat_messages, milestones, weigh_ins, maxes, program_settings, program_progress, exercise_templates, folders, locations, program_cycles
+- All Supabase tables: profiles, workouts, exercises, sets, meals, nutrition_goals, coach_memory, chat_messages, milestones, weigh_ins, maxes, program_settings, program_progress, exercise_templates, split_muscle_groups, folders, locations, program_cycles
 - All Pinecone vectors (filtered by `user_id` metadata)
 - Auth user via `auth.admin.deleteUser()`
 

@@ -40,7 +40,8 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2 }}
-            className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-50 max-w-[calc(100vw-32px)] sm:max-w-md mx-auto"
+            className="fixed left-4 right-4 top-1/2 -translate-y-1/2 z-[60] max-w-[calc(100vw-32px)] sm:max-w-md mx-auto"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="rounded-3xl overflow-hidden glass-elevated">
               {title && (

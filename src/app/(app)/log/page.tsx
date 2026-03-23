@@ -31,6 +31,7 @@ import { Modal } from "@/components/ui/modal";
 import { WorkoutSession } from "@/components/workout-session";
 import { PendingWorkoutBanner } from "@/components/pending-workout-banner";
 import { SkeletonGymList } from "@/components/ui/skeleton";
+import { SplitEditorModal } from "@/components/split-editor-modal";
 import type {
   Location,
   Folder,
@@ -104,6 +105,9 @@ export default function LogPage() {
   const [editFolderName, setEditFolderName] = useState("");
   const [savingFolderEdit, setSavingFolderEdit] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Split editor state
+  const [splitEditorFolder, setSplitEditorFolder] = useState<FolderWithCount | null>(null);
 
   // Blur the edit input on mount to prevent mobile keyboard from popping up
   useEffect(() => {
@@ -414,12 +418,14 @@ export default function LogPage() {
       const workoutData = workout as { id: string };
       workoutId = workoutData.id;
 
-      // Batch insert all exercises (include equipment for PR tracking)
+      // Batch insert all exercises (include equipment, gym_id for PR tracking)
       const exerciseInserts = validExercises.map((ex) => ({
         workout_id: workoutData.id,
         name: ex.name,
         equipment: ex.equipment || 'barbell',
         order_index: ex.orderIndex,
+        gym_id: selectedLocation?.id || null,
+        is_gym_specific: ['machine', 'cable', 'smith'].includes(ex.equipment?.toLowerCase() || ''),
       }));
 
       const { data: exercisesData, error: exercisesError } = await supabase
@@ -540,13 +546,14 @@ export default function LogPage() {
   // ========================================
   // STATE 3: Workout Session View
   // ========================================
-  if (selectedFolder && user) {
+  if (selectedFolder && selectedLocation && user) {
     return (
       <div className="max-w-lg mx-auto">
         <WorkoutSession
           userId={user.id}
           folderId={selectedFolder.id}
           folderName={selectedFolder.name}
+          locationId={selectedLocation.id}
           onBack={() => setSelectedFolder(null)}
           onSave={handleSaveWorkout}
         />
@@ -759,8 +766,19 @@ export default function LogPage() {
               loading={savingFolderEdit}
               disabled={!editFolderName.trim()}
             >
-              Save
+              Save Name
             </Button>
+
+            {/* Edit Muscle Groups */}
+            <button
+              onClick={() => {
+                setSplitEditorFolder(editingFolder);
+                setEditingFolder(null);
+              }}
+              className="w-full py-3 rounded-xl bg-[#22d3ee]/10 text-[#22d3ee] font-medium hover:bg-[#22d3ee]/20 transition-colors"
+            >
+              Edit Muscle Groups
+            </button>
 
             {/* Reorder buttons */}
             <div className="flex gap-2">
@@ -805,6 +823,18 @@ export default function LogPage() {
             </button>
           </div>
         </Modal>
+
+        {/* Split Editor Modal */}
+        {user && splitEditorFolder && (
+          <SplitEditorModal
+            open={!!splitEditorFolder}
+            onClose={() => setSplitEditorFolder(null)}
+            folderId={splitEditorFolder.id}
+            folderName={splitEditorFolder.name}
+            locationId={selectedLocation.id}
+            userId={user.id}
+          />
+        )}
       </div>
     );
   }

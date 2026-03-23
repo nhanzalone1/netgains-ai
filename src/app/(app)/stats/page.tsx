@@ -37,6 +37,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover } from "@/components/ui/popover";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup } from "@/lib/supabase/types";
 
 // Epley Formula: Est. 1RM = Weight × (1 + Reps / 30)
 const calculateEst1RM = (weight: number, reps: number): number => {
@@ -81,6 +82,9 @@ interface ExerciseWithPR {
   prWeight: number;
   prReps: number;
   est1RM: number;
+  gymId: string | null;
+  isGymSpecific: boolean;
+  muscleGroup: string[] | null;
 }
 
 interface SessionData {
@@ -119,9 +123,9 @@ export default function StatsPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Collapsed sections - all collapsed by default
+  // Collapsed sections - all collapsed by default (use muscle group keys)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    new Set(["Chest", "Back", "Shoulders", "Legs", "Arms", "Core", "Other"])
+    new Set([...MUSCLE_GROUPS, "uncategorized"])
   );
 
   // Body weight tracking
@@ -235,7 +239,7 @@ export default function StatsPage() {
     setLoadingExercises(true);
     console.log('[Stats] Loading exercises with PRs for user:', user!.id);
 
-    // Get all exercise templates
+    // Get all exercise templates with gym info
     const { data: templates, error: templatesError } = await supabase
       .from("exercise_templates")
       .select("*")
@@ -256,13 +260,15 @@ export default function StatsPage() {
     }
 
     // Get all exercises with sets to calculate PRs
-    // Include equipment, variant, and measure_type for proper filtering
+    // Include gym_id for gym-specific PR tracking
     const { data: exercises, error: exercisesError } = await supabase
       .from("exercises")
       .select(`
         id,
         name,
         equipment,
+        gym_id,
+        is_gym_specific,
         sets (
           weight,
           reps,
@@ -281,7 +287,7 @@ export default function StatsPage() {
       console.log('[Stats] Exercises loaded:', exercises?.length || 0);
     }
 
-    // Build PR map by name+equipment (separate PRs for different equipment)
+    // Build PR map by name+equipment (universal view - combine all gyms)
     const prMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
 
     (exercises || []).forEach((exercise) => {
@@ -306,30 +312,34 @@ export default function StatsPage() {
 
     // Group templates by name+equipment (each equipment variant gets its own entry)
     const exerciseMap = new Map<string, ExerciseWithPR>();
-    const typedTemplates = templates as ExerciseTemplate[];
+    const typedTemplates = templates as (ExerciseTemplate & { gym_id?: number | null; is_gym_specific?: boolean; muscle_group?: string[] | null })[];
 
     typedTemplates.forEach((template) => {
-      const key = getExerciseKey(template.name, template.equipment);
-      // Also try key without equipment suffix (e.g., "Chest press machine" -> "Chest press")
+      const isGymSpecific = template.is_gym_specific !== false;
+      const baseKey = getExerciseKey(template.name, template.equipment);
+
+      // Also try legacy keys for backwards compatibility
       const nameWithoutEquipment = normalizeString(template.name)
         .replace(new RegExp(`\\s*${normalizeString(template.equipment)}$`), '')
         .trim();
       const altKey = `${nameWithoutEquipment}::${normalizeString(template.equipment)}`;
-      // Also try legacy key with "barbell" default (for exercises logged before equipment tracking)
       const legacyKey = `${normalizeString(template.name)}::barbell`;
-      const legacyAltKey = `${nameWithoutEquipment}::barbell`;
-      // Try all keys to find PR (exact match, alt name, or legacy barbell default)
-      const pr = prMap.get(key) || prMap.get(altKey) || prMap.get(legacyKey) || prMap.get(legacyAltKey);
+
+      // Try all keys to find PR
+      const pr = prMap.get(baseKey) || prMap.get(altKey) || prMap.get(legacyKey);
 
       // Each name+equipment combo gets its own entry
-      if (!exerciseMap.has(key)) {
-        exerciseMap.set(key, {
+      if (!exerciseMap.has(baseKey)) {
+        exerciseMap.set(baseKey, {
           id: template.id,
           name: template.name,
           equipment: template.equipment,
           prWeight: pr?.weight || 0,
           prReps: pr?.reps || 0,
           est1RM: pr?.est1RM || 0,
+          gymId: template.gym_id || null,
+          isGymSpecific,
+          muscleGroup: template.muscle_group || null,
         });
       }
     });
@@ -491,17 +501,39 @@ export default function StatsPage() {
     );
   }, [exercisesWithPR, searchQuery]);
 
-  // Group exercises by muscle group
+  // Group exercises by muscle group (using database muscle_group field)
   const groupedExercises = useMemo(() => {
     const groups: Record<string, ExerciseWithPR[]> = {};
-    const muscleGroups = ["Chest", "Back", "Shoulders", "Legs", "Arms", "Core", "Other"];
 
-    // Initialize all groups
-    muscleGroups.forEach((g) => (groups[g] = []));
+    // Initialize groups for all muscle groups
+    MUSCLE_GROUPS.forEach((g) => (groups[g] = []));
+    groups["uncategorized"] = [];
 
     filteredExercises.forEach((ex) => {
-      const group = categorizeExercise(ex.name);
-      groups[group].push(ex);
+      if (ex.muscleGroup && ex.muscleGroup.length > 0) {
+        // Exercise can appear in multiple groups if it has multiple muscle groups
+        ex.muscleGroup.forEach(mg => {
+          if (groups[mg]) {
+            // Avoid duplicates
+            if (!groups[mg].some(e => e.id === ex.id)) {
+              groups[mg].push(ex);
+            }
+          }
+        });
+      } else {
+        // Use keyword-based fallback for uncategorized exercises
+        const group = categorizeExercise(ex.name);
+        const mappedGroup = group === "Shoulders" ? "front_delt" :
+                          group === "Arms" ? "biceps" :
+                          group === "Legs" ? "quads" :
+                          group === "Other" ? "uncategorized" :
+                          group.toLowerCase();
+        if (groups[mappedGroup]) {
+          groups[mappedGroup].push(ex);
+        } else {
+          groups["uncategorized"].push(ex);
+        }
+      }
     });
 
     // Sort exercises within each group alphabetically
@@ -509,11 +541,25 @@ export default function StatsPage() {
       groups[g].sort((a, b) => a.name.localeCompare(b.name));
     });
 
-    // Return only non-empty groups
-    return muscleGroups.filter((g) => groups[g].length > 0).map((g) => ({
-      name: g,
-      exercises: groups[g],
-    }));
+    // Return only non-empty groups with display names
+    const result = MUSCLE_GROUPS
+      .filter((g) => groups[g]?.length > 0)
+      .map((g) => ({
+        name: MUSCLE_GROUP_LABELS[g],
+        key: g,
+        exercises: groups[g],
+      }));
+
+    // Add uncategorized at the end if any
+    if (groups["uncategorized"]?.length > 0) {
+      result.push({
+        name: "Uncategorized",
+        key: "uncategorized",
+        exercises: groups["uncategorized"],
+      });
+    }
+
+    return result;
   }, [filteredExercises]);
 
   // Chart data
@@ -687,8 +733,13 @@ export default function StatsPage() {
             {selectedExercise ? (
               <>
                 <p className="font-semibold text-white">{selectedExercise.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">
+                <p className="text-xs text-muted-foreground capitalize flex items-center gap-1">
                   {selectedExercise.equipment}
+                  {selectedExercise.isGymSpecific ? (
+                    <MapPin className="w-3 h-3" />
+                  ) : (
+                    <Globe className="w-3 h-3" />
+                  )}
                 </p>
               </>
             ) : (
@@ -1012,10 +1063,10 @@ export default function StatsPage() {
                       <div key={group.name}>
                         {/* Section Header */}
                         <button
-                          onClick={() => toggleSection(group.name)}
+                          onClick={() => toggleSection(group.key)}
                           className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-white transition-colors"
                         >
-                          {collapsedSections.has(group.name) ? (
+                          {collapsedSections.has(group.key) ? (
                             <ChevronRight className="w-4 h-4" />
                           ) : (
                             <ChevronDown className="w-4 h-4" />
@@ -1028,7 +1079,7 @@ export default function StatsPage() {
 
                         {/* Exercises in Section */}
                         <AnimatePresence>
-                          {!collapsedSections.has(group.name) && (
+                          {!collapsedSections.has(group.key) && (
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
@@ -1057,10 +1108,21 @@ export default function StatsPage() {
                                         <span className="text-[10px] text-muted-foreground/60">
                                           ({exercise.est1RM} est 1RM)
                                         </span>
+                                        {exercise.isGymSpecific ? (
+                                          <MapPin className="w-3 h-3 text-muted-foreground/50 ml-1" />
+                                        ) : (
+                                          <Globe className="w-3 h-3 text-muted-foreground/50 ml-1" />
+                                        )}
                                       </p>
                                     ) : (
-                                      <p className="text-xs text-muted-foreground capitalize">
-                                        {exercise.equipment} • No data yet
+                                      <p className="text-xs text-muted-foreground capitalize flex items-center gap-1">
+                                        {exercise.equipment}
+                                        {exercise.isGymSpecific ? (
+                                          <MapPin className="w-3 h-3 text-muted-foreground/50" />
+                                        ) : (
+                                          <Globe className="w-3 h-3 text-muted-foreground/50" />
+                                        )}
+                                        <span>• No data yet</span>
                                       </p>
                                     )}
                                   </div>

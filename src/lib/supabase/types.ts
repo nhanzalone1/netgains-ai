@@ -385,6 +385,8 @@ export interface Database {
           workout_id: string;
           name: string;
           equipment: string;
+          gym_id: number | null;
+          is_gym_specific: boolean;
           order_index: number;
           created_at: string;
         };
@@ -393,6 +395,8 @@ export interface Database {
           workout_id: string;
           name: string;
           equipment?: string;
+          gym_id?: number | null;
+          is_gym_specific?: boolean;
           order_index?: number;
           created_at?: string;
         };
@@ -401,6 +405,8 @@ export interface Database {
           workout_id?: string;
           name?: string;
           equipment?: string;
+          gym_id?: number | null;
+          is_gym_specific?: boolean;
           order_index?: number;
           created_at?: string;
         };
@@ -409,6 +415,12 @@ export interface Database {
             foreignKeyName: "exercises_workout_id_fkey";
             columns: ["workout_id"];
             referencedRelation: "workouts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "exercises_gym_id_fkey";
+            columns: ["gym_id"];
+            referencedRelation: "locations";
             referencedColumns: ["id"];
           }
         ];
@@ -455,21 +467,21 @@ export interface Database {
       };
       locations: {
         Row: {
-          id: string;
+          id: number;
           user_id: string;
           name: string;
           is_default: boolean;
           created_at: string;
         };
         Insert: {
-          id?: string;
+          id?: number;
           user_id: string;
           name: string;
           is_default?: boolean;
           created_at?: string;
         };
         Update: {
-          id?: string;
+          id?: number;
           user_id?: string;
           name?: string;
           is_default?: boolean;
@@ -488,7 +500,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          location_id: string;
+          location_id: number;
           name: string;
           order_index: number;
           created_at: string;
@@ -496,7 +508,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
-          location_id: string;
+          location_id: number;
           name: string;
           order_index?: number;
           created_at?: string;
@@ -504,7 +516,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string;
-          location_id?: string;
+          location_id?: number;
           name?: string;
           order_index?: number;
           created_at?: string;
@@ -534,6 +546,8 @@ export interface Database {
           exercise_type: string;
           default_measure_type: string;
           muscle_group: string[] | null;
+          gym_id: number | null;
+          is_gym_specific: boolean;
           order_index: number;
           created_at: string;
         };
@@ -546,6 +560,8 @@ export interface Database {
           exercise_type?: string;
           default_measure_type?: string;
           muscle_group?: string[] | null;
+          gym_id?: number | null;
+          is_gym_specific?: boolean;
           order_index?: number;
           created_at?: string;
         };
@@ -558,6 +574,8 @@ export interface Database {
           exercise_type?: string;
           default_measure_type?: string;
           muscle_group?: string[] | null;
+          gym_id?: number | null;
+          is_gym_specific?: boolean;
           order_index?: number;
           created_at?: string;
         };
@@ -570,6 +588,52 @@ export interface Database {
           },
           {
             foreignKeyName: "exercise_templates_folder_id_fkey";
+            columns: ["folder_id"];
+            referencedRelation: "folders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "exercise_templates_gym_id_fkey";
+            columns: ["gym_id"];
+            referencedRelation: "locations";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      split_muscle_groups: {
+        Row: {
+          id: number;
+          user_id: string;
+          folder_id: number;
+          muscle_groups: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          folder_id: number;
+          muscle_groups?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          folder_id?: number;
+          muscle_groups?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "split_muscle_groups_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "split_muscle_groups_folder_id_fkey";
             columns: ["folder_id"];
             referencedRelation: "folders";
             referencedColumns: ["id"];
@@ -753,7 +817,7 @@ export type FolderInsert = Database["public"]["Tables"]["folders"]["Insert"];
 export type ExerciseTemplateInsert = Database["public"]["Tables"]["exercise_templates"]["Insert"];
 
 // Equipment types
-export type EquipmentType = "barbell" | "dumbbell" | "cable" | "machine" | "smith" | "bodyweight";
+export type EquipmentType = "barbell" | "dumbbell" | "cable" | "machine" | "smith" | "bodyweight" | "plate";
 export type ExerciseType = "strength" | "cardio";
 
 // Workout with nested exercises and sets
@@ -771,3 +835,69 @@ export type ProgramSettings = Database["public"]["Tables"]["program_settings"]["
 export type ProgramSettingsInsert = Database["public"]["Tables"]["program_settings"]["Insert"];
 export type ProgramProgress = Database["public"]["Tables"]["program_progress"]["Row"];
 export type ProgramProgressInsert = Database["public"]["Tables"]["program_progress"]["Insert"];
+
+// Split muscle groups types
+export type SplitMuscleGroups = Database["public"]["Tables"]["split_muscle_groups"]["Row"];
+export type SplitMuscleGroupsInsert = Database["public"]["Tables"]["split_muscle_groups"]["Insert"];
+export type SplitMuscleGroupsUpdate = Database["public"]["Tables"]["split_muscle_groups"]["Update"];
+
+// Muscle group type (13 groups)
+export type MuscleGroup =
+  | "chest"
+  | "back"
+  | "biceps"
+  | "triceps"
+  | "front_delt"
+  | "side_delt"
+  | "rear_delt"
+  | "quads"
+  | "hamstrings"
+  | "glutes"
+  | "calves"
+  | "abs"
+  | "forearms";
+
+// Muscle group display names
+export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
+  chest: "Chest",
+  back: "Back",
+  biceps: "Biceps",
+  triceps: "Triceps",
+  front_delt: "Front Delt",
+  side_delt: "Side Delt",
+  rear_delt: "Rear Delt",
+  quads: "Quads",
+  hamstrings: "Hamstrings",
+  glutes: "Glutes",
+  calves: "Calves",
+  abs: "Abs",
+  forearms: "Forearms",
+};
+
+// All valid muscle groups array
+export const MUSCLE_GROUPS: MuscleGroup[] = [
+  "chest",
+  "back",
+  "biceps",
+  "triceps",
+  "front_delt",
+  "side_delt",
+  "rear_delt",
+  "quads",
+  "hamstrings",
+  "glutes",
+  "calves",
+  "abs",
+  "forearms",
+];
+
+// Equipment that is gym-specific (varies by location)
+export const GYM_SPECIFIC_EQUIPMENT: EquipmentType[] = ["machine", "cable", "smith"];
+
+// Equipment that is universal (available at any gym)
+export const UNIVERSAL_EQUIPMENT: EquipmentType[] = ["barbell", "dumbbell", "bodyweight", "plate"];
+
+// Helper to check if equipment is gym-specific
+export function isGymSpecificEquipment(equipment: string): boolean {
+  return GYM_SPECIFIC_EQUIPMENT.includes(equipment as EquipmentType);
+}
