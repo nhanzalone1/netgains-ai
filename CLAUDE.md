@@ -130,17 +130,22 @@ Recent workouts (last 7 days):
 ```
 
 ### Coach Behavioral Directives
-System prompt includes 13+ directives. Key ones:
+System prompt includes 20+ directives. Key ones:
 
 | Directive | Behavior |
 |-----------|----------|
+| **Action First, Science Second** | 80% actionable instructions, 20% explanation. Lead with what to do. |
+| **Response Length Matching** | Short message = short answer. 5 words in = 2-3 sentences out. |
+| **Key Memories Usage** | Always reference user's stored preferences. Never ask for info already saved. |
+| **Tier-Aware Question Efficiency** | Never send question-only messages. Combine questions with advice. |
+| **Ask Before Prescribe** | Give advice immediately when context exists. One question max at a time. |
+| **Free Tier Quality** | Same depth for all users. Natural hooks on final message of day. |
+| **Daily Cardio & Steps** | Proactive step goals (8-12k for cutting). Check in on evening convos. |
 | **Nutrition Math** | Always show explicit math: "you've had 72g, target is 171g, need 99g more" |
 | **Protein Targets** | 1g/lb bodyweight *target* during cuts (not minimum) |
 | **Calorie Floor** | Soft: 1500W/1800M with warning. Hard stop: 1000W/1200M |
 | **Injury Protocol** | Stop → modify → see pro. Never diagnose. |
-| **Rest Day Recognition** | Flag if same muscle group hit multiple days without rest |
-| **Strength as Progress** | Call out lift gains when scale stalls |
-| **Don't Repeat** | Reference earlier advice, don't restate |
+| **Capitalization** | Always capitalize first word of every sentence. |
 
 Full list in `getSystemPrompt()` in `api/chat/route.ts`.
 
