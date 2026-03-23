@@ -1391,23 +1391,12 @@ export function WorkoutSession({
                           {getSetLabel()}
                         </span>
 
-                        {/* Weight Input with backdrop for previous values */}
+                        {/* Weight Input - uses placeholder for previous values */}
                         <div className="relative">
                           {exercise.equipment === "bodyweight" && (
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-400 pointer-events-none z-10">
                               +
                             </span>
-                          )}
-                          {/* Backdrop for previous weight */}
-                          {set.previousWeight && !set.weight && (
-                            <div
-                              className={`absolute inset-0 rounded-lg py-2.5 text-right font-semibold pointer-events-none flex items-center justify-end ${
-                                exercise.equipment === "bodyweight" ? "pl-10 pr-10" : "pl-3 pr-10"
-                              }`}
-                              style={{ color: "rgba(255, 255, 255, 0.25)" }}
-                            >
-                              {set.previousWeight}
-                            </div>
                           )}
                           <input
                             type="text"
@@ -1416,10 +1405,10 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "weight", e.target.value)
                             }
-                            placeholder={set.previousWeight ? "" : (exercise.equipment === "bodyweight" ? "0" : "—")}
-                            className={`w-full rounded-lg py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] bg-transparent relative z-[1] ${
+                            placeholder={set.previousWeight || (exercise.equipment === "bodyweight" ? "0" : "—")}
+                            className={`w-full rounded-lg py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
                               exercise.equipment === "bodyweight" ? "pl-10 pr-10" : "pl-3 pr-10"
-                            }`}
+                            } ${set.previousWeight ? "placeholder:text-white/30 placeholder:font-semibold" : "placeholder:text-gray-600"}`}
                             style={{ background: variantStyle.inputBg }}
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 pointer-events-none z-10">
@@ -1427,17 +1416,8 @@ export function WorkoutSession({
                           </span>
                         </div>
 
-                        {/* Reps/Secs Input with backdrop for previous values */}
+                        {/* Reps/Secs Input - uses placeholder for previous values */}
                         <div className="relative">
-                          {/* Backdrop for previous reps */}
-                          {set.previousReps && !set.reps && (
-                            <div
-                              className="absolute inset-0 rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold pointer-events-none flex items-center justify-end"
-                              style={{ color: "rgba(255, 255, 255, 0.25)" }}
-                            >
-                              {set.previousReps}
-                            </div>
-                          )}
                           <input
                             type="text"
                             inputMode="numeric"
@@ -1445,9 +1425,13 @@ export function WorkoutSession({
                             onChange={(e) =>
                               updateSet(exercise.id, set.id, "reps", e.target.value)
                             }
-                            placeholder={set.previousReps ? "" : (set.targetReps || "—")}
-                            className={`w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] bg-transparent relative z-[1] ${
-                              set.targetReps && !set.previousReps ? "placeholder:text-cyan-500/60" : ""
+                            placeholder={set.previousReps || set.targetReps || "—"}
+                            className={`w-full rounded-lg pl-3 pr-12 py-2.5 text-right font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px] ${
+                              set.previousReps
+                                ? "placeholder:text-white/30 placeholder:font-semibold"
+                                : set.targetReps
+                                  ? "placeholder:text-cyan-500/60"
+                                  : "placeholder:text-gray-600"
                             }`}
                             style={{ background: variantStyle.inputBg }}
                           />

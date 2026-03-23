@@ -122,6 +122,10 @@ export default function LogPage() {
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Delete confirmation modals
+  const [deleteLocationId, setDeleteLocationId] = useState<string | null>(null);
+  const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
+
   // Load locations on mount
   useEffect(() => {
     if (!user) return;
@@ -273,11 +277,10 @@ export default function LogPage() {
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    if (!confirm("Delete this gym and all its splits?")) return;
-
     await supabase.from("locations").delete().eq("id", locationId);
     setLocations((prev) => prev.filter((l) => l.id !== locationId));
     setLocationMenuId(null);
+    setDeleteLocationId(null);
   };
 
   const handleAddFolder = async () => {
@@ -316,10 +319,10 @@ export default function LogPage() {
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm("Delete this split and all its exercises?")) return;
-
     await supabase.from("folders").delete().eq("id", folderId);
     setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    setDeleteFolderId(null);
+    setEditingFolder(null);
   };
 
   const handleEditFolder = (folder: FolderWithCount) => {
@@ -815,8 +818,7 @@ export default function LogPage() {
             <button
               onClick={() => {
                 if (editingFolder) {
-                  handleDeleteFolder(editingFolder.id);
-                  setEditingFolder(null);
+                  setDeleteFolderId(editingFolder.id);
                 }
               }}
               className="w-full py-3 rounded-xl text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors font-medium"
@@ -954,7 +956,10 @@ export default function LogPage() {
                     }}
                   >
                     <button
-                      onClick={() => handleDeleteLocation(location.id)}
+                      onClick={() => {
+                        setDeleteLocationId(location.id);
+                        setLocationMenuId(null);
+                      }}
                       className="flex items-center gap-2 px-4 py-3 text-sm text-destructive hover:bg-destructive/10 w-full"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1025,6 +1030,122 @@ export default function LogPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Delete Location Confirmation Modal */}
+      <AnimatePresence>
+        {deleteLocationId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setDeleteLocationId(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl p-6"
+              style={{
+                background: "var(--card)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              <div className="flex justify-center mb-4">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(239, 68, 68, 0.15)" }}
+                >
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+              </div>
+
+              <h2 className="text-xl font-bold text-center text-white mb-2">
+                Delete Gym?
+              </h2>
+
+              <p className="text-sm text-gray-400 text-center mb-6">
+                This will delete the gym and all its splits. This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteLocationId(null)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-white transition-colors"
+                  style={{ background: "rgba(55, 55, 65, 0.8)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteLocation(deleteLocationId)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Folder/Split Confirmation Modal */}
+      <AnimatePresence>
+        {deleteFolderId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setDeleteFolderId(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl p-6"
+              style={{
+                background: "var(--card)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              <div className="flex justify-center mb-4">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(239, 68, 68, 0.15)" }}
+                >
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+              </div>
+
+              <h2 className="text-xl font-bold text-center text-white mb-2">
+                Delete Split?
+              </h2>
+
+              <p className="text-sm text-gray-400 text-center mb-6">
+                This will delete the split and all its exercises. This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteFolderId(null)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-white transition-colors"
+                  style={{ background: "rgba(55, 55, 65, 0.8)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteFolder(deleteFolderId)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
