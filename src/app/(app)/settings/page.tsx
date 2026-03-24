@@ -172,11 +172,20 @@ export default function SettingsPage() {
   const saveSplitEdit = async () => {
     if (editingSplitIndex === null || !user?.id) return;
 
+    const oldName = splitRotation[editingSplitIndex];
+    const newName = editingSplitValue.trim() || oldName;
+
+    if (oldName === newName) {
+      setEditingSplitIndex(null);
+      return;
+    }
+
     const newRotation = [...splitRotation];
-    newRotation[editingSplitIndex] = editingSplitValue.trim() || splitRotation[editingSplitIndex];
+    newRotation[editingSplitIndex] = newName;
 
     setSavingSplit(true);
     try {
+      // Update coach_memory
       const { data: existing } = await supabase
         .from("coach_memory")
         .select("id")
@@ -196,6 +205,13 @@ export default function SettingsPage() {
           value: JSON.stringify(newRotation),
         });
       }
+
+      // Sync to folders: Rename all folders with the old name across all gyms
+      await supabase
+        .from("folders")
+        .update({ name: newName })
+        .eq("user_id", user.id)
+        .eq("name", oldName);
 
       await supabase.from("coach_memory").upsert(
         {
@@ -262,10 +278,12 @@ export default function SettingsPage() {
   const removeSplitDay = async (index: number) => {
     if (!user?.id || splitRotation.length <= 1) return;
 
+    const dayName = splitRotation[index];
     const newRotation = splitRotation.filter((_, i) => i !== index);
 
     setSavingSplit(true);
     try {
+      // Update coach_memory
       const { data: existing } = await supabase
         .from("coach_memory")
         .select("id")
@@ -278,6 +296,31 @@ export default function SettingsPage() {
           .from("coach_memory")
           .update({ value: JSON.stringify(newRotation) })
           .eq("id", existing.id);
+      }
+
+      // Sync to folders: First detach exercises, then delete folders with this name across all gyms
+      // Get folder IDs first
+      const { data: foldersToDelete } = await supabase
+        .from("folders")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("name", dayName);
+
+      if (foldersToDelete && foldersToDelete.length > 0) {
+        const folderIds = foldersToDelete.map(f => f.id);
+
+        // Detach exercises from these folders (prevent cascade delete)
+        await supabase
+          .from("exercise_templates")
+          .update({ folder_id: null })
+          .in("folder_id", folderIds);
+
+        // Delete the folders
+        await supabase
+          .from("folders")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("name", dayName);
       }
 
       setSplitRotation(newRotation);
