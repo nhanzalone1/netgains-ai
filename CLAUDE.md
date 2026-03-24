@@ -230,6 +230,28 @@ index.upsert({ records: vectors })
 ### Auto-Triggers
 After meal/workout save, Haiku generates proactive message → badge on Coach tab.
 
+**Post-Workout Trigger (`/api/coach-trigger`):**
+- Fires after user ends a workout (called from `log/page.tsx`)
+- Includes full context: exercise names, top sets (weight × reps), PRs detected
+- PR detection compares current workout to historical best (by Epley 1RM formula)
+- Prompt instructs coach to celebrate PRs and suggest cardio with exact parameters
+- Message saved to `chat_messages` table, triggers `coach-message-added` event
+
+**Coach Tab Message Refresh:**
+- Listens for `coach-message-added` custom event to reload messages immediately
+- On mount, refreshes messages after 500ms delay to catch in-flight triggers
+- Streaming state cached to sessionStorage on tab switch, restored on return
+- Messages never lost during mid-stream tab navigation
+
+**Cardio Recommendations:**
+Coach must use exact parameters from `key_memories.preferences`:
+- Speed (e.g., 3.2 mph)
+- Incline (e.g., 8-10%)
+- Duration (e.g., 25 minutes)
+- Heart rate zone (e.g., zone 2)
+
+If cardio preferences not saved, coach asks once and saves to key_memories.
+
 ### Meal Type Classification
 AI classifies food logs as meal vs snack based on food content, not just time:
 
