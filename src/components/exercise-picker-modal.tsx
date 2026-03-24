@@ -518,12 +518,27 @@ export function ExercisePickerModal({
       groups[equip].push(ex);
     });
 
-    return EQUIPMENT_ORDER
+    // Start with standard equipment in order
+    const result = EQUIPMENT_ORDER
       .filter(eq => groups[eq]?.length > 0)
       .map(eq => ({
         equipment: eq,
         exercises: groups[eq].sort((a, b) => a.name.localeCompare(b.name))
       }));
+
+    // Add any custom equipment types not in the standard list
+    const customEquipment = Object.keys(groups)
+      .filter(eq => !EQUIPMENT_ORDER.includes(eq) && groups[eq]?.length > 0)
+      .sort();
+
+    customEquipment.forEach(eq => {
+      result.push({
+        equipment: eq,
+        exercises: groups[eq].sort((a, b) => a.name.localeCompare(b.name))
+      });
+    });
+
+    return result;
   }, [filteredExercises]);
 
   // Group exercises by muscle group (for "All" tab)
