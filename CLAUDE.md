@@ -298,6 +298,12 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 - `is_gym_specific: false` — barbell, dumbbell, bodyweight, plate (available everywhere)
 - `gym_id` — FK to locations table (which gym this exercise belongs to)
 
+**Custom Equipment Types:**
+- Users can create exercises with custom equipment names (e.g., "E-Gym", "Hammer Strength")
+- Standard equipment order: barbell, dumbbell, cable, machine, plate, bodyweight, smith
+- Custom equipment appears after standard types, sorted alphabetically
+- Custom equipment gets pink badge color (`#ec4899`)
+
 **Split → Muscle Group Mapping:**
 - `split_muscle_groups` table maps folders (split days) to muscle groups
 - When user opens a split, exercises are filtered by matching muscle groups
