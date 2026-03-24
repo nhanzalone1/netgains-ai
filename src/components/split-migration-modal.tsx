@@ -305,30 +305,83 @@ export function SplitMigrationModal({
         }
 
         // Create split_muscle_groups mapping
-        await apiFetch("/api/split-muscle-groups", {
+        const response = await apiFetch("/api/split-muscle-groups", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            folderId: folder.id,
+            folderId: String(folder.id), // Ensure string type
             muscleGroups: day.muscleGroups,
           }),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("[SplitMigration] Failed to save muscle groups for", day.name, errorData);
+        }
       }
 
       // Sync to Settings: Update coach_memory.split_rotation so Settings page reflects the change
       const newRotation = activeSplit.days.map(d => d.name);
-      await supabase.from("coach_memory").upsert(
-        {
-          user_id: userId,
-          key: "split_rotation",
-          value: JSON.stringify(newRotation),
-        },
-        { onConflict: "user_id,key" }
-      );
+      console.log("[SplitMigration] Updating split_rotation to:", newRotation);
+
+      // Check if split_rotation exists first
+      const { data: existingRotation } = await supabase
+        .from("coach_memory")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("key", "split_rotation")
+        .maybeSingle();
+
+      if (existingRotation) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from("coach_memory")
+          .update({ value: JSON.stringify(newRotation) })
+          .eq("id", existingRotation.id);
+
+        if (updateError) {
+          console.error("[SplitMigration] Failed to update split_rotation:", updateError);
+        } else {
+          console.log("[SplitMigration] Successfully updated split_rotation");
+        }
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from("coach_memory")
+          .insert({
+            user_id: userId,
+            key: "split_rotation",
+            value: JSON.stringify(newRotation),
+          });
+
+        if (insertError) {
+          console.error("[SplitMigration] Failed to insert split_rotation:", insertError);
+        } else {
+          console.log("[SplitMigration] Successfully inserted split_rotation");
+        }
+      }
 
       // Also notify coach of the change
-      await supabase.from("coach_memory").upsert(
-        {
+      const { data: existingChanges } = await supabase
+        .from("coach_memory")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("key", "pending_changes")
+        .maybeSingle();
+
+      if (existingChanges) {
+        await supabase
+          .from("coach_memory")
+          .update({
+            value: JSON.stringify({
+              type: "split",
+              newRotation: newRotation,
+              restructured: true,
+            }),
+          })
+          .eq("id", existingChanges.id);
+      } else {
+        await supabase.from("coach_memory").insert({
           user_id: userId,
           key: "pending_changes",
           value: JSON.stringify({
@@ -336,9 +389,8 @@ export function SplitMigrationModal({
             newRotation: newRotation,
             restructured: true,
           }),
-        },
-        { onConflict: "user_id,key" }
-      );
+        });
+      }
 
       onComplete();
       onClose();

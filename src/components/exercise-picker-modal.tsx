@@ -236,6 +236,8 @@ export function ExercisePickerModal({
       .eq("key", "split_rotation")
       .maybeSingle();
 
+    console.log("[ExercisePicker] Loaded split_rotation from DB:", splitData?.value);
+
     if (!splitData?.value) {
       // No split defined, use folder name for context
       setSplitTabs(["Recent", folderName || "All", "All"]);
@@ -244,6 +246,7 @@ export function ExercisePickerModal({
 
     try {
       const splitRotation = JSON.parse(splitData.value) as string[];
+      console.log("[ExercisePicker] Parsed split rotation:", splitRotation);
       // Filter out "Rest" days
       const trainingDays = splitRotation.filter(day => day.toLowerCase() !== "rest");
 
