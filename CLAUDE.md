@@ -309,6 +309,32 @@ Goals accept variations: cut→cutting, bulk→bulking, maintain→maintaining. 
 - When user opens a split, exercises are filtered by matching muscle groups
 - Split editor modal (`src/components/split-editor-modal.tsx`) lets users assign muscle groups to splits
 
+**Split Migration / Restructuring:**
+When users want to change their entire training split (e.g., Upper/Lower to PPL):
+
+1. **Trigger:** "Restructure Split" button in gym detail view (Log → select gym)
+2. **Preset Options:** PPL, Upper/Lower, Bro Split (5-day), Full Body
+3. **Custom Option:** Create custom days with custom muscle group assignments
+4. **Preview:** Shows which exercises will appear in each new split day based on `muscle_group[]` overlap
+5. **Exercise Exclusion:** Tap any exercise in preview to exclude it from migration
+6. **Confirmation:** Warning that history/PRs are preserved (only organizational view changes)
+
+**On Migration:**
+- Detaches `exercise_templates` from folders (sets `folder_id = null`) to prevent cascade delete
+- Deletes old folders
+- Creates new folders with proper `split_muscle_groups` mappings
+- Updates `coach_memory.split_rotation` so Settings page syncs
+- Notifies coach via `pending_changes`
+
+**Bidirectional Sync:**
+- Migration → Settings: `coach_memory.split_rotation` updated automatically
+- Settings → Log: Renaming/removing days in Settings updates all folders across all gyms
+
+**Files:**
+- `src/components/split-migration-modal.tsx` — Migration wizard UI
+- `src/app/(app)/log/page.tsx` — "Restructure Split" button and modal integration
+- `src/app/(app)/settings/page.tsx` — Syncs edits to folders table
+
 **Files:**
 - `src/app/api/exercise/categorize/route.ts` — AI categorization with detailed prompt rules
 - `src/app/api/exercise/recategorize-all/route.ts` — Batch recategorization (skips failures)
