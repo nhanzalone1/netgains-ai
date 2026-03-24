@@ -41,8 +41,8 @@ export async function POST(req: Request) {
     console.log('[CoachTrigger API] Using date:', today, 'from client:', !!context.localDate);
 
     // Fetch user context in parallel (including recent conversation and today's workout)
-    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult, todayWorkoutResult] = await Promise.all([
-      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity').eq('id', user.id).maybeSingle(),
+    const [profileResult, memoriesResult, todayMealsResult, nutritionGoalsResult, recentMessagesResult, todayWorkoutResult, keyMemoriesResult] = await Promise.all([
+      supabase.from('profiles').select('height_inches, weight_lbs, goal, coaching_intensity, key_memories').eq('id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('key, value').eq('user_id', user.id),
       supabase.from('meals').select('food_name, calories, protein, carbs, fat, created_at').eq('user_id', user.id).eq('date', today).eq('consumed', true).limit(50),
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
@@ -50,6 +50,8 @@ export async function POST(req: Request) {
       supabase.from('chat_messages').select('content, role').eq('user_id', user.id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(3),
       // Check if user already worked out today
       supabase.from('workouts').select('id, notes, created_at').eq('user_id', user.id).eq('date', today).order('created_at', { ascending: false }).limit(1),
+      // Fetch key_memories for cardio preferences
+      supabase.from('profiles').select('key_memories').eq('id', user.id).maybeSingle(),
     ]);
 
     const profile = profileResult.data;
@@ -58,10 +60,85 @@ export async function POST(req: Request) {
     const nutritionGoals = nutritionGoalsResult.data || DEFAULT_NUTRITION_GOALS;
     const recentMessages = recentMessagesResult.data || [];
     const todayWorkout = todayWorkoutResult.data?.[0] || null;
+    const keyMemories = (profile?.key_memories || {}) as Record<string, string>;
+
+    // Extract cardio preferences from key_memories
+    const cardioPreferences = keyMemories.preferences?.toLowerCase().includes('cardio')
+      ? keyMemories.preferences
+      : null;
 
     // Determine if user already trained today
     const alreadyTrainedToday = !!todayWorkout;
     console.log('[CoachTrigger API] Already trained today:', alreadyTrainedToday, todayWorkout?.notes);
+
+    // For workout_completed triggers, fetch exercise details and check for PRs
+    const workoutExercises: { name: string; topSet?: { weight: number; reps: number } }[] = [];
+    const prsHit: { exercise: string; weight: number; reps: number }[] = [];
+
+    if (triggerType === 'workout_completed' && context.workoutId) {
+      // Fetch exercises and sets for this workout
+      const { data: exercises } = await supabase
+        .from('exercises')
+        .select('id, name, equipment')
+        .eq('workout_id', context.workoutId)
+        .order('order_index', { ascending: true });
+
+      if (exercises && exercises.length > 0) {
+        // Fetch all sets for these exercises
+        const exerciseIds = exercises.map(e => e.id);
+        const { data: sets } = await supabase
+          .from('sets')
+          .select('exercise_id, weight, reps, variant')
+          .in('exercise_id', exerciseIds)
+          .neq('variant', 'warmup'); // Exclude warmup sets
+
+        // Group sets by exercise and find top set (by estimated 1RM: weight * (1 + reps/30))
+        const setsByExercise = new Map<string, { weight: number; reps: number; e1rm: number }[]>();
+        for (const set of (sets || [])) {
+          const e1rm = set.weight * (1 + set.reps / 30);
+          if (!setsByExercise.has(set.exercise_id)) {
+            setsByExercise.set(set.exercise_id, []);
+          }
+          setsByExercise.get(set.exercise_id)!.push({ weight: set.weight, reps: set.reps, e1rm });
+        }
+
+        // Build exercise list with top sets
+        for (const ex of exercises) {
+          const exSets = setsByExercise.get(ex.id) || [];
+          const topSet = exSets.sort((a, b) => b.e1rm - a.e1rm)[0];
+          workoutExercises.push({
+            name: ex.name,
+            topSet: topSet ? { weight: topSet.weight, reps: topSet.reps } : undefined,
+          });
+
+          // Check if this is a PR (compare to previous best)
+          if (topSet) {
+            const { data: previousBest } = await supabase
+              .from('sets')
+              .select('weight, reps, exercises!inner(name, equipment, workout_id)')
+              .eq('exercises.name', ex.name)
+              .eq('exercises.equipment', ex.equipment)
+              .neq('exercises.workout_id', context.workoutId) // Exclude current workout
+              .neq('variant', 'warmup')
+              .order('weight', { ascending: false })
+              .limit(10);
+
+            // Calculate best previous e1rm
+            let bestPreviousE1rm = 0;
+            for (const prev of (previousBest || [])) {
+              const prevE1rm = prev.weight * (1 + prev.reps / 30);
+              if (prevE1rm > bestPreviousE1rm) bestPreviousE1rm = prevE1rm;
+            }
+
+            // If current top set beats previous best, it's a PR
+            if (topSet.e1rm > bestPreviousE1rm && bestPreviousE1rm > 0) {
+              prsHit.push({ exercise: ex.name, weight: topSet.weight, reps: topSet.reps });
+            }
+          }
+        }
+      }
+      console.log('[CoachTrigger API] Workout exercises:', workoutExercises.length, 'PRs hit:', prsHit.length);
+    }
 
     // Build recent conversation context (reversed to chronological order)
     const recentConversation = recentMessages.reverse().map(m => m.content).join('\n---\n');
@@ -191,8 +268,26 @@ RULES:
 - Keep it punchy and direct. 2-3 sentences max.`;
     } else {
       // workout_completed
-      const cardioLine = context.cardioNotes ? `\n- Cardio: ${context.cardioNotes}` : '';
-      prompt = `You are Coach, an elite fitness trainer. The user just finished a workout. Generate a SHORT (2-3 sentences max) post-workout directive.
+      const cardioLine = context.cardioNotes ? `\n- Cardio completed: ${context.cardioNotes}` : '';
+
+      // Build exercise summary with top sets
+      const exerciseSummary = workoutExercises.length > 0
+        ? workoutExercises.map(ex =>
+            ex.topSet ? `${ex.name}: ${ex.topSet.weight}lbs × ${ex.topSet.reps}` : ex.name
+          ).join(', ')
+        : (context.exerciseNames?.join(', ') || `${context.exerciseCount || 'Multiple'} exercises`);
+
+      // Build PR callout
+      const prSummary = prsHit.length > 0
+        ? `\n\nPRs HIT THIS SESSION:\n${prsHit.map(pr => `- ${pr.exercise}: ${pr.weight}lbs × ${pr.reps} (NEW PR!)`).join('\n')}`
+        : '';
+
+      // Build cardio recommendation based on key_memories
+      const cardioRecommendation = cardioPreferences
+        ? `\n\nUSER'S CARDIO PREFERENCES (from key_memories): ${cardioPreferences}\nUse these EXACT parameters when suggesting post-workout cardio.`
+        : `\n\nNo cardio preferences saved yet. If suggesting cardio, ask for their preferred type (incline walk, stairmaster, etc.) and parameters (speed, incline, duration, heart rate zone) so you can save it.`;
+
+      prompt = `You are Coach, an elite fitness trainer. The user just finished a workout. Generate a SHORT (3-4 sentences max) post-workout directive.
 
 USER CONTEXT:
 - Name: ${userName}
@@ -201,20 +296,21 @@ USER CONTEXT:
 
 WORKOUT COMPLETED:
 - ${context.workoutName || 'Training session'}
-- ${context.exerciseCount || 'Multiple'} exercises${cardioLine}
+- Exercises: ${exerciseSummary}${cardioLine}${prSummary}
 
 TODAY'S NUTRITION SO FAR:
 - Consumed: ${todayTotals.calories} cal, ${todayTotals.protein}g protein
 - Goals: ${nutritionGoals.calories} cal, ${nutritionGoals.protein}g protein
-
-${foodStaples ? `USER'S FOOD STAPLES: ${foodStaples}` : ''}
+${cardioRecommendation}
+${foodStaples ? `\nUSER'S FOOD STAPLES: ${foodStaples}` : ''}
 ${splitRotation ? `SPLIT ROTATION: ${splitRotation}` : ''}
 
 RULES:
-1. React to the workout completion (one short line)${context.cardioNotes ? ' — acknowledge the cardio they did' : ''}
+1. React to the workout — reference specific exercises they did${prsHit.length > 0 ? '. CELEBRATE THE PR(S)!' : ''}
 2. Tell them their post-workout window is open — give EXACT protein target (40-50g) and timing
-3. End with: "next up: [specific recovery meal] — [biological reason]"
-4. Keep it punchy and direct. This is a critical recovery moment.`;
+3. ${profile?.goal === 'cutting' ? 'For cutting: suggest steady state cardio with EXACT parameters from their preferences (or ask for preferences if not saved)' : 'Keep cardio brief if bulking'}
+4. End with: "next up: [specific recovery meal] — [biological reason]"
+5. Keep it punchy and direct. This is a critical recovery moment.`;
     }
 
     const anthropic = new Anthropic();

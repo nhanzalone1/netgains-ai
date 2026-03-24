@@ -265,6 +265,7 @@ export default function CoachPage() {
   const hasGeneratedOpeningRef = useRef(false);
   const hasLoadedFromDBRef = useRef(false); // Track if we've loaded from DB this session
   const isAutoOpeningRef = useRef(false); // Track if auto-opening is in progress (blocks DB reload)
+  const streamingMessageIdRef = useRef<string | null>(null); // Track the ID of the currently streaming message
 
   // Timeout refs for cleanup (prevent memory leaks)
   const keyboardScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -471,6 +472,9 @@ export default function CoachPage() {
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
 
+    // Track the streaming message ID
+    streamingMessageIdRef.current = assistantMessageId;
+
     if (reader) {
       try {
         while (true) {
@@ -504,9 +508,20 @@ export default function CoachPage() {
         }
         console.error("Stream reading error:", error);
         throw error;
+      } finally {
+        // Clear streaming message ID when done
+        streamingMessageIdRef.current = null;
+        // Clear any cached streaming message since we completed
+        if (user?.id) {
+          try {
+            sessionStorage.removeItem(`netgains-streaming-message-${user.id}`);
+          } catch {
+            // Ignore sessionStorage errors
+          }
+        }
       }
     }
-  }, []);
+  }, [user?.id]);
 
   // Generate auto-opening message from coach using hidden trigger
   const generateAutoOpening = useCallback(async () => {
@@ -657,6 +672,26 @@ export default function CoachPage() {
       const dbMessages = await loadMessagesFromDB(user.id);
       console.log(">>> Loaded", dbMessages.length, "messages from DB <<<");
 
+      // Check for cached streaming message (from tab switch during streaming)
+      let cachedStreamingMessage: { id: string; content: string; timestamp: number } | null = null;
+      try {
+        const cached = sessionStorage.getItem(`netgains-streaming-message-${user.id}`);
+        if (cached) {
+          cachedStreamingMessage = JSON.parse(cached);
+          // Only use cache if it's less than 5 minutes old
+          const cacheAge = Date.now() - (cachedStreamingMessage?.timestamp || 0);
+          if (cacheAge > 5 * 60 * 1000) {
+            console.log('[Coach] Cached message too old, ignoring');
+            cachedStreamingMessage = null;
+            sessionStorage.removeItem(`netgains-streaming-message-${user.id}`);
+          } else {
+            console.log('[Coach] Found cached streaming message:', cachedStreamingMessage?.content?.substring(0, 50));
+          }
+        }
+      } catch (e) {
+        console.error('[Coach] Failed to read cached message:', e);
+      }
+
       // Initialize tracking refs with loaded messages so save effect doesn't re-save them
       lastSavedContentRef.current.clear();
       for (const msg of dbMessages) {
@@ -666,6 +701,29 @@ export default function CoachPage() {
       // If we have messages, show them
       if (dbMessages.length > 0) {
         console.log(">>> Messages exist in DB, showing them <<<");
+
+        // If there's a cached streaming message, merge it with DB messages
+        if (cachedStreamingMessage) {
+          const existingMsg = dbMessages.find(m => m.id === cachedStreamingMessage!.id);
+          if (existingMsg) {
+            // If DB has the message but with less content, use cached content
+            if (cachedStreamingMessage.content.length > existingMsg.content.length) {
+              console.log('[Coach] Using cached content (longer than DB)');
+              existingMsg.content = cachedStreamingMessage.content;
+            }
+          } else {
+            // Message not in DB yet, append it
+            console.log('[Coach] Appending cached message (not in DB yet)');
+            dbMessages.push({
+              id: cachedStreamingMessage.id,
+              role: 'assistant' as const,
+              content: cachedStreamingMessage.content,
+            });
+          }
+          // Clear the cache after using it
+          sessionStorage.removeItem(`netgains-streaming-message-${user.id}`);
+        }
+
         setMessages(dbMessages);
         setMessagesLoaded(true);
         return;
@@ -684,6 +742,40 @@ export default function CoachPage() {
 
     loadMessages();
   }, [user?.id]);
+
+  // Refresh messages on mount to catch any new trigger messages
+  // This handles the case where user navigates from Log -> Coach after ending a workout
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Small delay to allow any in-flight trigger saves to complete
+    const refreshTimer = setTimeout(async () => {
+      // Don't refresh if we're streaming or auto-opening
+      if (isLoadingRef.current || isAutoOpeningRef.current) return;
+
+      console.log('[Coach] Mount refresh - checking for new messages');
+      const dbMessages = await loadMessagesFromDB(user.id);
+
+      // Only update if we have more messages than currently shown
+      // This prevents overwriting in-progress streams
+      setMessages(prev => {
+        if (dbMessages.length > prev.length) {
+          console.log('[Coach] Found new messages, updating');
+          // Update tracking refs
+          for (const msg of dbMessages) {
+            if (!lastSavedContentRef.current.has(msg.id)) {
+              lastSavedContentRef.current.set(msg.id, msg.content);
+            }
+          }
+          return dbMessages;
+        }
+        return prev;
+      });
+    }, 500);
+
+    return () => clearTimeout(refreshTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps = runs once on mount
 
   // Auto-scroll to bottom when messages finish loading
   useEffect(() => {
@@ -760,13 +852,35 @@ export default function CoachPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messagesLoaded, user?.id]);
 
-  // Cleanup: abort any pending request when component unmounts
+  // Cleanup timeouts on unmount, but DON'T abort the stream
+  // This allows the response to continue generating in the background
   useEffect(() => {
     return () => {
-      // Cleanup abort controller
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // DON'T abort the stream - let it continue in background
+      // The server will complete the response and save it to DB
+      // When user returns to this tab, they'll see the completed message
+
+      // If we're mid-stream, cache the current message content to sessionStorage
+      // so it's available immediately on remount (before DB reload)
+      if (isLoadingRef.current && user?.id) {
+        const streamingMessage = messages.find(m => m.role === 'assistant' && m.id === streamingMessageIdRef.current);
+        if (streamingMessage && streamingMessage.content) {
+          try {
+            sessionStorage.setItem(
+              `netgains-streaming-message-${user.id}`,
+              JSON.stringify({
+                id: streamingMessage.id,
+                content: streamingMessage.content,
+                timestamp: Date.now(),
+              })
+            );
+            console.log('[Coach] Cached streaming message to sessionStorage');
+          } catch (e) {
+            console.error('[Coach] Failed to cache streaming message:', e);
+          }
+        }
       }
+
       // Cleanup all pending timeouts to prevent memory leaks
       if (resetTimeoutRef.current) {
         clearTimeout(resetTimeoutRef.current);
@@ -775,7 +889,7 @@ export default function CoachPage() {
         clearTimeout(focusScrollTimeoutRef.current);
       }
     };
-  }, []);
+  }, [user?.id, messages]);
 
   // Track if we're currently streaming to avoid interruption
   const isLoadingRef = useRef(isLoading);
@@ -908,6 +1022,35 @@ export default function CoachPage() {
       }
     };
   }, [user?.id, messages, triggerMemoryExtraction]);
+
+  // Listen for new coach messages from triggers (post-workout, post-meal)
+  // This ensures the Coach tab shows new messages immediately after a trigger fires
+  useEffect(() => {
+    const handleNewCoachMessage = async () => {
+      if (!user?.id) return;
+      // Don't reload if currently streaming
+      if (isLoadingRef.current) return;
+
+      console.log('[Coach] New coach message detected, reloading from DB');
+      const dbMessages = await loadMessagesFromDB(user.id);
+
+      // Update tracking refs with loaded messages
+      for (const msg of dbMessages) {
+        if (!lastSavedContentRef.current.has(msg.id)) {
+          lastSavedContentRef.current.set(msg.id, msg.content);
+        }
+      }
+
+      setMessages(dbMessages);
+      // Scroll to bottom to show the new message
+      setTimeout(() => scrollToBottom(true), 100);
+    };
+
+    window.addEventListener('coach-message-added', handleNewCoachMessage);
+    return () => {
+      window.removeEventListener('coach-message-added', handleNewCoachMessage);
+    };
+  }, [user?.id, scrollToBottom]);
 
   // Track messages that need to be saved to DB
   const pendingSaveRef = useRef<Set<string>>(new Set());

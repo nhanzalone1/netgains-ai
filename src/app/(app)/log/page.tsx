@@ -479,11 +479,20 @@ export default function LogPage() {
       setShowSuccessModal(true);
       if (user?.id) {
         invalidateDailyBriefCache(user.id);
-        // Trigger coach post-workout directive
+        // Trigger coach post-workout directive with full context
+        const now = new Date();
         triggerCoachResponse(user.id, 'workout_completed', {
           workoutName: selectedFolder?.name || 'Training session',
           exerciseCount: validExercises.length,
+          exerciseNames: validExercises.map(ex => ex.name),
           cardioNotes: cardioNotes?.trim() || undefined,
+          localDate: formatLocalDate(now),
+          localTime: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+          localHour: now.getHours(),
+          workoutId: workoutId, // Pass workout ID so API can fetch PRs
+        }).catch((error) => {
+          // Log error but don't block the success flow
+          console.error('[CoachTrigger] Failed to trigger post-workout message:', error);
         });
       }
     } catch (err) {
