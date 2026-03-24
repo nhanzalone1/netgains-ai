@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, Check, ChevronRight, ChevronDown, AlertTriangle, Dumbbell, Info, ArrowRight } from "lucide-react";
+import { X, Check, ChevronRight, ChevronDown, AlertTriangle, Dumbbell, Info, ArrowRight, Plus, Trash2, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "@/lib/supabase/types";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup } from "@/lib/supabase/types";
 import { apiFetch } from "@/lib/capacitor";
 
 interface SplitMigrationModalProps {
@@ -23,12 +23,14 @@ interface ExerciseTemplate {
   muscle_group: MuscleGroup[];
 }
 
+interface SplitDay {
+  name: string;
+  muscleGroups: MuscleGroup[];
+}
+
 interface SplitPreset {
   name: string;
-  days: Array<{
-    name: string;
-    muscleGroups: MuscleGroup[];
-  }>;
+  days: SplitDay[];
 }
 
 // Common split presets
@@ -68,7 +70,23 @@ const SPLIT_PRESETS: SplitPreset[] = [
   },
 ];
 
-type Step = "select" | "preview" | "confirm";
+// Group muscle groups by body region for custom editor
+const MUSCLE_GROUP_SECTIONS = [
+  {
+    label: "Push",
+    groups: ["chest", "front_delt", "side_delt", "triceps"] as MuscleGroup[],
+  },
+  {
+    label: "Pull",
+    groups: ["back", "rear_delt", "biceps", "forearms"] as MuscleGroup[],
+  },
+  {
+    label: "Lower",
+    groups: ["quads", "hamstrings", "glutes", "calves", "abs"] as MuscleGroup[],
+  },
+];
+
+type Step = "select" | "custom" | "preview" | "confirm";
 
 export function SplitMigrationModal({
   open,
@@ -82,7 +100,10 @@ export function SplitMigrationModal({
 
   const [step, setStep] = useState<Step>("select");
   const [selectedPreset, setSelectedPreset] = useState<SplitPreset | null>(null);
+  const [customDays, setCustomDays] = useState<SplitDay[]>([{ name: "", muscleGroups: [] }]);
+  const [editingDayIndex, setEditingDayIndex] = useState<number | null>(null);
   const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
+  const [excludedExercises, setExcludedExercises] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
@@ -93,6 +114,9 @@ export function SplitMigrationModal({
       loadExercises();
       setStep("select");
       setSelectedPreset(null);
+      setCustomDays([{ name: "", muscleGroups: [] }]);
+      setEditingDayIndex(null);
+      setExcludedExercises(new Set());
       setExpandedDays(new Set());
     }
   }, [open]);
@@ -120,16 +144,28 @@ export function SplitMigrationModal({
     setLoading(false);
   };
 
+  // Get the active split config (preset or custom)
+  const activeSplit = useMemo(() => {
+    if (selectedPreset) return selectedPreset;
+    // Build custom preset from customDays
+    const validDays = customDays.filter(d => d.name.trim() && d.muscleGroups.length > 0);
+    if (validDays.length === 0) return null;
+    return { name: "Custom", days: validDays };
+  }, [selectedPreset, customDays]);
+
   // Group exercises by which new split day they'll appear in
   const exercisesByDay = useMemo(() => {
-    if (!selectedPreset) return new Map<string, ExerciseTemplate[]>();
+    if (!activeSplit) return new Map<string, ExerciseTemplate[]>();
 
     const grouped = new Map<string, ExerciseTemplate[]>();
     const unassigned: ExerciseTemplate[] = [];
 
     exercises.forEach((exercise) => {
+      // Skip excluded exercises
+      if (excludedExercises.has(exercise.id)) return;
+
       let assigned = false;
-      selectedPreset.days.forEach((day) => {
+      activeSplit.days.forEach((day) => {
         const hasOverlap = exercise.muscle_group?.some((mg) =>
           day.muscleGroups.includes(mg)
         );
@@ -152,12 +188,52 @@ export function SplitMigrationModal({
     }
 
     return grouped;
-  }, [selectedPreset, exercises]);
+  }, [activeSplit, exercises, excludedExercises]);
 
   const handleSelectPreset = (preset: SplitPreset) => {
     setSelectedPreset(preset);
     // Auto-expand all days for preview
     setExpandedDays(new Set(preset.days.map((d) => d.name)));
+    setStep("preview");
+  };
+
+  const handleStartCustom = () => {
+    setSelectedPreset(null);
+    setCustomDays([{ name: "", muscleGroups: [] }]);
+    setStep("custom");
+  };
+
+  const handleAddCustomDay = () => {
+    setCustomDays([...customDays, { name: "", muscleGroups: [] }]);
+    setEditingDayIndex(customDays.length);
+  };
+
+  const handleRemoveCustomDay = (index: number) => {
+    setCustomDays(customDays.filter((_, i) => i !== index));
+    if (editingDayIndex === index) setEditingDayIndex(null);
+  };
+
+  const handleUpdateDayName = (index: number, name: string) => {
+    const updated = [...customDays];
+    updated[index] = { ...updated[index], name };
+    setCustomDays(updated);
+  };
+
+  const handleToggleMuscleGroup = (dayIndex: number, group: MuscleGroup) => {
+    const updated = [...customDays];
+    const day = updated[dayIndex];
+    if (day.muscleGroups.includes(group)) {
+      day.muscleGroups = day.muscleGroups.filter(g => g !== group);
+    } else {
+      day.muscleGroups = [...day.muscleGroups, group];
+    }
+    setCustomDays(updated);
+  };
+
+  const handleCustomContinue = () => {
+    const validDays = customDays.filter(d => d.name.trim() && d.muscleGroups.length > 0);
+    if (validDays.length === 0) return;
+    setExpandedDays(new Set(validDays.map(d => d.name)));
     setStep("preview");
   };
 
@@ -173,21 +249,43 @@ export function SplitMigrationModal({
     });
   };
 
+  const toggleExcludeExercise = (exerciseId: string) => {
+    setExcludedExercises(prev => {
+      const next = new Set(prev);
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  };
+
   const handleConfirm = async () => {
-    if (!selectedPreset) return;
+    if (!activeSplit) return;
 
     setSaving(true);
     try {
-      // Delete existing folders for this location
+      // IMPORTANT: First, detach all exercise_templates from folders at this location
+      // This prevents cascade deletion when we delete folders
+      const folderIds = currentFolders.map(f => f.id);
+      if (folderIds.length > 0) {
+        await supabase
+          .from("exercise_templates")
+          .update({ folder_id: null })
+          .in("folder_id", folderIds);
+      }
+
+      // Now safe to delete existing folders for this location
       await supabase
         .from("folders")
         .delete()
         .eq("location_id", locationId)
         .eq("user_id", userId);
 
-      // Create new folders with the preset structure
-      for (let i = 0; i < selectedPreset.days.length; i++) {
-        const day = selectedPreset.days[i];
+      // Create new folders with the split structure
+      for (let i = 0; i < activeSplit.days.length; i++) {
+        const day = activeSplit.days[i];
 
         // Create folder
         const { data: folder, error: folderError } = await supabase
@@ -274,12 +372,135 @@ export function SplitMigrationModal({
             </div>
           </button>
         ))}
+
+        {/* Custom Split Option */}
+        <button
+          onClick={handleStartCustom}
+          className="w-full p-4 rounded-xl bg-white/5 border border-dashed border-white/20 hover:bg-white/10 hover:border-white/30 transition-all text-left"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-white">Custom Split</span>
+            <Plus className="w-5 h-5 text-gray-400" />
+          </div>
+          <p className="text-xs text-gray-400">
+            Create your own split structure with custom days and muscle groups
+          </p>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderCustomStep = () => (
+    <div className="flex-1 overflow-y-auto px-4 py-4">
+      <p className="text-sm text-gray-400 mb-6">
+        Create your custom split. Add days and assign muscle groups to each.
+      </p>
+
+      <div className="space-y-4">
+        {customDays.map((day, index) => {
+          const isEditing = editingDayIndex === index;
+
+          return (
+            <div
+              key={index}
+              className="rounded-xl bg-white/5 border border-white/10 overflow-hidden"
+            >
+              {/* Day Header */}
+              <div className="p-4 flex items-center gap-3">
+                <input
+                  type="text"
+                  value={day.name}
+                  onChange={(e) => handleUpdateDayName(index, e.target.value)}
+                  placeholder={`Day ${index + 1} name (e.g., Push)`}
+                  className="flex-1 bg-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#22d3ee]"
+                />
+                <button
+                  onClick={() => setEditingDayIndex(isEditing ? null : index)}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                    isEditing ? "bg-[#22d3ee] text-black" : "bg-white/10 text-gray-400"
+                  }`}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                {customDays.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveCustomDay(index)}
+                    className="w-10 h-10 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Muscle Group Selector */}
+              <AnimatePresence>
+                {isEditing && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 pb-4 space-y-3">
+                      {MUSCLE_GROUP_SECTIONS.map((section) => (
+                        <div key={section.label}>
+                          <p className="text-xs text-gray-500 mb-2">{section.label}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {section.groups.map((group) => {
+                              const isSelected = day.muscleGroups.includes(group);
+                              return (
+                                <button
+                                  key={group}
+                                  onClick={() => handleToggleMuscleGroup(index, group)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    isSelected
+                                      ? "bg-[#22d3ee] text-black"
+                                      : "bg-white/10 text-gray-400"
+                                  }`}
+                                >
+                                  {MUSCLE_GROUP_LABELS[group]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Selected muscle groups preview */}
+              {!isEditing && day.muscleGroups.length > 0 && (
+                <div className="px-4 pb-3 flex flex-wrap gap-1">
+                  {day.muscleGroups.map((mg) => (
+                    <span
+                      key={mg}
+                      className="px-2 py-0.5 rounded text-xs bg-[#22d3ee]/20 text-[#22d3ee]"
+                    >
+                      {MUSCLE_GROUP_LABELS[mg]}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Add Day Button */}
+        <button
+          onClick={handleAddCustomDay}
+          className="w-full py-3 rounded-xl border border-dashed border-white/20 text-gray-400 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Another Day
+        </button>
       </div>
     </div>
   );
 
   const renderPreviewStep = () => {
-    if (!selectedPreset) return null;
+    if (!activeSplit) return null;
 
     return (
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -289,10 +510,10 @@ export function SplitMigrationModal({
             <Dumbbell className="w-5 h-5 text-[#22d3ee] mt-0.5" />
             <div>
               <p className="text-sm font-medium text-white mb-1">
-                Reorganizing to {selectedPreset.name}
+                Reorganizing to {activeSplit.name}
               </p>
               <p className="text-xs text-gray-400">
-                Your exercises will be reorganized into your new split based on their muscle groups. Review the changes below.
+                Your exercises will be reorganized based on their muscle groups. Tap an exercise to exclude it from migration.
               </p>
             </div>
           </div>
@@ -300,7 +521,7 @@ export function SplitMigrationModal({
 
         {/* Preview Groups */}
         <div className="space-y-3">
-          {selectedPreset.days.map((day) => {
+          {activeSplit.days.map((day) => {
             const dayExercises = exercisesByDay.get(day.name) || [];
             const isExpanded = expandedDays.has(day.name);
 
@@ -340,10 +561,11 @@ export function SplitMigrationModal({
                       className="overflow-hidden"
                     >
                       <div className="px-4 pb-4 space-y-2">
-                        {dayExercises.slice(0, 10).map((exercise) => (
-                          <div
+                        {dayExercises.map((exercise) => (
+                          <button
                             key={exercise.id}
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5"
+                            onClick={() => toggleExcludeExercise(exercise.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-left"
                           >
                             <span className="text-sm text-gray-300 flex-1">
                               {exercise.name}
@@ -351,13 +573,9 @@ export function SplitMigrationModal({
                             <span className="text-xs text-gray-500 capitalize">
                               {exercise.equipment}
                             </span>
-                          </div>
+                            <X className="w-4 h-4 text-gray-500" />
+                          </button>
                         ))}
-                        {dayExercises.length > 10 && (
-                          <p className="text-xs text-gray-500 text-center py-2">
-                            +{dayExercises.length - 10} more exercises
-                          </p>
-                        )}
                       </div>
                     </motion.div>
                   )}
@@ -378,17 +596,48 @@ export function SplitMigrationModal({
             );
           })}
 
-          {/* Uncategorized exercises warning */}
-          {exercisesByDay.has("Uncategorized") && (
+          {/* Excluded exercises */}
+          {excludedExercises.size > 0 && (
             <div className="rounded-xl bg-orange-500/10 border border-orange-500/30 p-4">
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 mb-3">
                 <AlertTriangle className="w-5 h-5 text-orange-400 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-orange-300 mb-1">
+                  <p className="text-sm font-medium text-orange-300">
+                    {excludedExercises.size} exercise{excludedExercises.size !== 1 ? "s" : ""} excluded
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    These won&apos;t appear in the new split. Tap to restore.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                {exercises
+                  .filter((e) => excludedExercises.has(e.id))
+                  .map((exercise) => (
+                    <button
+                      key={exercise.id}
+                      onClick={() => toggleExcludeExercise(exercise.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-left"
+                    >
+                      <Plus className="w-4 h-4 text-orange-400" />
+                      <span className="text-sm text-gray-300">{exercise.name}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Uncategorized exercises warning */}
+          {exercisesByDay.has("Uncategorized") && (
+            <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-300 mb-1">
                     {exercisesByDay.get("Uncategorized")?.length} exercises won&apos;t appear in any split
                   </p>
                   <p className="text-xs text-gray-400">
-                    These exercises have muscle groups that don&apos;t match the new split. You can categorize them later in the exercise picker.
+                    These exercises have muscle groups that don&apos;t match the new split. You can recategorize them later.
                   </p>
                 </div>
               </div>
@@ -400,7 +649,7 @@ export function SplitMigrationModal({
   };
 
   const renderConfirmStep = () => {
-    if (!selectedPreset) return null;
+    if (!activeSplit) return null;
 
     return (
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -414,16 +663,22 @@ export function SplitMigrationModal({
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-400">New structure:</span>
-              <span className="text-white font-medium">{selectedPreset.name}</span>
+              <span className="text-white font-medium">{activeSplit.name}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-400">Split days:</span>
-              <span className="text-white font-medium">{selectedPreset.days.length}</span>
+              <span className="text-white font-medium">{activeSplit.days.length}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-400">Total exercises:</span>
-              <span className="text-white font-medium">{exercises.length}</span>
+              <span className="text-white font-medium">{exercises.length - excludedExercises.size}</span>
             </div>
+            {excludedExercises.size > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Excluded:</span>
+                <span className="text-orange-400 font-medium">{excludedExercises.size}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -473,7 +728,7 @@ export function SplitMigrationModal({
             <div className="flex-1">
               <p className="text-xs text-gray-500 mb-2">New</p>
               <div className="space-y-1.5">
-                {selectedPreset.days.map((day) => (
+                {activeSplit.days.map((day) => (
                   <div
                     key={day.name}
                     className="px-2 py-1.5 rounded-lg bg-green-500/10 text-green-300 text-xs"
@@ -488,6 +743,8 @@ export function SplitMigrationModal({
       </div>
     );
   };
+
+  const canContinueCustom = customDays.some(d => d.name.trim() && d.muscleGroups.length > 0);
 
   return (
     <AnimatePresence>
@@ -510,8 +767,10 @@ export function SplitMigrationModal({
             <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
               <button
                 onClick={() => {
-                  if (step === "preview") {
+                  if (step === "custom") {
                     setStep("select");
+                  } else if (step === "preview") {
+                    setStep(selectedPreset ? "select" : "custom");
                   } else if (step === "confirm") {
                     setStep("preview");
                   } else {
@@ -525,11 +784,13 @@ export function SplitMigrationModal({
               <div className="text-center">
                 <h1 className="text-lg font-bold text-white">
                   {step === "select" && "Change Split Structure"}
+                  {step === "custom" && "Custom Split"}
                   {step === "preview" && "Preview Changes"}
                   {step === "confirm" && "Confirm Migration"}
                 </h1>
                 <p className="text-sm text-gray-400">
                   {step === "select" && "Choose a new training split"}
+                  {step === "custom" && "Define your split days"}
                   {step === "preview" && "Review exercise assignments"}
                   {step === "confirm" && "Ready to apply changes"}
                 </p>
@@ -545,14 +806,24 @@ export function SplitMigrationModal({
             ) : (
               <>
                 {step === "select" && renderSelectStep()}
+                {step === "custom" && renderCustomStep()}
                 {step === "preview" && renderPreviewStep()}
                 {step === "confirm" && renderConfirmStep()}
               </>
             )}
 
             {/* Footer */}
-            {step !== "select" && (
+            {(step === "custom" || step === "preview" || step === "confirm") && (
               <div className="px-4 py-4 border-t border-white/10 bg-white/5">
+                {step === "custom" && (
+                  <button
+                    onClick={handleCustomContinue}
+                    disabled={!canContinueCustom}
+                    className="w-full py-3.5 rounded-xl bg-[#22d3ee] text-black font-semibold disabled:opacity-50"
+                  >
+                    Preview Exercises
+                  </button>
+                )}
                 {step === "preview" && (
                   <button
                     onClick={() => setStep("confirm")}
