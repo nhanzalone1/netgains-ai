@@ -32,6 +32,7 @@ import { WorkoutSession } from "@/components/workout-session";
 import { PendingWorkoutBanner } from "@/components/pending-workout-banner";
 import { SkeletonGymList } from "@/components/ui/skeleton";
 import { SplitEditorModal } from "@/components/split-editor-modal";
+import { SplitMigrationModal } from "@/components/split-migration-modal";
 import type {
   Location,
   Folder,
@@ -108,6 +109,9 @@ export default function LogPage() {
 
   // Split editor state
   const [splitEditorFolder, setSplitEditorFolder] = useState<FolderWithCount | null>(null);
+
+  // Split migration state
+  const [showSplitMigration, setShowSplitMigration] = useState(false);
 
   // Blur the edit input on mount to prevent mobile keyboard from popping up
   useEffect(() => {
@@ -733,6 +737,17 @@ export default function LogPage() {
               </span>
             </motion.button>
           </div>
+
+          {/* Restructure Split Button - only show if user has existing splits with exercises */}
+          {folders.length > 0 && folders.some(f => f.exercise_count > 0) && (
+            <button
+              onClick={() => setShowSplitMigration(true)}
+              className="w-full py-3 mt-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium text-gray-400 hover:text-white transition-all flex items-center justify-center gap-2"
+            >
+              <Dumbbell className="w-4 h-4" />
+              Restructure Split
+            </button>
+          )}
         </div>
 
         {/* New Split Modal */}
@@ -851,6 +866,21 @@ export default function LogPage() {
             folderName={splitEditorFolder.name}
             locationId={selectedLocation.id}
             userId={user.id}
+          />
+        )}
+
+        {/* Split Migration Modal */}
+        {user && (
+          <SplitMigrationModal
+            open={showSplitMigration}
+            onClose={() => setShowSplitMigration(false)}
+            locationId={selectedLocation.id}
+            userId={user.id}
+            currentFolders={folders}
+            onComplete={() => {
+              // Reload folders after migration
+              loadFolders(selectedLocation.id);
+            }}
           />
         )}
 
