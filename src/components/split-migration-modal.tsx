@@ -315,6 +315,31 @@ export function SplitMigrationModal({
         });
       }
 
+      // Sync to Settings: Update coach_memory.split_rotation so Settings page reflects the change
+      const newRotation = activeSplit.days.map(d => d.name);
+      await supabase.from("coach_memory").upsert(
+        {
+          user_id: userId,
+          key: "split_rotation",
+          value: JSON.stringify(newRotation),
+        },
+        { onConflict: "user_id,key" }
+      );
+
+      // Also notify coach of the change
+      await supabase.from("coach_memory").upsert(
+        {
+          user_id: userId,
+          key: "pending_changes",
+          value: JSON.stringify({
+            type: "split",
+            newRotation: newRotation,
+            restructured: true,
+          }),
+        },
+        { onConflict: "user_id,key" }
+      );
+
       onComplete();
       onClose();
     } catch (error) {
