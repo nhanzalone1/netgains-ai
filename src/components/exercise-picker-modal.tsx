@@ -220,11 +220,12 @@ export function ExercisePickerModal({
   };
 
   // Load split rotation and parse into tabs
+  // Re-fetch every time modal opens to get latest split structure
   useEffect(() => {
     if (open) {
       loadSplitTabs();
     }
-  }, [open, userId]);
+  }, [open, userId, folderId]);
 
   const loadSplitTabs = async () => {
     // Fetch user's split rotation from coach_memory

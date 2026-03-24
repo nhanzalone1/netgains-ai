@@ -738,8 +738,8 @@ export default function LogPage() {
             </motion.button>
           </div>
 
-          {/* Restructure Split Button - only show if user has existing splits with exercises */}
-          {folders.length > 0 && folders.some(f => f.exercise_count > 0) && (
+          {/* Restructure Split Button - show if user has any splits */}
+          {folders.length > 0 && (
             <button
               onClick={() => setShowSplitMigration(true)}
               className="w-full py-3 mt-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium text-gray-400 hover:text-white transition-all flex items-center justify-center gap-2"
