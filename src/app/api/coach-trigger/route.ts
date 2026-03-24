@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { formatLocalDate } from '@/lib/date-utils';
 import { AI_MODELS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
+import { isGymSpecificEquipment } from '@/lib/supabase/types';
 
 // Use Haiku for fast, cheap auto-triggers
 const TRIGGER_MODEL = AI_MODELS.DAILY_BRIEF; // claude-3-haiku-20240307
@@ -72,14 +73,15 @@ export async function POST(req: Request) {
     console.log('[CoachTrigger API] Already trained today:', alreadyTrainedToday, todayWorkout?.notes);
 
     // For workout_completed triggers, fetch exercise details and check for PRs
-    const workoutExercises: { name: string; topSet?: { weight: number; reps: number } }[] = [];
-    const prsHit: { exercise: string; weight: number; reps: number }[] = [];
+    // PRs are separated by: exercise name + equipment type + gym (for gym-specific equipment)
+    const workoutExercises: { name: string; equipment: string; topSet?: { weight: number; reps: number } }[] = [];
+    const prsHit: { exercise: string; equipment: string; weight: number; reps: number }[] = [];
 
     if (triggerType === 'workout_completed' && context.workoutId) {
-      // Fetch exercises and sets for this workout
+      // Fetch exercises and sets for this workout (include gym info for PR tracking)
       const { data: exercises } = await supabase
         .from('exercises')
-        .select('id, name, equipment')
+        .select('id, name, equipment, gym_id, is_gym_specific')
         .eq('workout_id', context.workoutId)
         .order('order_index', { ascending: true });
 
@@ -108,20 +110,31 @@ export async function POST(req: Request) {
           const topSet = exSets.sort((a, b) => b.e1rm - a.e1rm)[0];
           workoutExercises.push({
             name: ex.name,
+            equipment: ex.equipment || 'barbell',
             topSet: topSet ? { weight: topSet.weight, reps: topSet.reps } : undefined,
           });
 
-          // Check if this is a PR (compare to previous best)
+          // Check if this is a PR (compare to previous best with gym-aware logic)
           if (topSet) {
-            const { data: previousBest } = await supabase
+            const isGymSpecific = ex.is_gym_specific ?? isGymSpecificEquipment(ex.equipment || 'barbell');
+
+            // Build query for previous best - filter by name and equipment
+            let query = supabase
               .from('sets')
-              .select('weight, reps, exercises!inner(name, equipment, workout_id)')
+              .select('weight, reps, exercises!inner(name, equipment, gym_id, is_gym_specific, workout_id)')
               .eq('exercises.name', ex.name)
-              .eq('exercises.equipment', ex.equipment)
+              .eq('exercises.equipment', ex.equipment || 'barbell')
               .neq('exercises.workout_id', context.workoutId) // Exclude current workout
               .neq('variant', 'warmup')
               .order('weight', { ascending: false })
-              .limit(10);
+              .limit(20);
+
+            // For gym-specific equipment, also filter by same gym
+            if (isGymSpecific && ex.gym_id) {
+              query = query.eq('exercises.gym_id', ex.gym_id);
+            }
+
+            const { data: previousBest } = await query;
 
             // Calculate best previous e1rm
             let bestPreviousE1rm = 0;
@@ -132,7 +145,7 @@ export async function POST(req: Request) {
 
             // If current top set beats previous best, it's a PR
             if (topSet.e1rm > bestPreviousE1rm && bestPreviousE1rm > 0) {
-              prsHit.push({ exercise: ex.name, weight: topSet.weight, reps: topSet.reps });
+              prsHit.push({ exercise: ex.name, equipment: ex.equipment || 'barbell', weight: topSet.weight, reps: topSet.reps });
             }
           }
         }
@@ -277,9 +290,12 @@ RULES:
           ).join(', ')
         : (context.exerciseNames?.join(', ') || `${context.exerciseCount || 'Multiple'} exercises`);
 
-      // Build PR callout
+      // Build PR callout (include equipment type if not barbell)
       const prSummary = prsHit.length > 0
-        ? `\n\nPRs HIT THIS SESSION:\n${prsHit.map(pr => `- ${pr.exercise}: ${pr.weight}lbs × ${pr.reps} (NEW PR!)`).join('\n')}`
+        ? `\n\nPRs HIT THIS SESSION:\n${prsHit.map(pr => {
+            const equipmentStr = pr.equipment !== 'barbell' ? ` (${pr.equipment})` : '';
+            return `- ${pr.exercise}${equipmentStr}: ${pr.weight}lbs × ${pr.reps} (NEW PR!)`;
+          }).join('\n')}`
         : '';
 
       // Build cardio recommendation based on key_memories

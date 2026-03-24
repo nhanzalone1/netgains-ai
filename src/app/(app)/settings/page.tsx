@@ -33,12 +33,39 @@ const intensityOptions = [
 
 type IntensityId = (typeof intensityOptions)[number]["id"];
 
+// Deduplicate split rotation by removing consecutive duplicate patterns
+function deduplicateSplitRotation(rotation: string[]): string[] {
+  if (rotation.length === 0) return rotation;
+
+  // Try to find a repeating pattern (starting from half the array)
+  for (let patternLen = 1; patternLen <= rotation.length / 2; patternLen++) {
+    if (rotation.length % patternLen !== 0) continue;
+
+    const pattern = rotation.slice(0, patternLen);
+    let isRepeating = true;
+
+    for (let i = patternLen; i < rotation.length; i++) {
+      if (rotation[i] !== pattern[i % patternLen]) {
+        isRepeating = false;
+        break;
+      }
+    }
+
+    if (isRepeating && rotation.length > patternLen) {
+      return pattern;
+    }
+  }
+
+  return rotation;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [intensity, setIntensityState] = useState<IntensityId>("moderate");
   const [splitRotation, setSplitRotation] = useState<string[]>([]);
+  const [isRepeating, setIsRepeating] = useState(false);
   const [editingSplitIndex, setEditingSplitIndex] = useState<number | null>(null);
   const [editingSplitValue, setEditingSplitValue] = useState("");
   const [savingSplit, setSavingSplit] = useState(false);
@@ -60,7 +87,7 @@ export default function SettingsPage() {
         setIntensityState(profileData.coaching_intensity as IntensityId);
       }
 
-      // Load split rotation
+      // Load split rotation and repeating flag
       const { data: splitData } = await supabase
         .from("coach_memory")
         .select("value")
@@ -71,11 +98,33 @@ export default function SettingsPage() {
         try {
           const parsed = JSON.parse(splitData.value);
           if (Array.isArray(parsed)) {
-            setSplitRotation(parsed);
+            // Deduplicate any previously duplicated rotations
+            const deduplicated = deduplicateSplitRotation(parsed);
+            setSplitRotation(deduplicated);
+
+            // If we deduplicated, save the cleaned version
+            if (deduplicated.length !== parsed.length) {
+              await supabase
+                .from("coach_memory")
+                .update({ value: JSON.stringify(deduplicated) })
+                .eq("user_id", user.id)
+                .eq("key", "split_rotation");
+            }
           }
         } catch {
           // ignore parse errors
         }
+      }
+
+      // Load split repeating flag
+      const { data: repeatingData } = await supabase
+        .from("coach_memory")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "split_repeating")
+        .maybeSingle();
+      if (repeatingData?.value) {
+        setIsRepeating(repeatingData.value === "true");
       }
     };
     loadUserData();
@@ -173,30 +222,39 @@ export default function SettingsPage() {
     setEditingSplitValue("");
   };
 
-  const repeatSplitRotation = async () => {
+  const toggleSplitRepeating = async () => {
     if (!user?.id || splitRotation.length === 0) return;
 
-    const doubled = [...splitRotation, ...splitRotation];
+    const newValue = !isRepeating;
 
     setSavingSplit(true);
     try {
-      const { data: existing } = await supabase
-        .from("coach_memory")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("key", "split_rotation")
-        .maybeSingle();
+      await supabase.from("coach_memory").upsert(
+        {
+          user_id: user.id,
+          key: "split_repeating",
+          value: String(newValue),
+        },
+        { onConflict: "user_id,key" }
+      );
 
-      if (existing) {
-        await supabase
-          .from("coach_memory")
-          .update({ value: JSON.stringify(doubled) })
-          .eq("id", existing.id);
-      }
+      // Update pending changes so coach acknowledges
+      await supabase.from("coach_memory").upsert(
+        {
+          user_id: user.id,
+          key: "pending_changes",
+          value: JSON.stringify({
+            type: "split",
+            newRotation: splitRotation,
+            isRepeating: newValue,
+          }),
+        },
+        { onConflict: "user_id,key" }
+      );
 
-      setSplitRotation(doubled);
+      setIsRepeating(newValue);
     } catch (error) {
-      console.error("Failed to repeat split:", error);
+      console.error("Failed to toggle split repeating:", error);
     }
     setSavingSplit(false);
   };
@@ -368,6 +426,12 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="w-5 h-5 text-primary" />
               <span className="font-medium">Training Split</span>
+              {isRepeating && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs">
+                  <Repeat className="w-3 h-3" />
+                  Repeats
+                </span>
+              )}
               <span className="text-xs text-muted-foreground ml-auto">
                 {splitRotation.filter((d) => typeof d === "string" && d !== "Rest").length} days
               </span>
@@ -432,12 +496,19 @@ export default function SettingsPage() {
 
               <motion.button
                 whileTap={{ scale: 0.98 }}
-                onClick={repeatSplitRotation}
+                onClick={toggleSplitRepeating}
                 disabled={savingSplit}
-                className="w-full flex items-center justify-center gap-2 p-2 mt-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                className={`w-full flex items-center justify-center gap-2 p-2 mt-2 rounded-xl transition-colors disabled:opacity-50 ${
+                  isRepeating
+                    ? "bg-primary text-white"
+                    : "bg-primary/10 text-primary hover:bg-primary/20"
+                }`}
               >
                 <Repeat className="w-4 h-4" />
-                <span className="text-sm font-medium">Repeat Cycle</span>
+                <span className="text-sm font-medium">
+                  {isRepeating ? "Cycle Repeats" : "Repeat Cycle"}
+                </span>
+                {isRepeating && <Check className="w-4 h-4" />}
               </motion.button>
             </div>
           </GlassCard>

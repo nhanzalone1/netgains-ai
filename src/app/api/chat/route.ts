@@ -15,6 +15,7 @@ import {
 } from '@/lib/constants';
 import { retrieveRelevantMemories, RetrievedMemory } from '@/lib/memory-retrieval';
 import type { Profile, NutritionGoals } from '@/lib/supabase/types';
+import { isGymSpecificEquipment } from '@/lib/supabase/types';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -1588,13 +1589,13 @@ export async function POST(req: Request) {
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
 
-    // Get exercises for recent workouts
-    let workoutDetails: { date: string; exercises: { name: string; sets: { weight: number; reps: number }[] }[] }[] = [];
+    // Get exercises for recent workouts (including equipment and gym info for PR tracking)
+    let workoutDetails: { date: string; exercises: { name: string; equipment: string; gym_id: number | null; is_gym_specific: boolean; sets: { weight: number; reps: number; variant?: string }[] }[] }[] = [];
     if (recentWorkouts.length > 0) {
       const workoutIds = recentWorkouts.map(w => w.id);
       const { data: exercises } = await supabase
         .from('exercises')
-        .select('id, workout_id, name')
+        .select('id, workout_id, name, equipment, gym_id, is_gym_specific')
         .in('workout_id', workoutIds);
 
       if (exercises && exercises.length > 0) {
@@ -1610,6 +1611,9 @@ export async function POST(req: Request) {
             .filter(e => e.workout_id === w.id)
             .map(e => ({
               name: e.name,
+              equipment: e.equipment || 'barbell',
+              gym_id: e.gym_id,
+              is_gym_specific: e.is_gym_specific ?? isGymSpecificEquipment(e.equipment || 'barbell'),
               sets: (sets || [])
                 .filter(s => s.exercise_id === e.id)
                 .map(s => ({ weight: s.weight, reps: s.reps, variant: s.variant || 'normal' }))
@@ -1635,7 +1639,17 @@ export async function POST(req: Request) {
     }
 
     // Detect PRs from today's workout first, then yesterday's
-    const yesterdayPRs: { exercise: string; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
+    // PRs are now separated by: exercise name + equipment type + gym (for gym-specific equipment)
+    const yesterdayPRs: { exercise: string; equipment: string; gym_id?: number | null; weight: number; reps: number; previousBest: { weight: number; reps: number } | null }[] = [];
+
+    // Helper to create gym-aware PR key
+    const getPRKey = (name: string, equipment: string, gymId?: number | null, isGymSpecific?: boolean): string => {
+      const baseKey = `${name.toLowerCase()}::${equipment.toLowerCase()}`;
+      if (isGymSpecific && gymId) {
+        return `${baseKey}::gym_${gymId}`;
+      }
+      return baseKey;
+    };
 
     if (yesterdayWorkout && yesterdayWorkout.exercises.length > 0) {
       // Get all historical data for exercises done yesterday (excluding yesterday)
@@ -1650,7 +1664,7 @@ export async function POST(req: Request) {
         .order('date', { ascending: false });
 
       // Helper to get best set from yesterday for an exercise (excluding warmup sets)
-      const getYesterdayBest = (exercise: { name: string; sets: { weight: number; reps: number; variant?: string }[] }) => {
+      const getYesterdayBest = (exercise: { name: string; equipment: string; gym_id: number | null; is_gym_specific: boolean; sets: { weight: number; reps: number; variant?: string }[] }) => {
         // Filter out warmup sets - they shouldn't count for PRs
         const workingSets = exercise.sets.filter(s => s.variant !== 'warmup');
         return workingSets.reduce(
@@ -1667,9 +1681,10 @@ export async function POST(req: Request) {
       if (historicalWorkouts && historicalWorkouts.length > 0) {
         const historicalWorkoutIds = historicalWorkouts.map(w => w.id);
 
+        // Query historical exercises WITH equipment and gym info for proper PR separation
         const { data: historicalExercises } = await supabase
           .from('exercises')
-          .select('id, workout_id, name')
+          .select('id, workout_id, name, equipment, gym_id, is_gym_specific')
           .in('workout_id', historicalWorkoutIds)
           .in('name', exerciseNames);
 
@@ -1681,33 +1696,41 @@ export async function POST(req: Request) {
             .select('exercise_id, weight, reps, variant')
             .in('exercise_id', historicalExerciseIds);
 
-          // Build historical bests per exercise (excluding warmup sets from PR consideration)
+          // Build historical bests per exercise+equipment+gym (excluding warmup sets from PR consideration)
           const historicalBests: Record<string, { weight: number; reps: number }> = {};
 
           for (const exercise of historicalExercises) {
             // Filter out warmup sets - they shouldn't count for historical bests
             const exerciseSets = (historicalSets || [])
               .filter(s => s.exercise_id === exercise.id && s.variant !== 'warmup');
+
+            // Use gym-aware key for gym-specific equipment
+            const isGymSpecific = exercise.is_gym_specific ?? isGymSpecificEquipment(exercise.equipment || 'barbell');
+            const key = getPRKey(exercise.name, exercise.equipment || 'barbell', exercise.gym_id, isGymSpecific);
+
             for (const set of exerciseSets) {
-              const current = historicalBests[exercise.name];
+              const current = historicalBests[key];
               // Compare by weight first, then by reps at same weight
               if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
-                historicalBests[exercise.name] = { weight: set.weight, reps: set.reps };
+                historicalBests[key] = { weight: set.weight, reps: set.reps };
               }
             }
           }
 
-          // Check each of yesterday's exercises for PRs
+          // Check each of yesterday's exercises for PRs (using gym-aware keys)
           for (const exercise of yesterdayWorkout.exercises) {
             const yesterdayBest = getYesterdayBest(exercise);
 
             if (yesterdayBest) {
-              const historical = historicalBests[exercise.name];
+              const key = getPRKey(exercise.name, exercise.equipment, exercise.gym_id, exercise.is_gym_specific);
+              const historical = historicalBests[key];
               // It's a PR if no historical data for this exercise OR yesterday beat the historical best
               if (!historical || yesterdayBest.weight > historical.weight ||
                   (yesterdayBest.weight === historical.weight && yesterdayBest.reps > historical.reps)) {
                 yesterdayPRs.push({
                   exercise: exercise.name,
+                  equipment: exercise.equipment,
+                  gym_id: exercise.gym_id,
                   weight: yesterdayBest.weight,
                   reps: yesterdayBest.reps,
                   previousBest: historical || null,
@@ -1722,6 +1745,8 @@ export async function POST(req: Request) {
             if (yesterdayBest) {
               yesterdayPRs.push({
                 exercise: exercise.name,
+                equipment: exercise.equipment,
+                gym_id: exercise.gym_id,
                 weight: yesterdayBest.weight,
                 reps: yesterdayBest.reps,
                 previousBest: null,
@@ -1736,6 +1761,8 @@ export async function POST(req: Request) {
           if (yesterdayBest) {
             yesterdayPRs.push({
               exercise: exercise.name,
+              equipment: exercise.equipment,
+              gym_id: exercise.gym_id,
               weight: yesterdayBest.weight,
               reps: yesterdayBest.reps,
               previousBest: null,
@@ -1750,6 +1777,20 @@ export async function POST(req: Request) {
     const daysSinceLastWorkout = lastWorkoutDate
       ? Math.floor((Date.now() - new Date(lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24))
       : null;
+
+    // Fetch gym names for PR context (only if we have gym-specific PRs)
+    let gymNameMap = new Map<number, string>();
+    const gymSpecificPRs = yesterdayPRs.filter(pr => pr.gym_id);
+    if (gymSpecificPRs.length > 0) {
+      const gymIds = [...new Set(gymSpecificPRs.map(pr => pr.gym_id).filter(Boolean))];
+      const { data: gyms } = await supabase
+        .from('locations')
+        .select('id, name')
+        .in('id', gymIds);
+      if (gyms) {
+        gyms.forEach(g => gymNameMap.set(g.id, g.name));
+      }
+    }
 
     // Detect milestones (pass first PR if detected yesterday)
     const firstPR = yesterdayPRs.length > 0 ? yesterdayPRs[0] : undefined;
@@ -1915,9 +1956,13 @@ ${todayMeals.length > 0 ? `
 === YESTERDAY'S DATA (${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}) ===
 
 🏆 PERSONAL RECORDS HIT YESTERDAY:
-${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr =>
-  `- ${pr.exercise}: ${pr.weight}lbs x ${pr.reps} reps${pr.previousBest ? ` (previous best: ${pr.previousBest.weight}lbs x ${pr.previousBest.reps})` : ' (first time!)'}`
-).join('\n') : 'No PRs yesterday'}
+${yesterdayPRs.length > 0 ? yesterdayPRs.map(pr => {
+  // Include equipment type if not barbell (the default)
+  const equipmentStr = pr.equipment !== 'barbell' ? ` (${pr.equipment})` : '';
+  // Include gym name for gym-specific equipment
+  const gymStr = pr.gym_id && gymNameMap.has(pr.gym_id) ? ` @ ${gymNameMap.get(pr.gym_id)}` : '';
+  return `- ${pr.exercise}${equipmentStr}${gymStr}: ${pr.weight}lbs x ${pr.reps} reps${pr.previousBest ? ` (previous best: ${pr.previousBest.weight}lbs x ${pr.previousBest.reps})` : ' (first time!)'}`;
+}).join('\n') : 'No PRs yesterday'}
 
 Yesterday's Workout:
 ${yesterdayWorkout ? formatWorkoutCompact(yesterdayWorkout.exercises) : 'No workout logged yesterday'}
@@ -2001,7 +2046,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
       supabase.from('nutrition_goals').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'conversation_summary').maybeSingle(),
       supabase.from('coach_memory').select('value').eq('user_id', user.id).eq('key', 'summary_message_count').maybeSingle(),
-      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'name', 'injuries', 'pending_changes', 'sex']),
+      supabase.from('coach_memory').select('key, value').eq('user_id', user.id).in('key', ['training_split', 'split_rotation', 'split_repeating', 'name', 'injuries', 'pending_changes', 'sex']),
       supabase.from('workouts').select('date, notes, exercises(name)').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
       supabase.from('weigh_ins').select('weight_lbs, date').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
     ]);
@@ -2238,6 +2283,9 @@ Daily calorie target: ${nutritionGoals.calories} cal (${normalizedGoal || 'not s
       }
     }
 
+    // Check if split cycle repeats
+    const splitRepeating = keyMemories.split_repeating === 'true';
+
     // Parse pending changes (settings user updated that coach should acknowledge)
     if (keyMemories.pending_changes) {
       try {
@@ -2277,8 +2325,16 @@ Daily calorie target: ${nutritionGoals.calories} cal (${normalizedGoal || 'not s
 
         // Suggest next in rotation
         if (rotationPosition >= 0) {
-          const nextIndex = (rotationPosition + 1) % splitRotation.length;
-          todaysSuggestedWorkout = splitRotation[nextIndex];
+          const nextIndex = rotationPosition + 1;
+          if (nextIndex < splitRotation.length) {
+            todaysSuggestedWorkout = splitRotation[nextIndex];
+          } else if (splitRepeating) {
+            // Cycle repeats - wrap around to Day 1
+            todaysSuggestedWorkout = splitRotation[0];
+          } else {
+            // Cycle doesn't repeat - rotation complete
+            todaysSuggestedWorkout = 'Rotation complete (restart or choose freely)';
+          }
         } else {
           todaysSuggestedWorkout = splitRotation.find(d => d.toLowerCase() !== 'rest') || splitRotation[0];
         }
@@ -2300,10 +2356,12 @@ Briefly acknowledge this change in your response: "switched to ${pendingChanges.
 `;
       } else if (pendingChanges.type === 'split') {
         const newRotation = pendingChanges.newRotation || [];
+        const repeats = pendingChanges.isRepeating !== undefined ? pendingChanges.isRepeating : splitRepeating;
         pendingChangesSection = `
 [SETTINGS CHANGED - ACKNOWLEDGE THIS]
 User just updated their training split rotation.
-New rotation: ${newRotation.join(' → ')} (repeats)
+New rotation: ${newRotation.join(' → ')}${repeats ? ' (repeats after last day)' : ' (does not repeat)'}
+${repeats ? 'After completing the last day, the cycle starts over at Day 1.' : 'The rotation ends after the last day.'}
 Briefly acknowledge this change in your response: "got it — updated your rotation" and confirm what's scheduled next.
 [END SETTINGS CHANGED]
 `;
@@ -2329,7 +2387,7 @@ Sex: ${keyMemories.sex || 'not set'}
 Height: ${profile?.height_inches ? `${Math.floor(profile.height_inches / 12)}'${profile.height_inches % 12}"` : 'not set'}
 Weight: ${profile?.weight_lbs ? `${profile.weight_lbs} lbs` : 'not set'}
 Training split: ${keyMemories.training_split || 'not set'}
-Split rotation: ${splitRotation.length > 0 ? splitRotation.join(' → ') + ' (repeats)' : 'not set'}
+Split rotation: ${splitRotation.length > 0 ? splitRotation.join(' → ') + (splitRepeating ? ' (repeats)' : '') : 'not set'}
 ${lastWorkoutInfo ? lastWorkoutInfo : ''}
 ${todaysSuggestedWorkout ? `Today's scheduled workout: ${todaysSuggestedWorkout}${todaysSuggestedWorkout.toLowerCase() === 'rest' ? ' (Rest Day)' : ''}` : ''}
 ${keyMemories.injuries && keyMemories.injuries !== 'none' ? `Injuries: ${keyMemories.injuries}` : ''}

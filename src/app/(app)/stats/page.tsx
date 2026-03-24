@@ -24,6 +24,8 @@ import {
   Trophy,
   Scale,
   Plus,
+  MapPin,
+  Globe,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover } from "@/components/ui/popover";
 import type { ExerciseTemplate } from "@/lib/supabase/types";
-import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup } from "@/lib/supabase/types";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS, type MuscleGroup, isGymSpecificEquipment } from "@/lib/supabase/types";
 
 // Epley Formula: Est. 1RM = Weight × (1 + Reps / 30)
 const calculateEst1RM = (weight: number, reps: number): number => {
@@ -69,9 +71,15 @@ const categorizeExercise = (name: string): string => {
 // Normalize strings for consistent comparison (trim, lowercase, collapse whitespace)
 const normalizeString = (s: string): string => s.toLowerCase().trim().replace(/\s+/g, ' ');
 
-// Create composite key for grouping by name+equipment
-const getExerciseKey = (name: string, equipment: string): string => {
-  return `${normalizeString(name)}::${normalizeString(equipment)}`;
+// Create composite key for grouping by name+equipment+gym (if gym-specific)
+// Gym-specific equipment (machine, cable, smith) gets separated by gym
+// Universal equipment (barbell, dumbbell, bodyweight, plate) is combined across all gyms
+const getExerciseKey = (name: string, equipment: string, gymId?: number | null, forGymSpecific?: boolean): string => {
+  const baseKey = `${normalizeString(name)}::${normalizeString(equipment)}`;
+  if (forGymSpecific && gymId) {
+    return `${baseKey}::gym_${gymId}`;
+  }
+  return baseKey;
 };
 
 // Exercise with PR data
@@ -82,7 +90,7 @@ interface ExerciseWithPR {
   prWeight: number;
   prReps: number;
   est1RM: number;
-  gymId: string | null;
+  gymId: number | null;
   isGymSpecific: boolean;
   muscleGroup: string[] | null;
 }
@@ -231,7 +239,10 @@ export default function StatsPage() {
   // Load history when exercise is selected
   useEffect(() => {
     if (selectedExercise) {
-      loadExerciseHistory(selectedExercise.name, selectedExercise.equipment);
+      loadExerciseHistory(
+        selectedExercise.name,
+        selectedExercise.equipment
+      );
     }
   }, [selectedExercise]);
 
@@ -259,16 +270,13 @@ export default function StatsPage() {
       return;
     }
 
-    // Get all exercises with sets to calculate PRs
-    // Include gym_id for gym-specific PR tracking
+    // Get all exercises with sets to calculate PRs (combined across all gyms)
     const { data: exercises, error: exercisesError } = await supabase
       .from("exercises")
       .select(`
         id,
         name,
         equipment,
-        gym_id,
-        is_gym_specific,
         sets (
           weight,
           reps,
@@ -287,14 +295,15 @@ export default function StatsPage() {
       console.log('[Stats] Exercises loaded:', exercises?.length || 0);
     }
 
-    // Build PR map by name+equipment (universal view - combine all gyms)
+    // Build PR map by name+equipment (combined across all gyms)
     const prMap = new Map<string, { weight: number; reps: number; est1RM: number }>();
 
     (exercises || []).forEach((exercise) => {
       const sets = exercise.sets as { weight: number; reps: number; variant: string; measure_type: string }[];
-      const key = getExerciseKey(exercise.name, exercise.equipment || 'barbell');
+      const equipmentType = exercise.equipment || 'barbell';
+      const key = getExerciseKey(exercise.name, equipmentType);
 
-      // Filter out warmup sets and time-based sets (they don't count for weight PRs)
+      // Filter out warmup sets and time-based sets
       const workingSets = sets.filter(
         (s) => s.variant !== 'warmup' && s.measure_type !== 'secs'
       );
@@ -310,38 +319,29 @@ export default function StatsPage() {
       });
     });
 
-    // Group templates by name+equipment (each equipment variant gets its own entry)
+    // Build exercise entries from templates
     const exerciseMap = new Map<string, ExerciseWithPR>();
-    const typedTemplates = templates as (ExerciseTemplate & { gym_id?: number | null; is_gym_specific?: boolean; muscle_group?: string[] | null })[];
+    const typedTemplates = templates as (ExerciseTemplate & { muscle_group?: string[] | null })[];
 
     typedTemplates.forEach((template) => {
-      const isGymSpecific = template.is_gym_specific !== false;
-      const baseKey = getExerciseKey(template.name, template.equipment);
+      const key = getExerciseKey(template.name, template.equipment);
 
-      // Also try legacy keys for backwards compatibility
-      const nameWithoutEquipment = normalizeString(template.name)
-        .replace(new RegExp(`\\s*${normalizeString(template.equipment)}$`), '')
-        .trim();
-      const altKey = `${nameWithoutEquipment}::${normalizeString(template.equipment)}`;
-      const legacyKey = `${normalizeString(template.name)}::barbell`;
+      // Skip duplicates
+      if (exerciseMap.has(key)) return;
 
-      // Try all keys to find PR
-      const pr = prMap.get(baseKey) || prMap.get(altKey) || prMap.get(legacyKey);
+      const pr = prMap.get(key);
 
-      // Each name+equipment combo gets its own entry
-      if (!exerciseMap.has(baseKey)) {
-        exerciseMap.set(baseKey, {
-          id: template.id,
-          name: template.name,
-          equipment: template.equipment,
-          prWeight: pr?.weight || 0,
-          prReps: pr?.reps || 0,
-          est1RM: pr?.est1RM || 0,
-          gymId: template.gym_id || null,
-          isGymSpecific,
-          muscleGroup: template.muscle_group || null,
-        });
-      }
+      exerciseMap.set(key, {
+        id: template.id,
+        name: template.name,
+        equipment: template.equipment,
+        prWeight: pr?.weight || 0,
+        prReps: pr?.reps || 0,
+        est1RM: pr?.est1RM || 0,
+        gymId: null,
+        isGymSpecific: isGymSpecificEquipment(template.equipment),
+        muscleGroup: template.muscle_group || null,
+      });
     });
 
     setExercisesWithPR(Array.from(exerciseMap.values()));
@@ -360,11 +360,14 @@ export default function StatsPage() {
     });
   };
 
-  const loadExerciseHistory = async (exerciseName: string, exerciseEquipment: string) => {
+  const loadExerciseHistory = async (
+    exerciseName: string,
+    exerciseEquipment: string
+  ) => {
     setLoadingHistory(true);
     console.log('[Stats] Loading history for:', exerciseName, exerciseEquipment);
 
-    // Query all exercises for this user with equipment, variant, and measure_type
+    // Query all exercises for this user with equipment, variant, measure_type
     const { data: allExercises, error } = await supabase
       .from("exercises")
       .select(`
@@ -400,7 +403,7 @@ export default function StatsPage() {
     // This handles cases where template name includes equipment but DB stores them separately
     const targetNameWithoutEquipment = targetName.replace(new RegExp(`\\s*${targetEquipment}$`), '').trim();
 
-    // Filter to exercises matching name AND equipment
+    // Filter to exercises matching name AND equipment (combined across all gyms)
     // Handle legacy data where equipment was not tracked (defaults to "barbell")
     const exercises = (allExercises || []).filter((ex) => {
       const exName = normalizeString(ex.name);
@@ -413,7 +416,8 @@ export default function StatsPage() {
 
       // Equipment matches OR this is legacy data (no equipment specified, defaulted to barbell)
       // Legacy data matches any template equipment since it was logged before equipment tracking
-      return exEquipment === targetEquipment || isLegacyData;
+      const equipmentMatches = exEquipment === targetEquipment || isLegacyData;
+      return equipmentMatches;
     });
 
     console.log('[Stats] Matching exercises after filter:', exercises.length);
@@ -493,6 +497,7 @@ export default function StatsPage() {
   // Filtered exercises for search
   const filteredExercises = useMemo(() => {
     if (!searchQuery.trim()) return exercisesWithPR;
+
     const query = searchQuery.toLowerCase();
     return exercisesWithPR.filter(
       (ex) =>
