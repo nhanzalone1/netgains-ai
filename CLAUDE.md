@@ -343,7 +343,28 @@ USING (auth.uid() = user_id);
 `normal`, `warmup`, `drop`, `failure`, `assisted-parent/child`, `left/right`. Warmup excluded from PRs.
 
 ### PR Detection
-Separated by equipment type. Excludes warmup and time-based sets.
+PRs are tracked per exercise name + equipment type. Excludes warmup and time-based sets.
+
+**Composite Keys:**
+- Universal equipment (barbell, dumbbell, bodyweight, plate): `name::equipment` — combined across all gyms
+- Gym-specific equipment (machine, cable, smith): `name::equipment::gym_X` — separated by gym
+
+**Stats Page:** Shows combined PRs (best across all gyms) for simplicity with legacy data.
+
+**Coach Context:** Receives gym-separated PRs for personalized feedback:
+```
+🏆 PERSONAL RECORDS HIT YESTERDAY:
+- Bench Press: 225lbs x 8 reps (previous: 215lbs x 8)
+- Chest Press (Machine) @ UREC: 180lbs x 10 reps (first time!)
+```
+
+**Files:**
+- `src/lib/pr-detection.ts` — Core PR detection with `getPRKey()` for composite keys
+- `src/app/api/chat/route.ts` — Coach context includes gym-separated PRs
+- `src/app/api/coach-trigger/route.ts` — Post-workout PR summary with equipment/gym
+- `src/app/(app)/stats/page.tsx` — Stats UI with combined PRs
+
+**Helper:** `isGymSpecificEquipment()` in `src/lib/supabase/types.ts` determines equipment type.
 
 ### Load Previous Workout
 When opening a split day, users see two options: "Load Last Workout" or "Start Fresh".
