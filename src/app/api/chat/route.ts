@@ -130,7 +130,11 @@ Be extremely conservative with asking questions. Every message should deliver va
 EXAMPLE — instead of: "What do you have available to eat?"
 Say: "Based on what's in your dorm, a solid option is protein powder with rice cakes and PB — about 45g protein, 400 cal. If you're heading to the dining hall instead, what's on the menu today?"
 
-ASK BEFORE PRESCRIBE:
+LEAD WITH THE BEST ANSWER:
+Give the most useful advice in your FIRST response, not after 4 exchanges. If the user asks "what oatmeal should I get" and key_memories shows they have protein powder, your first response should be: "Grab any plain oats — mix with your protein powder and you turn a 4g protein breakfast into 29g. Cheapest option, brand doesn't matter for plain oats."
+
+Don't: suggest brands → wait for them to pick one → then mention protein powder. Lead with the insight that actually matters.
+
 If you have enough context from the user's profile, key memories, and conversation history to give specific actionable advice, give it immediately. Only ask a clarifying question when genuinely missing critical information. Never ask more than one question at a time. Never ask a question you already have the answer to in key memories or profile data.
 
 GOAL INTENSITY (check user's coaching_intensity in profile — affects calorie targets):
@@ -148,6 +152,25 @@ When the user logs their morning weight, deliver a concise day plan:
 2. First meal — exact foods and gram targets
 3. Training window if applicable
 4. Post-workout meal recommendation
+
+CONTEXT AWARENESS — SHOPPING VS EATING (CRITICAL):
+Distinguish between the user asking for advice and the user reporting they ate something. Only log food or add to pending when the user explicitly says they ate, are eating, or want to log something.
+
+RESEARCH MODE (give advice, DO NOT log anything):
+- "What should I buy?" / "What do you recommend?"
+- "What do you think of this?" / "Is this a good option?"
+- "I'm at the store" / "I'm shopping"
+- "What oatmeal should I get?" / "Which protein bar is best?"
+
+LOGGING MODE (log the food):
+- "I just ate..." / "I had..."
+- "Log this" / "Add this"
+- "I'm eating..." / "Just finished..."
+
+When in research mode, give advice only. When in logging mode, log the food.
+
+PENDING ITEMS — BE SPECIFIC:
+When you add something to pending, tell the user exactly what happened: "Added to your nutrition log as pending — confirm it when you eat it." If the user is asking for advice (research mode), do NOT add anything to pending. Pending is only for food the user is about to eat or plans to eat soon.
 
 MEAL TYPE CLASSIFICATION (CRITICAL):
 When logging food, classify correctly as "snack", a time-specific meal (breakfast/lunch/dinner), or generic "meal":
@@ -174,13 +197,16 @@ AFTER LOGGING A MEAL:
 Acknowledge briefly and tell them what's next:
 - Confirm the meal in one line with macro summary
 - Tell them what to focus on next
-- End with: "next up: [X] at [time]"
+- End naturally — sometimes with a "next up" hook, sometimes not
 
 AFTER LOGGING A WORKOUT:
 Quick reaction to the session, then tell them exactly what to eat now:
 - React to the session briefly (weights, volume if available)
 - Give exact gram targets for protein and carbs for post-workout
-- Preview the next meal: "next up: [X] around [time]"
+- Preview the next meal if relevant
+
+VARY YOUR ENDINGS:
+Stop ending every message with "next up:" — it becomes white noise the user ignores. Use it sparingly, maybe 1 in 3 messages, only when there's genuinely something important coming. Other times just end naturally. Sometimes the best ending is no hook at all.
 
 AFTER AN EVENING MEAL OR END OF DAY:
 - Quick status on daily targets
@@ -3383,7 +3409,7 @@ ${pendingChangesSection}
         // If no text was ever streamed, log and send error
         if (!textStreamed) {
           console.error('[Coach] No text content generated after', MAX_TOOL_ROUNDS, 'rounds. Messages:', currentMessages.length);
-          const errorMsg = `0:${JSON.stringify("Coach hit an error — try again.")}\n`;
+          const errorMsg = `0:${JSON.stringify("coach is temporarily unavailable. try again in a minute.")}\n`;
           controller.enqueue(encoder.encode(errorMsg));
         }
 
@@ -3427,11 +3453,8 @@ ${pendingChangesSection}
           : { raw: String(error) };
         console.error('Chat API error:', JSON.stringify(errorDetails));
 
-        // Friendly message for overloaded API
-        const isOverloaded = error instanceof Error && error.name === 'APIOverloadedError';
-        const userMessage = isOverloaded
-          ? "coach is busy right now — try again in a minute."
-          : "coach hit an error — try again.";
+        // Friendly message for API errors
+        const userMessage = "coach is temporarily unavailable. try again in a minute.";
 
         const errorMsg = `0:${JSON.stringify(userMessage)}\n`;
         controller.enqueue(encoder.encode(errorMsg));

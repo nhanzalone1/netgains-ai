@@ -76,7 +76,7 @@ Check `constants.ts` for current model IDs. If 404 errors, check [model deprecat
 ### Coach (Sonnet)
 - System prompt: `getSystemPrompt()` in `api/chat/route.ts`
 - Tools: `updateUserProfile`, `saveMemory`, `logMeal`, `generateWorkout`, `loadWorkoutToFolder`
-- Evidence-based, no broscience. Punchy headlines, exact numbers, ends with "next up: [action]"
+- Evidence-based, no broscience. Punchy headlines, exact numbers, varied endings
 - Goal-aware: cutting = calorie ceiling, bulking = calorie floor
 - Daily limit: FREE=3, BASIC=15, PREMIUM=50 messages/day
 
@@ -154,7 +154,10 @@ System prompt includes 20+ directives. Key ones:
 | **Response Length Matching** | Short message = short answer. 5 words in = 2-3 sentences out. |
 | **Key Memories Usage** | Always reference user's stored preferences. Never ask for info already saved. |
 | **Tier-Aware Question Efficiency** | Never send question-only messages. Combine questions with advice. |
-| **Ask Before Prescribe** | Give advice immediately when context exists. One question max at a time. |
+| **Lead With Best Answer** | Give most useful advice in FIRST response, not after 4 exchanges. Front-load insights. |
+| **Context Awareness** | Shopping/advice = research mode (no logging). "I ate/log this" = logging mode. |
+| **Pending Clarity** | Be specific: "Added to nutrition log as pending — confirm when you eat it." No pending in research mode. |
+| **Vary Endings** | Don't end every message with "next up:" — use sparingly (~1 in 3). Sometimes end naturally. |
 | **Free Tier Quality** | Same depth for all users. Natural hooks on final message of day. |
 | **Daily Cardio & Steps** | Proactive step goals (8-12k for cutting). Check in on evening convos. |
 | **Nutrition Math** | Always show explicit math: "you've had 72g, target is 171g, need 99g more" |
