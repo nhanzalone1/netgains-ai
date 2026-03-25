@@ -277,6 +277,19 @@ AI classifies food logs as meal vs snack based on food content, not just time:
 
 **UI:** Edit Food modal has Meal/Snack toggle. Display groups all non-snack types as "Meal X".
 
+### Auto-Calculate Calories from Macros
+When manually entering food in Add Food or Edit Food modals, calories auto-calculate as the user types macros:
+
+**Formula:** `(protein × 4) + (carbs × 4) + (fat × 9) = calories`
+
+**Behavior:**
+- Typing in protein, carbs, or fat fields triggers recalculation
+- Calories field updates instantly (no API call needed)
+- User can still manually override the calories field
+- Only calculates if at least one macro is entered
+
+**Implementation:** `calculateCaloriesFromMacros()` helper in `src/app/(app)/nutrition/page.tsx`
+
 ## Key Patterns
 
 ### Client → Server Context
