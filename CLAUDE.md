@@ -414,6 +414,27 @@ When opening a split day, users see two options: "Load Last Workout" or "Start F
 - `src/app/(app)/log/page.tsx` — Saves folder_id/location_id when workout is created
 - `supabase/migrations/add_workout_folder_id.sql` — Migration for new columns
 
+### Cardio Notes
+Users can enter cardio notes during a workout session via a text box below their exercises.
+
+**Data Flow:**
+1. User enters cardio in textarea (e.g., "25 min incline walk, 10% incline, 3.2 mph")
+2. Stored in component state as `cardioNotes`
+3. Synced to `localStorage["netgains-current-workout"].cardioNotes` for coach access during workout
+4. On workout save → stored in `workouts.cardio_notes` column
+5. Passed to coach trigger for post-workout feedback
+
+**Coach Access:**
+- `getCurrentWorkout` tool returns `cardioNotes` field from localStorage
+- Tool description explicitly tells AI to check this field
+- Post-workout trigger includes `cardioNotes` in context
+
+**Files:**
+- `src/components/workout-session.tsx` — Cardio textarea UI and state
+- `src/app/(app)/log/page.tsx` — Saves `cardio_notes` to workouts table
+- `src/app/api/chat/route.ts` — `getCurrentWorkout` tool returns cardioNotes
+- `src/app/api/coach-trigger/route.ts` — Includes cardioNotes in post-workout context
+
 ### Inline Previous Stats
 Under each exercise name, shows previous performance to guide progressive overload.
 
@@ -502,6 +523,23 @@ App Store requires apps to provide account deletion. Users can delete their acco
 2. Coach uses tools to save profile data
 3. After profile complete → interactive app tour (spotlight overlay)
 4. Profile "empty" if missing: height_inches, weight_lbs, or goal
+
+### Returning User Recognition
+The app detects returning users to avoid showing onboarding flows to users with existing data:
+
+**Coach Page (`src/app/(app)/coach/page.tsx`):**
+- When `chat_messages` is empty, checks if user has:
+  - Filled profile (height_inches + weight_lbs + goal), OR
+  - Any workout history
+- If returning user → triggers personalized auto-opening greeting
+- If new user → shows hardcoded onboarding welcome message
+
+**Nutrition Page (`src/app/(app)/nutrition/page.tsx`):**
+- "First time tracking food" onboarding only shows if:
+  - Main onboarding complete (`onboarding_complete = true`)
+  - Nutrition onboarding NOT complete (`nutrition_onboarding_complete != true`)
+  - **AND user has ZERO historical meals**
+- Users with any meal history skip the nutrition onboarding prompt
 
 ### Profile Query Resilience
 The profile query uses RLS (Row Level Security). During auth token refresh, the query can fail due to a race condition. To prevent existing users from seeing the onboarding message:
