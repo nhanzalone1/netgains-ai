@@ -107,6 +107,19 @@ function formatTime(dateString: string): string {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+// Calculate calories from macros: protein (4 cal/g) + carbs (4 cal/g) + fat (9 cal/g)
+function calculateCaloriesFromMacros(protein: string, carbs: string, fat: string): string {
+  const p = parseFloat(protein) || 0;
+  const c = parseFloat(carbs) || 0;
+  const f = parseFloat(fat) || 0;
+
+  // Only calculate if at least one macro is entered
+  if (p === 0 && c === 0 && f === 0) return "";
+
+  const calories = Math.round(p * 4 + c * 4 + f * 9);
+  return calories.toString();
+}
+
 // Compact Circular Progress Ring
 function CalorieRing({
   consumed,
@@ -1085,7 +1098,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={foodProtein}
-                onChange={(e) => setFoodProtein(e.target.value)}
+                onChange={(e) => {
+                  const newProtein = e.target.value;
+                  setFoodProtein(newProtein);
+                  setFoodCalories(calculateCaloriesFromMacros(newProtein, foodCarbs, foodFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
@@ -1097,7 +1114,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={foodCarbs}
-                onChange={(e) => setFoodCarbs(e.target.value)}
+                onChange={(e) => {
+                  const newCarbs = e.target.value;
+                  setFoodCarbs(newCarbs);
+                  setFoodCalories(calculateCaloriesFromMacros(foodProtein, newCarbs, foodFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
@@ -1109,7 +1130,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={foodFat}
-                onChange={(e) => setFoodFat(e.target.value)}
+                onChange={(e) => {
+                  const newFat = e.target.value;
+                  setFoodFat(newFat);
+                  setFoodCalories(calculateCaloriesFromMacros(foodProtein, foodCarbs, newFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
@@ -1258,7 +1283,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={editMealProtein}
-                onChange={(e) => setEditMealProtein(e.target.value)}
+                onChange={(e) => {
+                  const newProtein = e.target.value;
+                  setEditMealProtein(newProtein);
+                  setEditMealCalories(calculateCaloriesFromMacros(newProtein, editMealCarbs, editMealFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
@@ -1270,7 +1299,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={editMealCarbs}
-                onChange={(e) => setEditMealCarbs(e.target.value)}
+                onChange={(e) => {
+                  const newCarbs = e.target.value;
+                  setEditMealCarbs(newCarbs);
+                  setEditMealCalories(calculateCaloriesFromMacros(editMealProtein, newCarbs, editMealFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
@@ -1282,7 +1315,11 @@ export default function NutritionPage() {
                 inputMode="decimal"
                 step="any"
                 value={editMealFat}
-                onChange={(e) => setEditMealFat(e.target.value)}
+                onChange={(e) => {
+                  const newFat = e.target.value;
+                  setEditMealFat(newFat);
+                  setEditMealCalories(calculateCaloriesFromMacros(editMealProtein, editMealCarbs, newFat));
+                }}
                 placeholder="0"
                 className="w-full bg-background/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
               />
