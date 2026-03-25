@@ -264,8 +264,8 @@ export default function NutritionPage() {
 
     const dateStr = formatDate(selectedDate);
 
-    // Fetch meals, goals, and profile in parallel
-    const [mealsResult, goalsResult, profileResult] = await Promise.all([
+    // Fetch meals, goals, profile, and historical meal count in parallel
+    const [mealsResult, goalsResult, profileResult, historicalMealsResult] = await Promise.all([
       supabase
         .from("meals")
         .select("*")
@@ -282,6 +282,11 @@ export default function NutritionPage() {
         .select("nutrition_onboarding_complete, onboarding_complete")
         .eq("id", user.id)
         .single(),
+      // Check if user has ANY historical meals (returning user detection)
+      supabase
+        .from("meals")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id),
     ]);
 
     const mealsData = mealsResult.data || [];
@@ -292,19 +297,23 @@ export default function NutritionPage() {
     }
 
     // Check if we need to show nutrition onboarding
-    // Show if: main onboarding complete AND nutrition onboarding NOT complete
-    // Note: We no longer check meal count - users who logged meals before completing
-    // main onboarding should still see nutrition goal setup when ready
+    // Show if: main onboarding complete AND nutrition onboarding NOT complete AND no historical meals
+    // Users who have logged meals before are returning users - skip the "First time tracking" prompt
     if (!hasCheckedOnboarding && profileResult.data) {
       const profile = profileResult.data;
+      const hasHistoricalMeals = (historicalMealsResult.count ?? 0) > 0;
+
       console.log("[Nutrition Onboarding] Profile check:", {
         onboarding_complete: profile.onboarding_complete,
         nutrition_onboarding_complete: profile.nutrition_onboarding_complete,
+        hasHistoricalMeals,
       });
 
+      // Skip onboarding if user has ANY meal history (they're not "first time tracking")
       const needsOnboarding =
         profile.onboarding_complete === true &&
-        profile.nutrition_onboarding_complete !== true;
+        profile.nutrition_onboarding_complete !== true &&
+        !hasHistoricalMeals;
 
       console.log("[Nutrition Onboarding] Needs onboarding:", needsOnboarding);
 

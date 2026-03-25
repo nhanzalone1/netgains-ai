@@ -989,7 +989,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'getCurrentWorkout',
-    description: 'Get the user\'s in-progress workout that they are currently doing at the gym. Returns exercises and sets logged so far (not yet saved). Returns null if no workout is active.',
+    description: 'Get the user\'s in-progress workout that they are currently doing at the gym. Returns exercises and sets logged so far (not yet saved), plus any cardioNotes the user has entered in the cardio text box. Returns null if no workout is active. IMPORTANT: Check the cardioNotes field to see what cardio the user plans to do or has done.',
     input_schema: {
       type: 'object',
       properties: {},

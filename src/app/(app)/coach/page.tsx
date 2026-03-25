@@ -15,7 +15,7 @@ import { markCoachAsViewed } from "@/lib/coach-notification";
 import { apiFetch } from "@/lib/capacitor";
 
 // Hardcoded first message for new users with empty profiles
-const HARDCODED_FIRST_MESSAGE = "hey, i'm your ai coach. i'll help you train smarter, eat right, and stay on track. tell me a bit about yourself — your age, height, weight, what you're training for, and what split you're running. throw in anything else you think i should know.";
+const HARDCODED_FIRST_MESSAGE = "welcome to netgains. to get started, tell me your goal (bulk, cut, maintain), your current bodyweight, and what gym you train at. i'll set everything up from there.";
 
 interface Message {
   id: string;
@@ -586,11 +586,11 @@ export default function CoachPage() {
         return;
       }
       console.error("Auto-open error:", error);
-      // Fallback to simple greeting
+      // Fallback to friendly error message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessageId
-            ? { ...m, content: "hey, i'm your coach. what should i call you?" }
+            ? { ...m, content: "coach is temporarily unavailable. try again in a minute." }
             : m
         )
       );
@@ -729,8 +729,36 @@ export default function CoachPage() {
         return;
       }
 
-      // No messages - show hardcoded first message
-      console.log(">>> No messages, showing hardcoded first message <<<");
+      // No messages in chat_messages table - check if this is a returning user
+      // A returning user has a filled profile (height, weight, goal) or workout history
+      console.log(">>> No messages, checking if returning user <<<");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("height_inches, weight_lbs, goal")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { count: workoutCount } = await supabase
+        .from("workouts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      const isReturningUser = !!(
+        (profile?.height_inches && profile?.weight_lbs && profile?.goal) ||
+        (workoutCount && workoutCount > 0)
+      );
+
+      if (isReturningUser) {
+        // Returning user with no chat history - trigger personalized auto-opening
+        console.log(">>> Returning user detected, triggering auto-opening <<<");
+        setMessages([]);
+        setMessagesLoaded(true);
+        // The checkAndGenerateOpening effect will trigger the auto-opening
+        return;
+      }
+
+      // New user - show hardcoded first message for onboarding
+      console.log(">>> New user, showing hardcoded first message <<<");
       const hardcodedMessage: Message = {
         id: getMessageTimestamp().toString(),
         role: "assistant",
@@ -1141,7 +1169,7 @@ export default function CoachPage() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessageId
-            ? { ...m, content: "Coach hit an error — try again." }
+            ? { ...m, content: "coach is temporarily unavailable. try again in a minute." }
             : m
         )
       );
