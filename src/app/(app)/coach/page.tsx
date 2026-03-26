@@ -672,6 +672,26 @@ export default function CoachPage() {
       const dbMessages = await loadMessagesFromDB(user.id);
       console.log(">>> Loaded", dbMessages.length, "messages from DB <<<");
 
+      // Check for cached user message (from tab switch during streaming)
+      let cachedUserMessage: { id: string; content: string; timestamp: number } | null = null;
+      try {
+        const cachedUser = sessionStorage.getItem(`netgains-pending-user-message-${user.id}`);
+        if (cachedUser) {
+          cachedUserMessage = JSON.parse(cachedUser);
+          // Only use cache if it's less than 5 minutes old
+          const cacheAge = Date.now() - (cachedUserMessage?.timestamp || 0);
+          if (cacheAge > 5 * 60 * 1000) {
+            console.log('[Coach] Cached user message too old, ignoring');
+            cachedUserMessage = null;
+            sessionStorage.removeItem(`netgains-pending-user-message-${user.id}`);
+          } else {
+            console.log('[Coach] Found cached user message:', cachedUserMessage?.content?.substring(0, 50));
+          }
+        }
+      } catch (e) {
+        console.error('[Coach] Failed to read cached user message:', e);
+      }
+
       // Check for cached streaming message (from tab switch during streaming)
       let cachedStreamingMessage: { id: string; content: string; timestamp: number } | null = null;
       try {
@@ -701,6 +721,29 @@ export default function CoachPage() {
       // If we have messages, show them
       if (dbMessages.length > 0) {
         console.log(">>> Messages exist in DB, showing them <<<");
+
+        // If there's a cached user message, merge it with DB messages
+        if (cachedUserMessage) {
+          const existingUserMsg = dbMessages.find(m => m.id === cachedUserMessage!.id);
+          if (!existingUserMsg) {
+            // User message not in DB yet - this means the save failed or is still in progress
+            // Insert it in the right position (before any assistant messages that came after)
+            console.log('[Coach] Restoring cached user message (not in DB yet)');
+            dbMessages.push({
+              id: cachedUserMessage.id,
+              role: 'user' as const,
+              content: cachedUserMessage.content,
+            });
+            // Sort by ID (timestamp-based) to maintain order
+            dbMessages.sort((a, b) => {
+              const aTime = parseInt(a.id) || 0;
+              const bTime = parseInt(b.id) || 0;
+              return aTime - bTime;
+            });
+          }
+          // Clear the cache after using it
+          sessionStorage.removeItem(`netgains-pending-user-message-${user.id}`);
+        }
 
         // If there's a cached streaming message, merge it with DB messages
         if (cachedStreamingMessage) {
@@ -888,9 +931,28 @@ export default function CoachPage() {
       // The server will complete the response and save it to DB
       // When user returns to this tab, they'll see the completed message
 
-      // If we're mid-stream, cache the current message content to sessionStorage
-      // so it's available immediately on remount (before DB reload)
+      // If we're mid-stream, cache messages to sessionStorage
+      // so they're available immediately on remount (before DB reload)
       if (isLoadingRef.current && user?.id) {
+        // Cache the user's pending message (the one they just sent)
+        const pendingUserMessage = messages.filter(m => m.role === 'user' && !m.hidden).slice(-1)[0];
+        if (pendingUserMessage) {
+          try {
+            sessionStorage.setItem(
+              `netgains-pending-user-message-${user.id}`,
+              JSON.stringify({
+                id: pendingUserMessage.id,
+                content: pendingUserMessage.content,
+                timestamp: Date.now(),
+              })
+            );
+            console.log('[Coach] Cached pending user message to sessionStorage');
+          } catch (e) {
+            console.error('[Coach] Failed to cache user message:', e);
+          }
+        }
+
+        // Cache the assistant's streaming message
         const streamingMessage = messages.find(m => m.role === 'assistant' && m.id === streamingMessageIdRef.current);
         if (streamingMessage && streamingMessage.content) {
           try {
