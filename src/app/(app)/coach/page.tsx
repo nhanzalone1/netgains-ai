@@ -48,19 +48,25 @@ async function loadMessagesFromDB(userId: string): Promise<Message[]> {
     return [];
   }
 
+  // Order descending and limit to get most recent messages (Supabase default limit is 1000)
+  // Then reverse to display in chronological order
   const { data, error } = await supabase
     .from('chat_messages')
     .select('id, role, content, hidden, created_at')
     .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  // Reverse to chronological order (oldest first)
+  const chronologicalData = data ? [...data].reverse() : [];
 
   if (error) {
     console.error('[DB] Error loading messages:', error.message, error.code, error.details);
     return [];
   }
 
-  console.log('[DB] Loaded', data?.length || 0, 'messages');
-  return (data || []).map(msg => ({
+  console.log('[DB] Loaded', chronologicalData.length, 'messages');
+  return chronologicalData.map(msg => ({
     id: msg.id,
     role: msg.role as 'user' | 'assistant',
     content: msg.content,
