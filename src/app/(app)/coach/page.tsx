@@ -1138,6 +1138,17 @@ export default function CoachPage() {
     setIsLoading(true);
     isLoadingRef.current = true;
 
+    // Save user message to DB immediately (don't rely on async useEffect)
+    // This prevents message loss if user navigates away before useEffect completes
+    if (user?.id) {
+      const dbId = await saveMessageToDB(user.id, userMessage);
+      if (dbId) {
+        // Track both IDs to prevent useEffect from double-saving
+        lastSavedContentRef.current.set(dbId, userMessage.content);
+        lastSavedContentRef.current.set(userMessage.id, userMessage.content);
+      }
+    }
+
     const assistantMessageId = (getMessageTimestamp() + 1).toString();
 
     // Add empty assistant message placeholder
