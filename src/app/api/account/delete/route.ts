@@ -79,6 +79,8 @@ export async function POST() {
       adminClient.from('folders').delete().eq('user_id', userId),
       adminClient.from('locations').delete().eq('user_id', userId),
       adminClient.from('program_cycles').delete().eq('user_id', userId),
+      adminClient.from('coaching_events').delete().eq('user_id', userId),
+      adminClient.from('weekly_snapshots').delete().eq('user_id', userId),
     ]);
 
     console.log('[Account Delete] Deleted user data from tables');

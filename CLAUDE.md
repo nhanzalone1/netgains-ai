@@ -67,6 +67,8 @@ capacitor.config.ts         # Capacitor config (bundle ID, server URL)
 - **weigh_ins** — daily weight, auto-syncs to profiles.weight_lbs
 - **locations** — user's gyms (bigint id)
 - **folders** — split days with location_id FK
+- **coaching_events** — user behavior events for aggregate intelligence (workout_completed, meal_logged, weight_recorded, pr_hit, goal_changed, split_changed, message_sent)
+- **weekly_snapshots** — aggregated weekly metrics (bodyweight, calories, protein, volume, PRs, adherence)
 
 ## AI Architecture
 
@@ -254,8 +256,10 @@ User messages are saved via two mechanisms for reliability:
 2. **SessionStorage fallback** — On component unmount during streaming, pending user messages are cached to sessionStorage. On remount, if the message isn't in DB, it's restored from cache.
 
 **Duplicate prevention:**
+- Tracking ref is set BEFORE `setMessages()` — prevents useEffect from racing with handleSubmit's save
 - Cache is cleared after successful DB save
 - Restore logic checks both ID and content to avoid duplicates (DB assigns new UUID, cache has timestamp ID)
+- `loadMessagesFromDB` dedupes consecutive messages with same role + content
 
 **Assistant messages:** Saved by server after streaming completes (not client-side).
 
@@ -698,6 +702,68 @@ Key disclaimers in Terms:
 - **Haptic Feedback** — vibrations on set completion, PRs, button interactions
 - **HealthKit** — sync with Apple Health (weight, workouts)
 - **Widgets** — home screen widgets for quick logging
+
+## Coaching Events Analytics
+
+Data collection infrastructure for aggregate coaching intelligence. Tracks user behavior to analyze patterns and improve AI coaching over time.
+
+### Event Types
+
+| Event | Trigger Location | event_data |
+|-------|-----------------|------------|
+| `workout_completed` | `log/page.tsx` | exercises[], total_volume, folder_name, location_name, cardio_notes |
+| `meal_logged` | `nutrition/page.tsx` | calories, protein, carbs, fat, food_name, meal_type |
+| `weight_recorded` | `stats/page.tsx` | weight, previous_weight, change |
+| `pr_hit` | `coach-trigger/route.ts` | exercise, equipment, previous_best, new_best |
+| `goal_changed` | `chat/route.ts` | old_goal, new_goal, intensity |
+| `split_changed` | `settings/page.tsx` | old_split[], new_split[] |
+| `message_sent` | `chat/route.ts` | message_classification, model_used, user_tier, response_tokens |
+
+### User Context (Auto-Attached)
+
+Every event includes `user_context` JSONB with user state at time of event:
+- `bodyweight` — from profiles.weight_lbs
+- `goal` — cutting/bulking/maintaining
+- `goal_intensity` — light/moderate/aggressive
+- `training_frequency` — days/week from split rotation
+- `weeks_since_goal_set` — calculated from profile updated_at
+- `daily_calorie_target` — from nutrition_goals
+
+### Helper Function
+
+```typescript
+import { logCoachingEvent } from '@/lib/coaching-events';
+
+// Logs event with auto-populated user_context
+logCoachingEvent(userId, 'workout_completed', {
+  exercises: [...],
+  total_volume: 12500,
+  folder_name: 'Push',
+});
+```
+
+### Files
+- `src/lib/coaching-events.ts` — Helper functions and types
+- `supabase/migrations/add_coaching_events.sql` — Table definitions
+
+### Querying Events
+
+```sql
+-- Recent events for a user
+SELECT * FROM coaching_events
+WHERE user_id = 'uuid'
+ORDER BY created_at DESC LIMIT 20;
+
+-- Message cost analysis
+SELECT
+  (event_data->>'model_used') as model,
+  (event_data->>'user_tier') as tier,
+  COUNT(*) as messages,
+  AVG((event_data->>'response_tokens')::int) as avg_tokens
+FROM coaching_events
+WHERE event_type = 'message_sent'
+GROUP BY 1, 2;
+```
 
 ## Environment Variables
 

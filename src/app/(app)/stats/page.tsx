@@ -28,6 +28,7 @@ import {
   Globe,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { logCoachingEvent, type WeightRecordedData } from "@/lib/coaching-events";
 import { Button } from "@/components/ui/button";
 import { SkeletonStats, Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
@@ -229,6 +230,18 @@ export default function StatsPage() {
 
     // Update profile weight
     await supabase.from("profiles").update({ weight_lbs: weight }).eq("id", user.id);
+
+    // Log coaching event for aggregate intelligence
+    const previousWeight = weighIns.length > 0 ? weighIns[0].weight_lbs : null;
+    const weightChange = previousWeight !== null ? weight - previousWeight : null;
+
+    logCoachingEvent(user.id, 'weight_recorded', {
+      weight: weight,
+      previous_weight: previousWeight,
+      change: weightChange,
+    } as WeightRecordedData).catch((err) => {
+      console.error('[CoachingEvents] Failed to log weight_recorded:', err);
+    });
 
     setSavingWeighIn(false);
     setShowWeighInModal(false);

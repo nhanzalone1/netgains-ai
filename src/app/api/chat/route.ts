@@ -16,6 +16,7 @@ import {
 import { retrieveRelevantMemories, RetrievedMemory } from '@/lib/memory-retrieval';
 import type { Profile, NutritionGoals } from '@/lib/supabase/types';
 import { isGymSpecificEquipment } from '@/lib/supabase/types';
+import { logCoachingEvent, type GoalChangedData, type MessageSentData } from '@/lib/coaching-events';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -2550,6 +2551,20 @@ ${pendingChangesSection}
         // Use service role client to bypass RLS for profile updates
         // Use upsert to handle case where profile row doesn't exist yet
         const adminClient = getSupabaseAdmin();
+
+        // Fetch old profile for goal change logging
+        let oldGoal: string | null = null;
+        let oldIntensity: string | null = null;
+        if (input.goal !== undefined) {
+          const { data: oldProfile } = await adminClient
+            .from('profiles')
+            .select('goal, coaching_intensity')
+            .eq('id', user.id)
+            .maybeSingle();
+          oldGoal = oldProfile?.goal ?? null;
+          oldIntensity = oldProfile?.coaching_intensity ?? null;
+        }
+
         const { data, error } = await adminClient
           .from('profiles')
           .upsert({ id: user.id, ...updateData }, { onConflict: 'id' })
@@ -2561,6 +2576,18 @@ ${pendingChangesSection}
           console.error('[Coach] updateUserProfile error:', error);
           return JSON.stringify({ error: error.message });
         }
+
+        // Log goal change event for aggregate intelligence
+        if (input.goal !== undefined && input.goal !== oldGoal) {
+          logCoachingEvent(user.id, 'goal_changed', {
+            old_goal: oldGoal,
+            new_goal: input.goal as string,
+            intensity: (input.coaching_intensity as string) ?? oldIntensity,
+          } as GoalChangedData).catch((err) => {
+            console.error('[CoachingEvents] Failed to log goal_changed:', err);
+          });
+        }
+
         return JSON.stringify({ success: true, updated: updateData });
       }
       case 'getMaxes': {
@@ -3285,6 +3312,7 @@ ${pendingChangesSection}
         const currentMessages = [...anthropicMessages];
         let textStreamed = false;
         let fullResponseText = ''; // Accumulate full response for DB save
+        let totalOutputTokens = 0; // Track tokens for analytics
 
         // Log tools being sent to API
         console.log('[Coach] Tools passed to API:', tools.map(t => t.name).join(', '));
@@ -3334,6 +3362,7 @@ ${pendingChangesSection}
           console.log('[Coach] API call round:', round + 1);
 
           const response = await callAnthropicWithRetry();
+          totalOutputTokens += response.usage?.output_tokens || 0;
 
           console.log('[Coach] Response stop_reason:', response.stop_reason);
           console.log('[Coach] Response content types:', response.content.map(b => b.type).join(', '));
@@ -3443,6 +3472,17 @@ ${pendingChangesSection}
           if (saveError) {
             console.error('[Coach] Failed to save assistant message:', saveError);
           }
+
+          // Log message_sent event for aggregate intelligence
+          const modelUsed = selectedModel.includes('haiku') ? 'haiku' : 'sonnet';
+          logCoachingEvent(user.id, 'message_sent', {
+            message_classification: messageComplexity,
+            model_used: modelUsed,
+            user_tier: userTier,
+            response_tokens: totalOutputTokens,
+          } as MessageSentData).catch((err) => {
+            console.error('[CoachingEvents] Failed to log message_sent:', err);
+          });
         }
 
         controller.close();

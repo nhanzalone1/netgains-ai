@@ -22,6 +22,7 @@ import { useToast } from "@/components/toast";
 import { hapticSuccess } from "@/lib/haptics";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { triggerCoachResponse } from "@/lib/coach-notification";
+import { logCoachingEvent, calculateTotalVolume, type WorkoutCompletedData } from "@/lib/coaching-events";
 import { formatLocalDate } from "@/lib/date-utils";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
@@ -497,6 +498,29 @@ export default function LogPage() {
         }).catch((error) => {
           // Log error but don't block the success flow
           console.error('[CoachTrigger] Failed to trigger post-workout message:', error);
+        });
+
+        // Log coaching event for aggregate intelligence
+        const exerciseData = validExercises.map((ex) => ({
+          name: ex.name,
+          equipment: ex.equipment || 'barbell',
+          sets: ex.validSets.map((set) => ({
+            weight: parseFloat(set.weight),
+            reps: parseInt(set.reps, 10),
+            variant: set.variant || 'normal',
+          })),
+        }));
+
+        const workoutEventData: WorkoutCompletedData = {
+          exercises: exerciseData,
+          total_volume: calculateTotalVolume(exerciseData),
+          folder_name: selectedFolder?.name || null,
+          location_name: selectedLocation?.name || null,
+          cardio_notes: cardioNotes?.trim() || undefined,
+        };
+
+        logCoachingEvent(user.id, 'workout_completed', workoutEventData).catch((err) => {
+          console.error('[CoachingEvents] Failed to log workout_completed:', err);
         });
       }
     } catch (err) {

@@ -4,6 +4,7 @@ import { formatLocalDate } from '@/lib/date-utils';
 import { AI_MODELS, DEFAULT_NUTRITION_GOALS } from '@/lib/constants';
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit';
 import { isGymSpecificEquipment } from '@/lib/supabase/types';
+import { logPREvents, type PRHitData } from '@/lib/coaching-events';
 
 // Use Haiku for fast, cheap auto-triggers
 const TRIGGER_MODEL = AI_MODELS.DAILY_BRIEF; // claude-3-haiku-20240307
@@ -151,6 +152,20 @@ export async function POST(req: Request) {
         }
       }
       console.log('[CoachTrigger API] Workout exercises:', workoutExercises.length, 'PRs hit:', prsHit.length);
+
+      // Log PR events for aggregate intelligence
+      if (prsHit.length > 0) {
+        const prEventData: PRHitData[] = prsHit.map((pr) => ({
+          exercise: pr.exercise,
+          equipment: pr.equipment,
+          previous_best: null, // Previous best not tracked in current PR detection
+          new_best: { weight: pr.weight, reps: pr.reps },
+        }));
+
+        logPREvents(user.id, prEventData).catch((err) => {
+          console.error('[CoachingEvents] Failed to log pr_hit events:', err);
+        });
+      }
     }
 
     // Build recent conversation context (reversed to chronological order)

@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { triggerCoachResponse } from "@/lib/coach-notification";
+import { logCoachingEvent, type MealLoggedData } from "@/lib/coaching-events";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
@@ -577,6 +578,18 @@ export default function NutritionPage() {
       localHour: new Date().getHours(),
       localDate: formatDate(new Date()), // Pass client's local date for correct meal lookup
     });
+
+    // Log coaching event for aggregate intelligence
+    logCoachingEvent(user.id, 'meal_logged', {
+      calories: newCalories,
+      protein: parseFloat(foodProtein) || 0,
+      carbs: parseFloat(foodCarbs) || 0,
+      fat: parseFloat(foodFat) || 0,
+      food_name: foodName.trim(),
+      meal_type: addFoodType,
+    } as MealLoggedData).catch((err) => {
+      console.error('[CoachingEvents] Failed to log meal_logged:', err);
+    });
   };
 
   const markAsConsumed = async (mealId: string) => {
@@ -598,6 +611,18 @@ export default function NutritionPage() {
         localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
         localHour: new Date().getHours(),
         localDate: formatDate(new Date()),
+      });
+
+      // Log coaching event for aggregate intelligence
+      logCoachingEvent(user.id, 'meal_logged', {
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+        food_name: meal.food_name,
+        meal_type: meal.meal_type,
+      } as MealLoggedData).catch((err) => {
+        console.error('[CoachingEvents] Failed to log meal_logged (consume):', err);
       });
     }
   };
@@ -669,6 +694,18 @@ export default function NutritionPage() {
           localTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
           localHour: new Date().getHours(),
           localDate: formatDate(new Date()),
+        });
+
+        // Log coaching event for aggregate intelligence
+        logCoachingEvent(user.id, 'meal_logged', {
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat,
+          food_name: meal.food_name,
+          meal_type: meal.meal_type,
+        } as MealLoggedData).catch((err) => {
+          console.error('[CoachingEvents] Failed to log meal_logged (copy):', err);
         });
       }
     } finally {

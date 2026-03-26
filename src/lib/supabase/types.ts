@@ -805,6 +805,89 @@ export interface Database {
           }
         ];
       };
+      coaching_events: {
+        Row: {
+          id: number;
+          user_id: string;
+          event_type: string;
+          event_data: Record<string, unknown>;
+          user_context: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          event_type: string;
+          event_data?: Record<string, unknown>;
+          user_context?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          event_type?: string;
+          event_data?: Record<string, unknown>;
+          user_context?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "coaching_events_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      weekly_snapshots: {
+        Row: {
+          id: number;
+          user_id: string;
+          week_start: string;
+          bodyweight: number | null;
+          avg_daily_calories: number | null;
+          avg_daily_protein: number | null;
+          workouts_completed: number;
+          total_volume: number;
+          prs_hit: number;
+          adherence_score: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          week_start: string;
+          bodyweight?: number | null;
+          avg_daily_calories?: number | null;
+          avg_daily_protein?: number | null;
+          workouts_completed?: number;
+          total_volume?: number;
+          prs_hit?: number;
+          adherence_score?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          week_start?: string;
+          bodyweight?: number | null;
+          avg_daily_calories?: number | null;
+          avg_daily_protein?: number | null;
+          workouts_completed?: number;
+          total_volume?: number;
+          prs_hit?: number;
+          adherence_score?: number | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "weekly_snapshots_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -829,6 +912,8 @@ export type Folder = Database["public"]["Tables"]["folders"]["Row"];
 export type ExerciseTemplate = Database["public"]["Tables"]["exercise_templates"]["Row"];
 export type ProgramCycle = Database["public"]["Tables"]["program_cycles"]["Row"];
 export type WeighIn = Database["public"]["Tables"]["weigh_ins"]["Row"];
+export type CoachingEvent = Database["public"]["Tables"]["coaching_events"]["Row"];
+export type WeeklySnapshot = Database["public"]["Tables"]["weekly_snapshots"]["Row"];
 
 // Insert types
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
@@ -844,6 +929,8 @@ export type SetInsert = Database["public"]["Tables"]["sets"]["Insert"];
 export type LocationInsert = Database["public"]["Tables"]["locations"]["Insert"];
 export type FolderInsert = Database["public"]["Tables"]["folders"]["Insert"];
 export type ExerciseTemplateInsert = Database["public"]["Tables"]["exercise_templates"]["Insert"];
+export type CoachingEventInsert = Database["public"]["Tables"]["coaching_events"]["Insert"];
+export type WeeklySnapshotInsert = Database["public"]["Tables"]["weekly_snapshots"]["Insert"];
 
 // Equipment types
 export type EquipmentType = "barbell" | "dumbbell" | "cable" | "machine" | "smith" | "bodyweight" | "plate";

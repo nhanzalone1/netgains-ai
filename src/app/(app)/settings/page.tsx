@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { useTheme, themes } from "@/components/theme-provider";
 import { apiFetch } from "@/lib/capacitor";
+import { logCoachingEvent, type SplitChangedData } from "@/lib/coaching-events";
 
 const intensityOptions = [
   { id: "light", name: "Light", description: "~300 cal deficit/surplus" },
@@ -226,6 +227,14 @@ export default function SettingsPage() {
       );
 
       setSplitRotation(newRotation);
+
+      // Log coaching event for aggregate intelligence
+      logCoachingEvent(user.id, 'split_changed', {
+        old_split: splitRotation,
+        new_split: newRotation,
+      } as SplitChangedData).catch((err) => {
+        console.error('[CoachingEvents] Failed to log split_changed:', err);
+      });
     } catch (error) {
       console.error("Failed to save split:", error);
     }
@@ -324,6 +333,14 @@ export default function SettingsPage() {
       }
 
       setSplitRotation(newRotation);
+
+      // Log coaching event for aggregate intelligence
+      logCoachingEvent(user.id, 'split_changed', {
+        old_split: splitRotation,
+        new_split: newRotation,
+      } as SplitChangedData).catch((err) => {
+        console.error('[CoachingEvents] Failed to log split_changed:', err);
+      });
     } catch (error) {
       console.error("Failed to remove split day:", error);
     }
