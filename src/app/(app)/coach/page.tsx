@@ -65,14 +65,27 @@ async function loadMessagesFromDB(userId: string): Promise<Message[]> {
     return [];
   }
 
-  console.log('[DB] Loaded', chronologicalData.length, 'messages');
-  return chronologicalData.map(msg => ({
-    id: msg.id,
-    role: msg.role as 'user' | 'assistant',
-    content: msg.content,
-    hidden: msg.hidden || false,
-    created_at: msg.created_at,
-  }));
+  // Dedupe consecutive messages with same role + content (from race condition bug)
+  const messages: Message[] = [];
+  let lastKey = '';
+  for (const msg of chronologicalData) {
+    const key = `${msg.role}:${msg.content}`;
+    if (key !== lastKey) {
+      messages.push({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        hidden: msg.hidden || false,
+        created_at: msg.created_at,
+      });
+      lastKey = key;
+    } else {
+      console.log('[DB] Skipping duplicate message:', msg.id);
+    }
+  }
+
+  console.log('[DB] Loaded', messages.length, 'messages (deduped from', chronologicalData.length, ')');
+  return messages;
 }
 
 // Save a single message to database
@@ -1200,22 +1213,23 @@ export default function CoachPage() {
       content: inputEl.value.trim(),
     };
 
+    // Mark as tracked BEFORE adding to state to prevent useEffect from double-saving
+    // The useEffect checks this ref, so we must set it before setMessages triggers re-render
+    lastSavedContentRef.current.set(userMessage.id, userMessage.content);
+
     const allMessages = [...messages, userMessage];
     setMessages(allMessages);
     inputEl.value = "";
     setIsLoading(true);
     isLoadingRef.current = true;
 
-    // Save user message to DB immediately (don't rely on async useEffect)
-    // This prevents message loss if user navigates away before useEffect completes
+    // Save user message to DB
     if (user?.id) {
       const dbId = await saveMessageToDB(user.id, userMessage);
       if (dbId) {
-        // Track both IDs to prevent useEffect from double-saving
+        // Also track the DB-assigned ID
         lastSavedContentRef.current.set(dbId, userMessage.content);
-        lastSavedContentRef.current.set(userMessage.id, userMessage.content);
         // Clear any cached pending message since save succeeded
-        // This prevents duplicate restore on remount
         sessionStorage.removeItem(`netgains-pending-user-message-${user.id}`);
       }
     }
