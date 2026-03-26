@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth-provider";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { triggerCoachResponse } from "@/lib/coach-notification";
-import { logCoachingEvent, type MealLoggedData } from "@/lib/coaching-events";
+import { logCoachingEventClient, type MealLoggedData } from "@/lib/coaching-events";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
@@ -580,7 +580,7 @@ export default function NutritionPage() {
     });
 
     // Log coaching event for aggregate intelligence
-    logCoachingEvent(user.id, 'meal_logged', {
+    logCoachingEventClient('meal_logged', {
       calories: newCalories,
       protein: parseFloat(foodProtein) || 0,
       carbs: parseFloat(foodCarbs) || 0,
@@ -614,7 +614,7 @@ export default function NutritionPage() {
       });
 
       // Log coaching event for aggregate intelligence
-      logCoachingEvent(user.id, 'meal_logged', {
+      logCoachingEventClient('meal_logged', {
         calories: meal.calories,
         protein: meal.protein,
         carbs: meal.carbs,
@@ -697,7 +697,7 @@ export default function NutritionPage() {
         });
 
         // Log coaching event for aggregate intelligence
-        logCoachingEvent(user.id, 'meal_logged', {
+        logCoachingEventClient('meal_logged', {
           calories: meal.calories,
           protein: meal.protein,
           carbs: meal.carbs,

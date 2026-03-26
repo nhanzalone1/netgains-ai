@@ -28,7 +28,7 @@ import {
   Globe,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { logCoachingEvent, type WeightRecordedData } from "@/lib/coaching-events";
+import { logCoachingEventClient, type WeightRecordedData } from "@/lib/coaching-events";
 import { Button } from "@/components/ui/button";
 import { SkeletonStats, Skeleton } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
@@ -235,7 +235,7 @@ export default function StatsPage() {
     const previousWeight = weighIns.length > 0 ? weighIns[0].weight_lbs : null;
     const weightChange = previousWeight !== null ? weight - previousWeight : null;
 
-    logCoachingEvent(user.id, 'weight_recorded', {
+    logCoachingEventClient('weight_recorded', {
       weight: weight,
       previous_weight: previousWeight,
       change: weightChange,

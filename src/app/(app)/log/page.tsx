@@ -22,7 +22,7 @@ import { useToast } from "@/components/toast";
 import { hapticSuccess } from "@/lib/haptics";
 import { invalidateDailyBriefCache } from "@/lib/daily-brief-cache";
 import { triggerCoachResponse } from "@/lib/coach-notification";
-import { logCoachingEvent, calculateTotalVolume, type WorkoutCompletedData } from "@/lib/coaching-events";
+import { logCoachingEventClient, calculateTotalVolume, type WorkoutCompletedData } from "@/lib/coaching-events";
 import { formatLocalDate } from "@/lib/date-utils";
 import { UserMenu } from "@/components/user-menu";
 import { PageHeader } from "@/components/ui/page-header";
@@ -519,7 +519,7 @@ export default function LogPage() {
           cardio_notes: cardioNotes?.trim() || undefined,
         };
 
-        logCoachingEvent(user.id, 'workout_completed', workoutEventData).catch((err) => {
+        logCoachingEventClient('workout_completed', workoutEventData).catch((err) => {
           console.error('[CoachingEvents] Failed to log workout_completed:', err);
         });
       }

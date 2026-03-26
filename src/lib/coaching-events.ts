@@ -2,6 +2,7 @@
 // Captures user behavior for aggregate coaching intelligence
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { apiFetch } from '@/lib/capacitor';
 
 // Service role client for bypassing RLS
 function getSupabaseAdmin() {
@@ -246,4 +247,35 @@ export function calculateTotalVolume(
     }
   }
   return totalVolume;
+}
+
+// ============================================================================
+// CLIENT-SIDE HELPERS (call API endpoint, don't use server-only env vars)
+// ============================================================================
+
+/**
+ * Client-side: Log a coaching event via API endpoint
+ * Use this from client components (pages with "use client")
+ */
+export async function logCoachingEventClient(
+  eventType: CoachingEventType,
+  eventData: EventData
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await apiFetch('/api/coaching-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, eventData }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error || 'Request failed' };
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('[CoachingEvents Client] Error:', error);
+    return { success: false, error: String(error) };
+  }
 }
