@@ -732,19 +732,12 @@ export default function CoachPage() {
         if (cachedUserMessage) {
           const existingUserMsg = dbMessages.find(m => m.id === cachedUserMessage!.id);
           if (!existingUserMsg) {
-            // User message not in DB yet - this means the save failed or is still in progress
-            // Insert it in the right position (before any assistant messages that came after)
+            // User message not in DB yet - append at end (it's the most recent)
             console.log('[Coach] Restoring cached user message (not in DB yet)');
             dbMessages.push({
               id: cachedUserMessage.id,
               role: 'user' as const,
               content: cachedUserMessage.content,
-            });
-            // Sort by ID (timestamp-based) to maintain order
-            dbMessages.sort((a, b) => {
-              const aTime = parseInt(a.id) || 0;
-              const bTime = parseInt(b.id) || 0;
-              return aTime - bTime;
             });
           }
           // Clear the cache after using it
