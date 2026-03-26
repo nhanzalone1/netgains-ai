@@ -243,8 +243,21 @@ After meal/workout save, Haiku generates proactive message → badge on Coach ta
 **Coach Tab Message Refresh:**
 - Listens for `coach-message-added` custom event to reload messages immediately
 - On mount, refreshes messages after 500ms delay to catch in-flight triggers
-- Streaming state cached to sessionStorage on tab switch, restored on return
-- Messages never lost during mid-stream tab navigation
+- Loads most recent 500 messages (Supabase default limit is 1000)
+- Query uses `ascending: false` + `.limit(500)` then reverses for chronological order
+
+**Message Persistence (User Messages):**
+User messages are saved via two mechanisms for reliability:
+
+1. **Synchronous DB save** — In `handleSubmit`, user message is saved to DB immediately (awaited) before the API call. This ensures the message persists even if user navigates away.
+
+2. **SessionStorage fallback** — On component unmount during streaming, pending user messages are cached to sessionStorage. On remount, if the message isn't in DB, it's restored from cache.
+
+**Duplicate prevention:**
+- Cache is cleared after successful DB save
+- Restore logic checks both ID and content to avoid duplicates (DB assigns new UUID, cache has timestamp ID)
+
+**Assistant messages:** Saved by server after streaming completes (not client-side).
 
 **Cardio Recommendations:**
 Coach must use exact parameters from `key_memories.preferences`:
