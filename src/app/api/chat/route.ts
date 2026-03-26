@@ -1488,6 +1488,7 @@ export async function POST(req: Request) {
   // Smart routing model selection (set in each branch)
   let selectedModel: string = AI_MODELS.COACHING;
   let selectedMaxTokens: number = AI_TOKEN_LIMITS.COACHING;
+  let messageComplexity: 'simple' | 'complex' = 'complex'; // Default for system triggers, overwritten in normal flow
 
   if (isSystemTrigger) {
     // System triggers always use Sonnet for quality daily briefs
@@ -2084,7 +2085,7 @@ Keep each paragraph SHORT. Breathing room between sections. Real numbers. Sound 
     const userMessageContent = lastUserMessage?.content || '';
 
     // Smart model routing based on tier and message complexity
-    const messageComplexity = classifyMessageComplexity(userMessageContent);
+    messageComplexity = classifyMessageComplexity(userMessageContent);
     const modelSelection = selectModel(userTier, messageComplexity, false, isAdmin);
     selectedModel = modelSelection.model;
     selectedMaxTokens = modelSelection.maxTokens;
