@@ -730,15 +730,22 @@ export default function CoachPage() {
 
         // If there's a cached user message, merge it with DB messages
         if (cachedUserMessage) {
-          const existingUserMsg = dbMessages.find(m => m.id === cachedUserMessage!.id);
-          if (!existingUserMsg) {
-            // User message not in DB yet - append at end (it's the most recent)
+          // Check by ID first, then by content (DB assigns new UUID, so ID may differ)
+          const existingById = dbMessages.find(m => m.id === cachedUserMessage!.id);
+          const existingByContent = dbMessages.find(m =>
+            m.role === 'user' && m.content === cachedUserMessage!.content
+          );
+
+          if (!existingById && !existingByContent) {
+            // User message truly not in DB yet - append at end (it's the most recent)
             console.log('[Coach] Restoring cached user message (not in DB yet)');
             dbMessages.push({
               id: cachedUserMessage.id,
               role: 'user' as const,
               content: cachedUserMessage.content,
             });
+          } else {
+            console.log('[Coach] Cached user message already in DB, skipping restore');
           }
           // Clear the cache after using it
           sessionStorage.removeItem(`netgains-pending-user-message-${user.id}`);
@@ -1207,6 +1214,9 @@ export default function CoachPage() {
         // Track both IDs to prevent useEffect from double-saving
         lastSavedContentRef.current.set(dbId, userMessage.content);
         lastSavedContentRef.current.set(userMessage.id, userMessage.content);
+        // Clear any cached pending message since save succeeded
+        // This prevents duplicate restore on remount
+        sessionStorage.removeItem(`netgains-pending-user-message-${user.id}`);
       }
     }
 
