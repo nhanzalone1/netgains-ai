@@ -47,8 +47,8 @@ export const SONNET_RATIO = {
 // === IN-APP PURCHASE PRODUCTS ===
 // Product IDs must match App Store Connect and RevenueCat
 export const IAP_PRODUCTS = {
-  BASIC_MONTHLY: 'netgains_basic_monthly',
-  PREMIUM_MONTHLY: 'netgains_premium_monthly',
+  BASIC_MONTHLY: 'com.netgainsai.basic.monthly',
+  PREMIUM_MONTHLY: 'com.netgainsai.premium.monthly',
 } as const;
 
 // Map products to tiers

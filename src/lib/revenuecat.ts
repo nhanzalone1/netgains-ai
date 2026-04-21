@@ -7,8 +7,8 @@ import { SUBSCRIPTION_TIERS, SubscriptionTier } from "./constants";
 
 // Product IDs matching App Store Connect and RevenueCat
 export const PRODUCT_IDS = {
-  BASIC_MONTHLY: "netgains_basic_monthly",
-  PREMIUM_MONTHLY: "netgains_premium_monthly",
+  BASIC_MONTHLY: "com.netgainsai.basic.monthly",
+  PREMIUM_MONTHLY: "com.netgainsai.premium.monthly",
 } as const;
 
 // Map product IDs to subscription tiers
@@ -27,6 +27,7 @@ let isConfigured = false;
 
 /**
  * Initialize RevenueCat SDK. Call once after user authenticates.
+ * Never throws — logs errors and returns gracefully.
  */
 export async function initializeRevenueCat(userId: string): Promise<void> {
   if (!isNativePlatform()) {
@@ -73,7 +74,8 @@ export async function initializeRevenueCat(userId: string): Promise<void> {
     console.log("[RevenueCat] Initialized for user:", userId);
   } catch (error) {
     console.error("[RevenueCat] Failed to initialize:", error);
-    throw error;
+    // Don't throw — allow app to function without purchases.
+    // iPad compatibility mode and other edge cases can cause init failures.
   }
 }
 
@@ -114,20 +116,85 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
       customerInfo: result.customerInfo,
     };
   } catch (error: unknown) {
-    const purchaseError = error as { userCancelled?: boolean; message?: string };
+    const purchaseError = error as {
+      userCancelled?: boolean;
+      message?: string;
+      code?: number | string;
+    };
     if (purchaseError.userCancelled) {
       return { success: false, userCancelled: true };
     }
     console.error("[RevenueCat] Purchase failed:", error);
+
+    // Map common StoreKit/RevenueCat error codes to user-friendly messages
+    const errorMessage = getUserFriendlyPurchaseError(purchaseError);
     return {
       success: false,
-      error: purchaseError.message || "Purchase failed",
+      error: errorMessage,
     };
   }
 }
 
 /**
- * Purchase a specific product by ID
+ * Map RevenueCat/StoreKit errors to user-friendly messages.
+ * Covers iPad compatibility mode issues, network errors, and StoreKit failures.
+ */
+function getUserFriendlyPurchaseError(error: {
+  message?: string;
+  code?: number | string;
+}): string {
+  const message = (error.message || "").toLowerCase();
+  const code = String(error.code || "");
+
+  // StoreKit not available or storefront issues (common on iPad compat mode)
+  if (
+    message.includes("storekit") ||
+    message.includes("storefront") ||
+    message.includes("sk_error") ||
+    code === "STORE_PROBLEM" ||
+    code === "4"
+  ) {
+    return "The App Store couldn't process this purchase. Please try again, or open the App Store app first and retry.";
+  }
+
+  // Network errors
+  if (
+    message.includes("network") ||
+    message.includes("internet") ||
+    message.includes("offline") ||
+    code === "NETWORK_ERROR" ||
+    code === "1"
+  ) {
+    return "No internet connection. Please check your network and try again.";
+  }
+
+  // Payment not allowed (parental controls, restrictions)
+  if (
+    message.includes("not allowed") ||
+    message.includes("payment") ||
+    code === "PURCHASE_NOT_ALLOWED" ||
+    code === "3"
+  ) {
+    return "Purchases are not allowed on this device. Please check your device restrictions in Settings.";
+  }
+
+  // Product already owned
+  if (
+    message.includes("already") ||
+    code === "PRODUCT_ALREADY_PURCHASED" ||
+    code === "6"
+  ) {
+    return "You already have this subscription. Try restoring purchases instead.";
+  }
+
+  // Generic fallback
+  return "Something went wrong with the purchase. Please try again.";
+}
+
+/**
+ * Purchase a specific product by ID.
+ * Retries fetching offerings once if the first attempt returns empty
+ * (common on iPad compatibility mode where StoreKit loads slowly).
  */
 export async function purchaseProduct(productId: string): Promise<{
   success: boolean;
@@ -135,12 +202,38 @@ export async function purchaseProduct(productId: string): Promise<{
   error?: string;
   userCancelled?: boolean;
 }> {
-  const packages = await getOfferings();
+  if (!isNativePlatform()) {
+    return { success: false, error: "Not on native platform" };
+  }
+
+  if (!isConfigured) {
+    return {
+      success: false,
+      error: "The App Store is unavailable right now. Please restart the app and try again.",
+    };
+  }
+
+  // First attempt to load offerings
+  let packages = await getOfferings();
+
+  // Retry once after a short delay — StoreKit can be slow to load products
+  // on iPad compatibility mode or first launch
+  if (packages.length === 0) {
+    console.log("[RevenueCat] No packages found, retrying after delay...");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    packages = await getOfferings();
+  }
+
   const pkg = packages.find((p) => p.product.identifier === productId);
 
   if (!pkg) {
     console.error("[RevenueCat] Product not found:", productId, "Available:", packages.map(p => p.product.identifier));
-    return { success: false, error: `Product ${productId} not found` };
+    return {
+      success: false,
+      error: packages.length === 0
+        ? "Unable to load subscription options. Please check your internet connection and try again."
+        : "This subscription is temporarily unavailable. Please try again later.",
+    };
   }
 
   return purchasePackage(pkg);

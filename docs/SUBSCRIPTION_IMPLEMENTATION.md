@@ -76,8 +76,8 @@ CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
 1. Create account at https://app.revenuecat.com
 2. Add iOS app: `ai.netgains.app.noahanzalone`
 3. Create products in App Store Connect:
-   - `netgains_basic_monthly` - $6.99/month
-   - `netgains_premium_monthly` - $14.99/month
+   - `com.netgainsai.basic.monthly` - $6.99/month
+   - `com.netgainsai.premium.monthly` - $14.99/month
 4. Link products to RevenueCat
 5. Install: `npm install @revenuecat/purchases-capacitor`
 6. Create webhook endpoint: `/api/webhooks/revenuecat/route.ts`

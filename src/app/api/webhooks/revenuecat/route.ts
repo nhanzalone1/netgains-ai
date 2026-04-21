@@ -54,8 +54,8 @@ interface RevenueCatWebhookEvent {
 
 // Map product IDs to tiers
 const PRODUCT_TO_TIER: Record<string, string> = {
-  netgains_basic_monthly: SUBSCRIPTION_TIERS.BASIC,
-  netgains_premium_monthly: SUBSCRIPTION_TIERS.PREMIUM,
+  "com.netgainsai.basic.monthly": SUBSCRIPTION_TIERS.BASIC,
+  "com.netgainsai.premium.monthly": SUBSCRIPTION_TIERS.PREMIUM,
 };
 
 export async function POST(request: Request) {
