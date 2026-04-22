@@ -4,8 +4,6 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
 import { SUBSCRIPTION_TIERS, DAILY_MESSAGE_LIMITS, SubscriptionTier } from "@/lib/constants";
-import { initializeRevenueCat, logOutRevenueCat } from "@/lib/revenuecat";
-import { isNativePlatform } from "@/lib/capacitor";
 
 interface SubscriptionContextType {
   tier: SubscriptionTier;
@@ -99,28 +97,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     refreshSubscription();
     refreshMessageCount();
   }, [refreshSubscription, refreshMessageCount]);
-
-  // Initialize RevenueCat when user logs in
-  useEffect(() => {
-    async function initRC() {
-      if (user?.id && isNativePlatform()) {
-        try {
-          await initializeRevenueCat(user.id);
-          console.log("[SubscriptionProvider] RevenueCat initialized");
-        } catch (error) {
-          console.error("[SubscriptionProvider] RevenueCat init failed:", error);
-        }
-      }
-    }
-    initRC();
-  }, [user?.id]);
-
-  // Logout from RevenueCat when user signs out
-  useEffect(() => {
-    if (!user && isNativePlatform()) {
-      logOutRevenueCat();
-    }
-  }, [user]);
 
   // Refresh message count periodically
   useEffect(() => {

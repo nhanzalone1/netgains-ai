@@ -15,6 +15,9 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		8A0001011FED79650016851F /* StoreKit2Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0001001FED79650016851F /* StoreKit2Plugin.swift */; };
+		8A0001031FED79650016851F /* StoreKit2Plugin.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A0001021FED79650016851F /* StoreKit2Plugin.m */; };
+		EF477EA12F995B2700BBE938 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF477EA02F995B2700BBE938 /* StoreKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,7 +32,10 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		8A0001001FED79650016851F /* StoreKit2Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKit2Plugin.swift; sourceTree = "<group>"; };
+		8A0001021FED79650016851F /* StoreKit2Plugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StoreKit2Plugin.m; sourceTree = "<group>"; };
 		A6D2B1294BD71DC1B3069ADA /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		EF477EA02F995B2700BBE938 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +44,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				342A6492D436EC8C0EFE80A6 /* Pods_App.framework in Frameworks */,
+				EF477EA12F995B2700BBE938 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,6 +75,8 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				8A0001001FED79650016851F /* StoreKit2Plugin.swift */,
+				8A0001021FED79650016851F /* StoreKit2Plugin.m */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3131FED79650016851F /* Info.plist */,
@@ -89,6 +98,7 @@
 		C3DBBCEBDFDFF7B647EBD849 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				EF477EA02F995B2700BBE938 /* StoreKit.framework */,
 				0CE02F08BE0D3F17B19CBB6D /* Pods_App.framework */,
 			);
 			name = Frameworks;
@@ -212,6 +222,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				8A0001011FED79650016851F /* StoreKit2Plugin.swift in Sources */,
+				8A0001031FED79650016851F /* StoreKit2Plugin.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -290,7 +302,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -347,7 +359,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -364,12 +376,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = R29K253T7R;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -395,12 +407,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = R29K253T7R;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

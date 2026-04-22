@@ -45,11 +45,14 @@ export const SONNET_RATIO = {
 } as const;
 
 // === IN-APP PURCHASE PRODUCTS ===
-// Product IDs must match App Store Connect and RevenueCat
+// Product IDs must match App Store Connect exactly.
 export const IAP_PRODUCTS = {
   BASIC_MONTHLY: 'com.netgainsai.basic.monthly',
   PREMIUM_MONTHLY: 'com.netgainsai.premium.monthly',
 } as const;
+
+// Alias for client-side paywall. Same IDs, named for readability at call sites.
+export const PRODUCT_IDS = IAP_PRODUCTS;
 
 // Map products to tiers
 export const PRODUCT_TO_TIER: Record<string, SubscriptionTier> = {

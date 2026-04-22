@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, Zap, Crown, MessageCircle, Sparkles, RotateCcw } from "lucide-react";
 import { useSubscription } from "./subscription-provider";
 import { useToast } from "./toast";
-import { SUBSCRIPTION_TIERS } from "@/lib/constants";
-import { purchaseProduct, restorePurchases, PRODUCT_IDS } from "@/lib/revenuecat";
-import { isNativePlatform } from "@/lib/capacitor";
+import { SUBSCRIPTION_TIERS, PRODUCT_IDS } from "@/lib/constants";
+import { purchaseProduct, restorePurchases } from "@/lib/storekit";
+import { isNativePlatform, apiFetch } from "@/lib/capacitor";
 
 // Map tier IDs to product IDs
 const TIER_TO_PRODUCT: Record<string, string> = {
@@ -76,6 +76,7 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
   const toast = useToast();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   const handlePurchase = async (tierId: string) => {
     if (tierId === SUBSCRIPTION_TIERS.FREE || tierId === currentTier) return;
@@ -93,27 +94,44 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
     }
 
     setPurchasing(tierId);
+    setPurchaseError(null);
 
     try {
       const result = await purchaseProduct(productId);
 
-      if (result.success) {
-        toast.success("Purchase successful! Activating your subscription...");
+      if (result.success && result.transaction) {
+        // Verify the transaction server-side before trusting it.
+        const verifyRes = await apiFetch("/api/iap/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactionId: result.transaction.transactionId }),
+        });
 
-        // Wait a moment for webhook to process, then refresh
-        setTimeout(async () => {
-          await refreshSubscription();
-          onClose();
-        }, 2000);
+        if (!verifyRes.ok) {
+          const errBody = await verifyRes.json().catch(() => ({}));
+          const errorMsg = errBody.error || "Purchase could not be verified. Please contact support.";
+          setPurchaseError(errorMsg);
+          toast.error(errorMsg);
+          return;
+        }
+
+        toast.success("Purchase successful! Activating your subscription...");
+        await refreshSubscription();
+        onClose();
       } else if (result.userCancelled) {
-        // User cancelled - no error message needed
         console.log("[Paywall] User cancelled purchase");
+      } else if (result.pending) {
+        toast.info("Purchase is pending approval. You'll get access once it's confirmed.");
       } else {
-        toast.error(result.error || "Purchase failed. Please try again.");
+        const errorMsg = result.error || "Something went wrong. Please try again.";
+        setPurchaseError(errorMsg);
+        toast.error(errorMsg);
       }
     } catch (error) {
       console.error("[Paywall] Purchase error:", error);
-      toast.error("Something went wrong. Please try again.");
+      const errorMsg = "Something went wrong. Please try again.";
+      setPurchaseError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setPurchasing(null);
     }
@@ -130,19 +148,37 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
     try {
       const result = await restorePurchases();
 
-      if (result.success && result.customerInfo) {
-        // Check if any active entitlements were restored
-        const hasActiveEntitlements = Object.keys(result.customerInfo.entitlements.active).length > 0;
-
-        if (hasActiveEntitlements) {
-          toast.success("Purchases restored successfully!");
-          await refreshSubscription();
-          onClose();
-        } else {
-          toast.info("No active subscriptions found to restore.");
-        }
-      } else {
+      if (!result.success) {
         toast.error(result.error || "Failed to restore purchases.");
+        return;
+      }
+
+      const active = result.entitlements.filter(
+        (e) => !e.revocationDate && (!e.expirationDate || e.expirationDate > Date.now())
+      );
+
+      if (active.length === 0) {
+        toast.info("No active subscriptions found to restore.");
+        return;
+      }
+
+      // Verify each active entitlement server-side.
+      let restored = 0;
+      for (const entitlement of active) {
+        const verifyRes = await apiFetch("/api/iap/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactionId: entitlement.transactionId }),
+        });
+        if (verifyRes.ok) restored++;
+      }
+
+      if (restored > 0) {
+        toast.success("Purchases restored successfully!");
+        await refreshSubscription();
+        onClose();
+      } else {
+        toast.error("Couldn't verify restored purchases. Please contact support.");
       }
     } catch (error) {
       console.error("[Paywall] Restore error:", error);
@@ -291,6 +327,13 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
                   </motion.div>
                 );
               })}
+
+              {/* Error message */}
+              {purchaseError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-400 text-center">{purchaseError}</p>
+                </div>
+              )}
 
               {/* Footer */}
               <div className="pt-2 pb-4 space-y-2">
