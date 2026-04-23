@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "ai.netgains.app",
+  appId: "ai.netgains.app.noahanzalone",
   appName: "NetGains",
   webDir: "out",
   server: {
