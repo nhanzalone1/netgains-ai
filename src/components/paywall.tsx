@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, Zap, Crown, MessageCircle, Sparkles, RotateCcw } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 import { useSubscription } from "./subscription-provider";
 import { useToast } from "./toast";
 import { SUBSCRIPTION_TIERS, PRODUCT_IDS } from "@/lib/constants";
-import { purchaseProduct, restorePurchases } from "@/lib/storekit";
+import { purchaseProduct, restorePurchases, isStoreKitAvailable, getProducts } from "@/lib/storekit";
 import { isNativePlatform, apiFetch } from "@/lib/capacitor";
 
 // Map tier IDs to product IDs
@@ -77,38 +78,98 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  // DEBUG: on-screen diagnostics for purchase failures. Temporary.
+  const [debugLines, setDebugLines] = useState<string[]>([]);
 
   const handlePurchase = async (tierId: string) => {
     if (tierId === SUBSCRIPTION_TIERS.FREE || tierId === currentTier) return;
 
+    // DEBUG — reset and start collecting diagnostics for this attempt.
+    const debug: string[] = [];
+    const log = (line: string) => {
+      debug.push(line);
+      setDebugLines([...debug]);
+    };
+    const stringify = (v: unknown) => {
+      try {
+        return JSON.stringify(v, null, 2);
+      } catch {
+        return String(v);
+      }
+    };
+
+    log(`tapped tier: ${tierId}`);
+
     // Check if on native platform
     if (!isNativePlatform()) {
+      log("isNativePlatform(): false — skipping");
       toast.info("Subscriptions are available in the iOS app");
       return;
     }
 
     const productId = TIER_TO_PRODUCT[tierId];
     if (!productId) {
+      log(`no productId for tier: ${tierId}`);
       toast.error("Invalid subscription tier");
       return;
+    }
+    log(`productId: ${productId}`);
+
+    // DEBUG — platform + plugin diagnostics
+    try {
+      log(`Capacitor.getPlatform(): ${Capacitor.getPlatform()}`);
+      log(`Capacitor.isNativePlatform(): ${Capacitor.isNativePlatform()}`);
+      log(`Capacitor.isPluginAvailable("StoreKit2"): ${Capacitor.isPluginAvailable("StoreKit2")}`);
+      log(`isStoreKitAvailable(): ${isStoreKitAvailable()}`);
+    } catch (e) {
+      log(`diagnostic error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // DEBUG — can we load the product from StoreKit at all?
+    try {
+      const products = await getProducts([productId]);
+      log(`getProducts returned ${products.length} product(s)`);
+      log(`ids: ${products.map((p) => p.id).join(", ") || "(none)"}`);
+      if (products.length > 0) {
+        log(`product[0]: ${stringify(products[0])}`);
+      }
+    } catch (e) {
+      const err = e as { message?: string; name?: string; stack?: string };
+      log(`getProducts THREW: ${err.name ?? "Error"}: ${err.message ?? String(e)}`);
+      if (err.stack) log(`stack: ${err.stack}`);
     }
 
     setPurchasing(tierId);
     setPurchaseError(null);
 
     try {
+      log("calling purchaseProduct…");
       const result = await purchaseProduct(productId);
+      log(`purchaseProduct result: ${stringify({
+        success: result.success,
+        userCancelled: result.userCancelled,
+        pending: result.pending,
+        hasTransaction: !!result.transaction,
+        transactionId: result.transaction?.transactionId,
+        errorName: result.errorName,
+        errorCode: result.errorCode,
+        rawError: result.rawError,
+        mappedError: result.error,
+      })}`);
 
       if (result.success && result.transaction) {
         // Verify the transaction server-side before trusting it.
+        log("calling /api/iap/verify…");
         const verifyRes = await apiFetch("/api/iap/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transactionId: result.transaction.transactionId }),
         });
+        log(`verify status: ${verifyRes.status}`);
 
         if (!verifyRes.ok) {
           const errBody = await verifyRes.json().catch(() => ({}));
+          log(`verify body: ${stringify(errBody)}`);
           const errorMsg = errBody.error || "Purchase could not be verified. Please contact support.";
           setPurchaseError(errorMsg);
           toast.error(errorMsg);
@@ -123,13 +184,16 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
       } else if (result.pending) {
         toast.info("Purchase is pending approval. You'll get access once it's confirmed.");
       } else {
-        const errorMsg = result.error || "Something went wrong. Please try again.";
+        const errorMsg = result.rawError || result.error || "Something went wrong. Please try again.";
         setPurchaseError(errorMsg);
-        toast.error(errorMsg);
+        toast.error(result.error || errorMsg);
       }
     } catch (error) {
+      const err = error as { message?: string; name?: string; stack?: string };
       console.error("[Paywall] Purchase error:", error);
-      const errorMsg = "Something went wrong. Please try again.";
+      log(`UNCAUGHT: ${err.name ?? "Error"}: ${err.message ?? String(error)}`);
+      if (err.stack) log(`stack: ${err.stack}`);
+      const errorMsg = err.message || String(error);
       setPurchaseError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -332,6 +396,30 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
               {purchaseError && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
                   <p className="text-sm text-red-400 text-center">{purchaseError}</p>
+                </div>
+              )}
+
+              {/* DEBUG overlay — temporary. Shows raw diagnostics from the
+                  purchase flow so we can see exactly what StoreKit returns. */}
+              {debugLines.length > 0 && (
+                <div className="p-3 rounded-xl bg-red-500/15 border-2 border-red-500/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-red-300 uppercase tracking-wider">
+                      DEBUG
+                    </span>
+                    <button
+                      onClick={() => setDebugLines([])}
+                      className="text-red-300 hover:text-red-200 text-xs px-2 py-0.5 rounded bg-red-500/20"
+                    >
+                      clear
+                    </button>
+                  </div>
+                  <pre
+                    className="text-[10px] leading-snug text-red-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto"
+                    style={{ WebkitUserSelect: "text", userSelect: "text" }}
+                  >
+                    {debugLines.join("\n")}
+                  </pre>
                 </div>
               )}
 
