@@ -1381,30 +1381,20 @@ export async function POST(req: Request) {
     return rateLimitResponse(ipRateLimit);
   }
 
-  // Get user's subscription tier
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('tier, expires_at')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  // Determine effective tier (check expiration for paid tiers)
-  let userTier: SubscriptionTier = SUBSCRIPTION_TIERS.FREE;
-  if (subscription?.tier && subscription.tier !== SUBSCRIPTION_TIERS.FREE) {
-    const isExpired = subscription.expires_at && new Date(subscription.expires_at) < new Date();
-    if (!isExpired) {
-      userTier = subscription.tier as SubscriptionTier;
-    }
-  }
-  console.log('[Coach] User tier:', userTier);
-
-  // Check if user is admin (for bypassing limits and model routing)
-  const { data: adminCheck } = await supabase
+  // Read subscription status + admin flag from profiles (single round-trip)
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('is_admin')
+    .select('subscription_status, is_admin')
     .eq('id', user.id)
     .maybeSingle();
-  const isAdmin = adminCheck?.is_admin === true;
+
+  const status = profile?.subscription_status ?? null;
+  const userTier: SubscriptionTier = (status === 'active' || status === 'trialing')
+    ? SUBSCRIPTION_TIERS.PREMIUM
+    : SUBSCRIPTION_TIERS.FREE;
+  console.log('[Coach] User tier:', userTier);
+
+  const isAdmin = profile?.is_admin === true;
   if (isAdmin) {
     console.log('[Coach] Admin user detected - bypassing message limits, using Sonnet');
   }
@@ -1432,16 +1422,8 @@ export async function POST(req: Request) {
     const currentCount = countData ? parseInt(countData.value) : 0;
 
     if (currentCount >= dailyLimit) {
-      // Return limit reached message with tier-appropriate messaging
       const encoder = new TextEncoder();
-      let limitMessage: string;
-      if (userTier === SUBSCRIPTION_TIERS.FREE) {
-        limitMessage = "you've hit your 3 free messages for today. upgrade to Basic for 15 messages/day, or Premium for 50. resets at midnight.";
-      } else if (userTier === SUBSCRIPTION_TIERS.BASIC) {
-        limitMessage = "you've hit your 15 messages for today. upgrade to Premium for 50 messages/day, or check back at midnight.";
-      } else {
-        limitMessage = "you've hit your 50 messages for today — that's a lot of coaching! resets at midnight.";
-      }
+      const limitMessage = "you've hit your 3 free messages for today. upgrade for unlimited coaching at $14.99/mo, or check back at midnight.";
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode(`0:${JSON.stringify(limitMessage)}\n`));

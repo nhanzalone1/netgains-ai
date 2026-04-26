@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, LogOut, Settings, FileText, Crown, Zap, MessageCircle, UserX } from "lucide-react";
+import { User, LogOut, Settings, FileText, Crown, MessageCircle, UserX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./auth-provider";
@@ -11,11 +11,10 @@ import { IconButton } from "./ui/icon-button";
 import { Paywall } from "./paywall";
 import { DeleteAccountModal } from "./delete-account-modal";
 import { apiFetch } from "@/lib/capacitor";
-import { SUBSCRIPTION_TIERS } from "@/lib/constants";
 
 export function UserMenu() {
   const { user } = useAuth();
-  const { tier, messagesRemaining, dailyLimit, isFree, expiresAt, showPaywall, setShowPaywall } = useSubscription();
+  const { tier, messagesRemaining, dailyLimit, isFree, isPremium, showPaywall, setShowPaywall } = useSubscription();
   const [open, setOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const router = useRouter();
@@ -110,16 +109,12 @@ export function UserMenu() {
               <div className="p-3 border-b border-white/5">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    tier === SUBSCRIPTION_TIERS.PREMIUM
+                    isPremium
                       ? "bg-gradient-to-br from-amber-500/20 to-amber-600/10"
-                      : tier === SUBSCRIPTION_TIERS.BASIC
-                      ? "bg-primary/20"
                       : "bg-white/10"
                   }`}>
-                    {tier === SUBSCRIPTION_TIERS.PREMIUM ? (
+                    {isPremium ? (
                       <Crown className="w-5 h-5 text-amber-500" />
-                    ) : tier === SUBSCRIPTION_TIERS.BASIC ? (
-                      <Zap className="w-5 h-5 text-primary" />
                     ) : (
                       <MessageCircle className="w-5 h-5 text-muted-foreground" />
                     )}
@@ -129,7 +124,7 @@ export function UserMenu() {
                       {tier} Plan
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {messagesRemaining}/{dailyLimit} messages today
+                      {isPremium ? "Unlimited messages" : `${messagesRemaining}/${dailyLimit} messages today`}
                     </p>
                   </div>
                   {isFree && (
@@ -215,8 +210,7 @@ export function UserMenu() {
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteAccount}
-        subscriptionTier={tier}
-        subscriptionExpiresAt={expiresAt}
+        hasActiveSubscription={isPremium}
       />
     </div>
   );

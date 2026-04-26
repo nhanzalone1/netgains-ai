@@ -1,20 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") ?? "/coach";
   const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -31,7 +33,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/coach");
+      router.push(next);
       router.refresh();
     }
   };
@@ -104,11 +106,28 @@ export default function LoginPage() {
 
         <p className="text-center text-muted-foreground mt-6">
           Don&apos;t have an account?{" "}
-          <Link href="/auth/signup" className="text-primary font-semibold">
+          <Link
+            href={next === "/coach" ? "/auth/signup" : `/auth/signup?next=${encodeURIComponent(next)}`}
+            className="text-primary font-semibold"
+          >
             Sign up
           </Link>
         </p>
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }

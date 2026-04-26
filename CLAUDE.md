@@ -80,7 +80,7 @@ Check `constants.ts` for current model IDs. If 404 errors, check [model deprecat
 - Tools: `updateUserProfile`, `saveMemory`, `logMeal`, `generateWorkout`, `loadWorkoutToFolder`
 - Evidence-based, no broscience. Punchy headlines, exact numbers, varied endings
 - Goal-aware: cutting = calorie ceiling, bulking = calorie floor
-- Daily limit: FREE=3, BASIC=15, PREMIUM=50 messages/day
+- Daily limit: FREE=3, PREMIUM=unlimited messages/day
 
 ### Admin Bypass
 Admins skip message limits and always get Sonnet (no Haiku routing).
@@ -545,7 +545,7 @@ App Store requires apps to provide account deletion. Users can delete their acco
 - `src/components/delete-account-modal.tsx` — Confirmation UI with "DELETE" input
 - `src/components/user-menu.tsx` — Delete Account button
 
-**Note:** RevenueCat subscriptions are NOT cancelled automatically. Apple handles billing; subscription expires naturally when user is gone.
+**Note:** Stripe subscriptions are NOT cancelled automatically by account deletion. The delete modal surfaces a "Manage Subscription" button (opens Stripe Customer Portal via `/api/stripe/billing-portal`) for users with `subscription_status === 'active' | 'trialing'`. Users must cancel via the portal before deleting — otherwise billing continues against the deleted account and would require support intervention to refund.
 
 ## Onboarding
 
@@ -612,7 +612,7 @@ npm run cap:open:ios # Open in Xcode
 Capacitor wraps the PWA for native iOS distribution. **Phase 1** uses live server mode—the app loads directly from `https://netgainsai.com` via WebView, with access to native Capacitor plugins.
 
 **Key files:**
-- `capacitor.config.ts` — Bundle ID: `ai.netgains.app`, server URL config
+- `capacitor.config.ts` — Bundle ID: `ai.netgains.app.noahanzalone`, server URL config
 - `src/lib/capacitor.ts` — `apiFetch()` wrapper for native API calls
 - `scripts/build-ios.sh` — Build script
 - `ios/` — Xcode project (generated)

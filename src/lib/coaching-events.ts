@@ -85,7 +85,7 @@ export interface SplitChangedData {
 export interface MessageSentData {
   message_classification: 'simple' | 'complex';
   model_used: 'haiku' | 'sonnet';
-  user_tier: 'free' | 'basic' | 'premium';
+  user_tier: 'free' | 'premium';
   response_tokens: number;
 }
 

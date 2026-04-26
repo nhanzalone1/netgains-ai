@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["R29K253T7R.ai.netgains.app.noahanzalone"],
+        "paths": [
+          "/return-from-stripe",
+          "/upgrade-success"
+        ]
+      }
+    ]
+  }
+}

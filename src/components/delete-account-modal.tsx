@@ -4,37 +4,40 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Loader2, ExternalLink } from "lucide-react";
 import { Modal } from "./ui/modal";
-import { SubscriptionTier } from "@/lib/constants";
 
 interface DeleteAccountModalProps {
   open: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
-  subscriptionTier: SubscriptionTier;
-  subscriptionExpiresAt: Date | null;
+  hasActiveSubscription: boolean;
 }
 
 export function DeleteAccountModal({
   open,
   onClose,
   onConfirm,
-  subscriptionTier,
-  subscriptionExpiresAt,
+  hasActiveSubscription,
 }: DeleteAccountModalProps) {
   const [confirmText, setConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isConfirmed = confirmText === "DELETE";
-  const hasActiveSubscription = subscriptionTier !== "free" && subscriptionExpiresAt && subscriptionExpiresAt > new Date();
 
-  // Calculate days remaining
-  const daysRemaining = hasActiveSubscription && subscriptionExpiresAt
-    ? Math.ceil((subscriptionExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : 0;
-
-  const openAppleSubscriptions = () => {
-    window.open("https://apps.apple.com/account/subscriptions", "_blank");
+  const openBillingPortal = async () => {
+    setIsOpeningPortal(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", { method: "POST" });
+      if (res.status === 404) throw new Error("No active subscription found");
+      if (!res.ok) throw new Error("Could not open billing portal");
+      const { url } = await res.json();
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open billing portal");
+      setIsOpeningPortal(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -74,19 +77,29 @@ export function DeleteAccountModal({
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3">
             <div className="text-sm">
               <p className="text-amber-400 font-medium mb-1">
-                You have {subscriptionTier.charAt(0).toUpperCase() + subscriptionTier.slice(1)} with {daysRemaining} {daysRemaining === 1 ? "day" : "days"} remaining
+                You have an active subscription
               </p>
               <p className="text-muted-foreground">
-                Subscriptions are managed through your Apple ID and cannot be cancelled within the app. Tap below to manage your subscription in Settings.
+                Cancel your subscription before deleting to avoid being billed for another period.
               </p>
             </div>
             <motion.button
               whileTap={{ scale: 0.98 }}
-              onClick={openAppleSubscriptions}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/15 transition-colors"
+              onClick={openBillingPortal}
+              disabled={isOpeningPortal}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/15 transition-colors disabled:opacity-50"
             >
-              <span>Manage Subscription</span>
-              <ExternalLink className="w-4 h-4" />
+              {isOpeningPortal ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Opening...
+                </>
+              ) : (
+                <>
+                  <span>Manage Subscription</span>
+                  <ExternalLink className="w-4 h-4" />
+                </>
+              )}
             </motion.button>
           </div>
         )}

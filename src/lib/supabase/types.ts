@@ -74,49 +74,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      subscriptions: {
-        Row: {
-          id: string;
-          user_id: string;
-          tier: string;
-          apple_transaction_id: string | null;
-          apple_original_transaction_id: string | null;
-          product_id: string | null;
-          expires_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          tier?: string;
-          apple_transaction_id?: string | null;
-          apple_original_transaction_id?: string | null;
-          product_id?: string | null;
-          expires_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          tier?: string;
-          apple_transaction_id?: string | null;
-          apple_original_transaction_id?: string | null;
-          product_id?: string | null;
-          expires_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "subscriptions_user_id_fkey";
-            columns: ["user_id"];
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          }
-        ];
-      };
       coach_memory: {
         Row: {
           id: string;
@@ -898,7 +855,6 @@ export interface Database {
 
 // Convenience types
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type CoachMemory = Database["public"]["Tables"]["coach_memory"]["Row"];
 export type ChatMessage = Database["public"]["Tables"]["chat_messages"]["Row"];
 export type Meal = Database["public"]["Tables"]["meals"]["Row"];
@@ -917,7 +873,6 @@ export type WeeklySnapshot = Database["public"]["Tables"]["weekly_snapshots"]["R
 
 // Insert types
 export type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
-export type SubscriptionInsert = Database["public"]["Tables"]["subscriptions"]["Insert"];
 export type CoachMemoryInsert = Database["public"]["Tables"]["coach_memory"]["Insert"];
 export type ChatMessageInsert = Database["public"]["Tables"]["chat_messages"]["Insert"];
 export type MealInsert = Database["public"]["Tables"]["meals"]["Insert"];

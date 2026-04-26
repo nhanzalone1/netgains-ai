@@ -23,7 +23,6 @@ export const AI_TOKEN_LIMITS = {
 // === SUBSCRIPTION TIERS ===
 export const SUBSCRIPTION_TIERS = {
   FREE: 'free',
-  BASIC: 'basic',
   PREMIUM: 'premium',
 } as const;
 
@@ -32,33 +31,15 @@ export type SubscriptionTier = typeof SUBSCRIPTION_TIERS[keyof typeof SUBSCRIPTI
 // Message limits per day by tier
 export const DAILY_MESSAGE_LIMITS = {
   [SUBSCRIPTION_TIERS.FREE]: 3,
-  [SUBSCRIPTION_TIERS.BASIC]: 15,
-  [SUBSCRIPTION_TIERS.PREMIUM]: 50,
+  [SUBSCRIPTION_TIERS.PREMIUM]: Infinity,
 } as const;
 
 // Smart routing: percentage of complex messages that use Sonnet (rest use Haiku)
 // Higher = more Sonnet = better quality but higher cost
 export const SONNET_RATIO = {
   [SUBSCRIPTION_TIERS.FREE]: 0.3,      // 30% Sonnet, 70% Haiku
-  [SUBSCRIPTION_TIERS.BASIC]: 0.3,     // 30% Sonnet, 70% Haiku
-  [SUBSCRIPTION_TIERS.PREMIUM]: 0.5,   // 50% Sonnet, 50% Haiku
+  [SUBSCRIPTION_TIERS.PREMIUM]: 1.0,   // 100% Sonnet — paid tier always gets best model
 } as const;
-
-// === IN-APP PURCHASE PRODUCTS ===
-// Product IDs must match App Store Connect exactly.
-export const IAP_PRODUCTS = {
-  BASIC_MONTHLY: 'com.netgainsai.basic.monthly',
-  PREMIUM_MONTHLY: 'com.netgainsai.premium.monthly',
-} as const;
-
-// Alias for client-side paywall. Same IDs, named for readability at call sites.
-export const PRODUCT_IDS = IAP_PRODUCTS;
-
-// Map products to tiers
-export const PRODUCT_TO_TIER: Record<string, SubscriptionTier> = {
-  [IAP_PRODUCTS.BASIC_MONTHLY]: SUBSCRIPTION_TIERS.BASIC,
-  [IAP_PRODUCTS.PREMIUM_MONTHLY]: SUBSCRIPTION_TIERS.PREMIUM,
-};
 
 // === RATE LIMITING ===
 export const RATE_LIMITS = {
