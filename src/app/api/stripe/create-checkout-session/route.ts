@@ -83,6 +83,8 @@ export async function POST(req: NextRequest) {
     apiVersion: "2024-12-18.acacia",
   });
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://netgainsai.com";
+
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -99,8 +101,8 @@ export async function POST(req: NextRequest) {
         cohort: "cohort_1",
         user_id,
       },
-      success_url: "https://netgainsai.com/upgrade-success?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://netgainsai.com/upgrade?canceled=true",
+      success_url: `${appUrl}/upgrade-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/upgrade?canceled=true`,
       allow_promotion_codes: true,
     });
 
