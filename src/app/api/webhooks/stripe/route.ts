@@ -144,27 +144,55 @@ async function handleSubscriptionCreated(
   supabase: SupabaseClient,
   sub: Stripe.Subscription
 ) {
-  // Backup path: only updates if stripe_customer_id is already set on a profile.
-  // Primary path is checkout.session.completed. If subscription.created races
-  // ahead and the customer-id mapping isn't set yet, this is a no-op (matches
-  // 0 rows) — checkout.session.completed will set everything correctly when it
-  // arrives. Idempotent by design via the eq filter.
+  // Self-healing: try matching by stripe_customer_id first (set by
+  // checkout.session.completed if it's already run). If 0 rows match, fall
+  // back to sub.metadata.user_id (set by create-checkout-session via
+  // subscription_data.metadata) and backfill the customer/subscription IDs
+  // onto the profile so subsequent webhooks have a row to match.
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer.id;
   const priceId = sub.items.data[0]?.price.id ?? null;
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("profiles")
-    .update({
-      stripe_subscription_id: sub.id,
-      subscription_status: sub.status,
-      subscription_price_id: priceId,
-    })
+    .update(
+      {
+        stripe_customer_id: customerId,
+        stripe_subscription_id: sub.id,
+        subscription_status: sub.status,
+        subscription_price_id: priceId,
+      },
+      { count: "exact" }
+    )
     .eq("stripe_customer_id", customerId);
 
   if (error) {
     console.error("[stripe-webhook] subscription.created update error:", error);
     throw error;
+  }
+
+  if (count === 0) {
+    const userId = sub.metadata?.user_id as string | undefined;
+    if (!userId) {
+      console.error(
+        "[stripe-webhook] subscription.created: 0 rows matched and no user_id in sub.metadata",
+        { customerId, sub_id: sub.id }
+      );
+      return;
+    }
+    const { error: fallbackErr } = await supabase
+      .from("profiles")
+      .update({
+        stripe_customer_id: customerId,
+        stripe_subscription_id: sub.id,
+        subscription_status: sub.status,
+        subscription_price_id: priceId,
+      })
+      .eq("id", userId);
+    if (fallbackErr) {
+      console.error("[stripe-webhook] subscription.created fallback error:", fallbackErr);
+      throw fallbackErr;
+    }
   }
 }
 
@@ -172,23 +200,50 @@ async function handleSubscriptionUpdated(
   supabase: SupabaseClient,
   sub: Stripe.Subscription
 ) {
-  // Status-only sync. Stripe fires this for many transitions:
-  //   trialing → active, active → past_due, past_due → active (retry succeeded),
-  //   active → canceled (cancel_at_period_end took effect), etc.
-  // We trust Stripe's status verbatim — it's the source of truth for billing state.
+  // Status sync, self-healing on race with checkout.session.completed.
+  // If 0 rows match by stripe_customer_id, fall back to sub.metadata.user_id
+  // and backfill IDs so the profile is recoverable on the next webhook.
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer.id;
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("profiles")
-    .update({
-      subscription_status: sub.status,
-    })
+    .update(
+      {
+        stripe_customer_id: customerId,
+        stripe_subscription_id: sub.id,
+        subscription_status: sub.status,
+      },
+      { count: "exact" }
+    )
     .eq("stripe_customer_id", customerId);
 
   if (error) {
     console.error("[stripe-webhook] subscription.updated update error:", error);
     throw error;
+  }
+
+  if (count === 0) {
+    const userId = sub.metadata?.user_id as string | undefined;
+    if (!userId) {
+      console.error(
+        "[stripe-webhook] subscription.updated: 0 rows matched and no user_id in sub.metadata",
+        { customerId, sub_id: sub.id }
+      );
+      return;
+    }
+    const { error: fallbackErr } = await supabase
+      .from("profiles")
+      .update({
+        stripe_customer_id: customerId,
+        stripe_subscription_id: sub.id,
+        subscription_status: sub.status,
+      })
+      .eq("id", userId);
+    if (fallbackErr) {
+      console.error("[stripe-webhook] subscription.updated fallback error:", fallbackErr);
+      throw fallbackErr;
+    }
   }
 }
 

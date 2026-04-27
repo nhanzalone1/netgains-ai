@@ -101,6 +101,13 @@ export async function POST(req: NextRequest) {
         cohort: "cohort_1",
         user_id,
       },
+      subscription_data: {
+        metadata: {
+          user_id,
+          beta_code,
+          cohort: "cohort_1",
+        },
+      },
       success_url: `${appUrl}/upgrade-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/upgrade?canceled=true`,
       allow_promotion_codes: true,
