@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const POLL_INTERVAL_MS = 1000;
@@ -12,7 +12,7 @@ const ACTIVE_STATUSES = new Set(["active", "trialing"]);
 
 export default function ReturnFromStripePage() {
   const router = useRouter();
-  const [status, setStatus] = useState<"polling" | "timeout" | "error">("polling");
+  const [status, setStatus] = useState<"polling" | "timeout" | "error" | "logged-out">("polling");
   const attemptsRef = useRef(0);
 
   useEffect(() => {
@@ -24,7 +24,13 @@ export default function ReturnFromStripePage() {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        if (!cancelled) router.replace("/auth/login");
+        // No Supabase session in this context — most likely we're rendering
+        // inside Safari View Controller (universal-link interception failed)
+        // and the user's session lives in the WebView's cookie jar instead.
+        // Don't trap them in a /auth/login redirect they can't usefully
+        // complete; show a "subscription active, return to app" terminal
+        // state and let the swipe-down hint do its job.
+        if (!cancelled) setStatus("logged-out");
         return true;
       }
 
@@ -126,6 +132,22 @@ export default function ReturnFromStripePage() {
           </button>
         </>
       )}
+
+      {status === "logged-out" && (
+        <>
+          <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6">
+            <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">Your subscription is active</h1>
+          <p className="text-sm text-muted-foreground text-center max-w-xs">
+            Open the NetGains app from your home screen to continue.
+          </p>
+        </>
+      )}
+
+      <p className="text-xs text-muted-foreground/60 text-center mt-8">
+        Stuck? Swipe down to return to the app.
+      </p>
     </div>
   );
 }
