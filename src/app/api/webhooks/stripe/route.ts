@@ -46,6 +46,14 @@ export async function POST(req: NextRequest) {
 
   const supabase = getServiceClient();
 
+  console.log("[stripe-webhook] received", {
+    type: event.type,
+    id: event.id,
+    livemode: event.livemode,
+    created: event.created,
+    api_version: event.api_version,
+  });
+
   try {
     switch (event.type) {
       case "checkout.session.completed":
@@ -109,14 +117,29 @@ async function handleCheckoutCompleted(
       : session.subscription?.id ?? null;
   const betaCode = (session.metadata?.beta_code as string | undefined) ?? null;
 
-  // Fetch the subscription to get the live status + price ID.
-  // The session itself doesn't include subscription.status until expanded.
-  let status = "active";
+  console.log("[stripe-webhook] handleCheckoutCompleted entry", {
+    session_id: session.id,
+    user_id: userId,
+    customer_id: customerId,
+    subscription_id: subscriptionId,
+    beta_code: betaCode,
+  });
+
+  // Fetch the subscription to get the live price_id.
+  // subscription_status is intentionally NOT written here — it's owned by
+  // customer.subscription.{created,updated}. Stripe's subscriptions.retrieve()
+  // can lag behind canonical event status, so writing it here races and
+  // clobbers correct values (last-write-wins).
   let priceId: string | null = null;
   if (subscriptionId) {
     const sub = await stripe.subscriptions.retrieve(subscriptionId);
-    status = sub.status;
     priceId = sub.items.data[0]?.price.id ?? null;
+    console.log("[stripe-webhook] handleCheckoutCompleted retrieved sub", {
+      session_id: session.id,
+      sub_id: sub.id,
+      retrieved_status: sub.status,
+      price_id: priceId,
+    });
   }
 
   // Decision #5: write beta_code to profiles for cohort attribution that
@@ -127,12 +150,17 @@ async function handleCheckoutCompleted(
     .update({
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
-      subscription_status: status,
       subscription_price_id: priceId,
       subscribed_at: new Date().toISOString(),
       beta_code: betaCode,
     })
     .eq("id", userId);
+
+  console.log("[stripe-webhook] handleCheckoutCompleted update done", {
+    session_id: session.id,
+    user_id: userId,
+    error: error?.message ?? null,
+  });
 
   if (error) {
     console.error("[stripe-webhook] checkout.session.completed update error:", error);
@@ -153,6 +181,13 @@ async function handleSubscriptionCreated(
     typeof sub.customer === "string" ? sub.customer : sub.customer.id;
   const priceId = sub.items.data[0]?.price.id ?? null;
 
+  console.log("[stripe-webhook] handleSubscriptionCreated entry", {
+    sub_id: sub.id,
+    customer_id: customerId,
+    status: sub.status,
+    has_metadata_user_id: !!sub.metadata?.user_id,
+  });
+
   const { error, count } = await supabase
     .from("profiles")
     .update(
@@ -166,6 +201,13 @@ async function handleSubscriptionCreated(
     )
     .eq("stripe_customer_id", customerId);
 
+  console.log("[stripe-webhook] handleSubscriptionCreated primary update", {
+    sub_id: sub.id,
+    matched_count: count,
+    status_written: sub.status,
+    error: error?.message ?? null,
+  });
+
   if (error) {
     console.error("[stripe-webhook] subscription.created update error:", error);
     throw error;
@@ -173,6 +215,10 @@ async function handleSubscriptionCreated(
 
   if (count === 0) {
     const userId = sub.metadata?.user_id as string | undefined;
+    console.log("[stripe-webhook] handleSubscriptionCreated fallback path", {
+      sub_id: sub.id,
+      resolved_user_id: userId ?? null,
+    });
     if (!userId) {
       console.error(
         "[stripe-webhook] subscription.created: 0 rows matched and no user_id in sub.metadata",
@@ -189,6 +235,12 @@ async function handleSubscriptionCreated(
         subscription_price_id: priceId,
       })
       .eq("id", userId);
+    console.log("[stripe-webhook] handleSubscriptionCreated fallback update done", {
+      sub_id: sub.id,
+      user_id: userId,
+      status_written: sub.status,
+      error: fallbackErr?.message ?? null,
+    });
     if (fallbackErr) {
       console.error("[stripe-webhook] subscription.created fallback error:", fallbackErr);
       throw fallbackErr;
@@ -206,6 +258,13 @@ async function handleSubscriptionUpdated(
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer.id;
 
+  console.log("[stripe-webhook] handleSubscriptionUpdated entry", {
+    sub_id: sub.id,
+    customer_id: customerId,
+    status: sub.status,
+    has_metadata_user_id: !!sub.metadata?.user_id,
+  });
+
   const { error, count } = await supabase
     .from("profiles")
     .update(
@@ -218,6 +277,13 @@ async function handleSubscriptionUpdated(
     )
     .eq("stripe_customer_id", customerId);
 
+  console.log("[stripe-webhook] handleSubscriptionUpdated primary update", {
+    sub_id: sub.id,
+    matched_count: count,
+    status_written: sub.status,
+    error: error?.message ?? null,
+  });
+
   if (error) {
     console.error("[stripe-webhook] subscription.updated update error:", error);
     throw error;
@@ -225,6 +291,10 @@ async function handleSubscriptionUpdated(
 
   if (count === 0) {
     const userId = sub.metadata?.user_id as string | undefined;
+    console.log("[stripe-webhook] handleSubscriptionUpdated fallback path", {
+      sub_id: sub.id,
+      resolved_user_id: userId ?? null,
+    });
     if (!userId) {
       console.error(
         "[stripe-webhook] subscription.updated: 0 rows matched and no user_id in sub.metadata",
@@ -240,6 +310,12 @@ async function handleSubscriptionUpdated(
         subscription_status: sub.status,
       })
       .eq("id", userId);
+    console.log("[stripe-webhook] handleSubscriptionUpdated fallback update done", {
+      sub_id: sub.id,
+      user_id: userId,
+      status_written: sub.status,
+      error: fallbackErr?.message ?? null,
+    });
     if (fallbackErr) {
       console.error("[stripe-webhook] subscription.updated fallback error:", fallbackErr);
       throw fallbackErr;
@@ -289,8 +365,20 @@ async function handleInvoicePaymentSucceeded(
       : invoice.subscription?.id ?? null;
   if (!subscriptionId) return;
 
+  console.log("[stripe-webhook] handleInvoicePaymentSucceeded entry", {
+    invoice_id: invoice.id,
+    customer_id: customerId,
+    subscription_id: subscriptionId,
+  });
+
   // Pull live status from Stripe rather than guessing from the invoice.
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
+
+  console.log("[stripe-webhook] handleInvoicePaymentSucceeded retrieved sub", {
+    invoice_id: invoice.id,
+    sub_id: sub.id,
+    retrieved_status: sub.status,
+  });
 
   const { error } = await supabase
     .from("profiles")
@@ -298,6 +386,13 @@ async function handleInvoicePaymentSucceeded(
       subscription_status: sub.status,
     })
     .eq("stripe_customer_id", customerId);
+
+  console.log("[stripe-webhook] handleInvoicePaymentSucceeded update done", {
+    invoice_id: invoice.id,
+    customer_id: customerId,
+    status_written: sub.status,
+    error: error?.message ?? null,
+  });
 
   if (error) {
     console.error("[stripe-webhook] invoice.payment_succeeded update error:", error);
