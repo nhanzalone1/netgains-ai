@@ -7,15 +7,6 @@ import { SUBSCRIPTION_TIERS, DAILY_MESSAGE_LIMITS, SubscriptionTier } from "@/li
 
 const PREMIUM_STATUSES = new Set(["active", "trialing"]);
 
-// TEMPORARY DIAGNOSTIC — REMOVE WITH /api/debug-log AFTER FOLLOWUP #2 SUB-B IS RESOLVED.
-const debugLog = (message: string) => {
-  fetch("/api/debug-log", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  }).catch(() => {});
-};
-
 interface SubscriptionContextType {
   tier: SubscriptionTier;
   subscriptionStatus: string | null;
@@ -43,7 +34,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const supabase = createClient();
 
   const refreshSubscription = useCallback(async () => {
-    debugLog("[sub-provider] refreshSubscription called");
     if (!user?.id) {
       setTier(SUBSCRIPTION_TIERS.FREE);
       setSubscriptionStatus(null);
@@ -57,8 +47,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         .select("subscription_status")
         .eq("id", user.id)
         .maybeSingle();
-
-      debugLog("[sub-provider] refresh result: " + (profile?.subscription_status ?? "null"));
 
       const status = profile?.subscription_status ?? null;
       setSubscriptionStatus(status);
@@ -107,14 +95,23 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      debugLog("[sub-provider] visibility: " + document.visibilityState + ", user: " + (user?.id ?? "null"));
       if (document.visibilityState === "visible") {
         refreshSubscription();
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [refreshSubscription, user?.id]);
+  }, [refreshSubscription]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        refreshSubscription();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refreshSubscription]);
 
   const dailyLimit = DAILY_MESSAGE_LIMITS[tier];
   const messagesRemaining = Math.max(0, dailyLimit - messagesUsed);

@@ -23,6 +23,7 @@ const FEATURES = [
 
 export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
   const { user } = useAuth();
+  const { refreshSubscription } = useSubscription();
   const [betaCode, setBetaCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +90,10 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
     setRedirecting(true);
     try {
       const { Browser } = await import("@capacitor/browser");
+      const listener = await Browser.addListener("browserFinished", () => {
+        refreshSubscription();
+        listener.remove();
+      });
       await Browser.open({ url: checkoutUrl, presentationStyle: "fullscreen" });
     } catch (err) {
       console.error("[Paywall] Failed to open browser:", err);
