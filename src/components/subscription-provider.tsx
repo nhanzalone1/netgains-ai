@@ -93,6 +93,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [refreshMessageCount]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSubscription();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refreshSubscription]);
+
   const dailyLimit = DAILY_MESSAGE_LIMITS[tier];
   const messagesRemaining = Math.max(0, dailyLimit - messagesUsed);
 
