@@ -13,6 +13,15 @@ interface PaywallProps {
   trigger?: "limit" | "feature" | "manual";
 }
 
+// TEMPORARY DIAGNOSTIC — REMOVE WITH /api/debug-log AFTER FOLLOWUP #2 SUB-B IS RESOLVED.
+const debugLog = (message: string) => {
+  fetch("/api/debug-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  }).catch(() => {});
+};
+
 const FEATURES = [
   "Unlimited coach messages",
   "Personalized workouts & nutrition that adapt to you",
@@ -91,9 +100,11 @@ export function Paywall({ isOpen, onClose, trigger = "manual" }: PaywallProps) {
     try {
       const { Browser } = await import("@capacitor/browser");
       const listener = await Browser.addListener("browserFinished", () => {
+        debugLog("[paywall] browserFinished fired, calling refreshSubscription");
         refreshSubscription();
         listener.remove();
       });
+      debugLog("[paywall] browserFinished listener registered");
       await Browser.open({ url: checkoutUrl, presentationStyle: "fullscreen" });
     } catch (err) {
       console.error("[Paywall] Failed to open browser:", err);
