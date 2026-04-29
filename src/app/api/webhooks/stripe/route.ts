@@ -177,6 +177,14 @@ async function handleSubscriptionCreated(
   // back to sub.metadata.user_id (set by create-checkout-session via
   // subscription_data.metadata) and backfill the customer/subscription IDs
   // onto the profile so subsequent webhooks have a row to match.
+  //
+  // subscription_status is intentionally NOT written here. Stripe always
+  // creates subscriptions in 'incomplete'; the active flip arrives only via
+  // customer.subscription.updated. Writing status here races with
+  // handleSubscriptionUpdated (separate Vercel invocation) — if Created's
+  // DB commit lands after Updated's, it clobbers 'active' back to
+  // 'incomplete'. handleSubscriptionUpdated is the single owner of
+  // subscription_status; this handler only writes IDs and price_id.
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer.id;
   const priceId = sub.items.data[0]?.price.id ?? null;
@@ -194,7 +202,6 @@ async function handleSubscriptionCreated(
       {
         stripe_customer_id: customerId,
         stripe_subscription_id: sub.id,
-        subscription_status: sub.status,
         subscription_price_id: priceId,
       },
       { count: "exact" }
@@ -204,7 +211,6 @@ async function handleSubscriptionCreated(
   console.log("[stripe-webhook] handleSubscriptionCreated primary update", {
     sub_id: sub.id,
     matched_count: count,
-    status_written: sub.status,
     error: error?.message ?? null,
   });
 
@@ -231,14 +237,12 @@ async function handleSubscriptionCreated(
       .update({
         stripe_customer_id: customerId,
         stripe_subscription_id: sub.id,
-        subscription_status: sub.status,
         subscription_price_id: priceId,
       })
       .eq("id", userId);
     console.log("[stripe-webhook] handleSubscriptionCreated fallback update done", {
       sub_id: sub.id,
       user_id: userId,
-      status_written: sub.status,
       error: fallbackErr?.message ?? null,
     });
     if (fallbackErr) {
